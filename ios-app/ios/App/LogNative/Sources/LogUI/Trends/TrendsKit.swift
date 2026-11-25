@@ -282,7 +282,7 @@ struct TrTimeChart: View {
     /// switch), the earlier label goes left and the later one right so they don't overlap.
     static func markSide(_ m: TrMark, among marks: [TrMark], t0: Date, span: TimeInterval) -> AnnotationPosition {
         let x = m.at.timeIntervalSince(t0) / span
-        let near = 0.18
+        let near = 0.4 // a label like "Tirzepatide" spans about a quarter of a phone-width chart
         let hasCloseLater = marks.contains { $0.id != m.id && $0.at > m.at && $0.at.timeIntervalSince(m.at) / span < near }
         let hasCloseEarlier = marks.contains { $0.id != m.id && $0.at < m.at && m.at.timeIntervalSince($0.at) / span < near }
         if hasCloseLater && x > 0.12 { return .leading }
