@@ -223,13 +223,15 @@ function verdictCard(data) {
     return { label: "Building", tone: "steady", receipts: ["Needs a weigh-in to start a verdict."] };
   }
   receipts.push(`Current weight ${fmtNum(j.current.lb, 1)} lb as of ${fmtDateCT(j.current.at, true)}.`);
-  receipts.push(`${fmtNum(j.changeTirz, 1)} lb since the first weigh-in after starting tirzepatide (${fmtDateCT(j.sinceTirz.at, false)}, ${fmtNum(j.sinceTirz.lb, 1)} lb).`);
+  receipts.push(`${j.changeStart <= 0 ? "Down" : "Up"} ${fmtNum(Math.abs(j.changeStart), 1)} lb from your ${fmtNum(j.startLb, 1)} lb start.`);
+  const rp = recentPace(parseWeights(data.weights || []), 28);
+  if (rp) receipts.push(`${signed(rp.weekly)} lb a week over the last 4 weeks of weigh-ins (${fmtNum(Math.abs(rp.weekly / j.current.lb) * 100, 1)}% of body weight).`);
   receipts.push(`${doses.length} dose${doses.length === 1 ? "" : "s"} logged.`);
 
   const daysOn = (Date.now() - TIRZ_START.getTime()) / 86400000;
   const recent = parseWeights(data.weights).filter((w) => w.at >= TIRZ_START);
   const stall = stallCheck(data);
-  if (daysOn < 10 && j.changeTirz > -2) {
+  if (daysOn < 10 && j.changeStart > -2) {
     label = "Building";
     tone = "steady";
     receipts.push("Still early in the first cycles.");
@@ -237,17 +239,17 @@ function verdictCard(data) {
     label = "Worth watching";
     tone = "watch";
     receipts.push(stall.summary);
-  } else if (j.changeTirz <= -8) {
+  } else if (j.changeStart <= -8) {
     label = "Working";
     tone = "good";
-    receipts.push("Weight has moved down clearly since the first post-dose weigh-in.");
-  } else if (Math.abs(j.changeTirz) < 2) {
+    receipts.push("Weight has moved down clearly since your start.");
+  } else if (Math.abs(j.changeStart) < 2) {
     label = "Steady";
     tone = "steady";
-  } else if (j.changeTirz > 2) {
+  } else if (j.changeStart > 2) {
     label = "Worth watching";
     tone = "watch";
-    receipts.push("Weight is up since the first post-dose weigh-in.");
+    receipts.push("Weight is up since your start.");
   } else {
     label = "Working";
     tone = "good";

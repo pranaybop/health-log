@@ -270,7 +270,7 @@ function renderDoseForm(data) {
   ], active.compound || "tirzepatide");
   const mg = field("Dose (mg)", input({ type: "number", name: "dose_mg", min: "0.05", max: "50", step: "0.05", value: active.typical_dose_mg ?? 3, inputmode: "decimal" }));
   const units = field("Units (optional)", input({ type: "number", name: "units", min: "0", max: "1000", step: "1", value: active.units ?? "", inputmode: "numeric" }));
-  const site = chips("site", SITES.map((s) => ({ value: s, label: s })), rot.next || rot.lastSite || "");
+  const site = chips("site", SITES.map((s) => ({ value: s, label: SITE_LABELS[s] || s })), rot.next || rot.lastSite || "");
   const skip = el("label", { class: "toggle" },
     el("span", null, "Mark as skipped"),
     input({ type: "checkbox", name: "skipped", role: "switch" }),
@@ -365,6 +365,8 @@ function renderMeasurementForm() {
     { value: "neck", label: "Neck" },
     { value: "thigh", label: "Thigh" },
     { value: "arm", label: "Arm" },
+    { value: "body_fat_pct", label: "Body fat %" },
+    { value: "lean_mass_lb", label: "Lean mass (lb)" },
   ], "waist"));
   const value = field("Value", input({ type: "number", name: "value", min: "0", max: "1000", step: "0.1", inputmode: "decimal" }));
   const unit = field("Unit", select({ name: "unit" }, [
@@ -465,6 +467,7 @@ function renderReconCalc() {
 function renderLogTab(data) {
   return el("div", { class: "stack" },
     renderToast(),
+    canSyncHealth() ? card("Apple Health", el("p", { class: "caption first" }, "Steps, sleep, resting heart rate, HRV, weigh-ins, body fat and workouts. The app also catches up on its own when it opens."), renderHealthSync(true)) : null,
     renderCheckinCard(data),
     el("div", { class: "grid two" }, renderWeighIn(), renderEarnIt(data)),
     el("h2", { class: "section-title" }, "More to log"),

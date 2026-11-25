@@ -40,6 +40,10 @@ Nothing in this folder holds a passcode, token or key. Keep it that way.
 | `www/` | Fallback pages bundled in the app (offline screen, redirect) |
 | `ios/App` | The Xcode project: icon, launch screen, iPhone-only, portrait-only |
 
-## Possible next step: Apple Health sync
+## Apple Health sync
 
-A native app can read steps, sleep, resting heart rate, HRV and weight straight from Apple Health, which a web page can't. That would need a HealthKit plugin here and a new write action on the backend (for `log.daily_health` and `log.weights`), so it waits for an explicit go-ahead.
+The app reads steps, distance, active calories, exercise minutes, stand hours, resting heart rate, HRV, VO2 max, sleep, weigh-ins, body fat and workouts through [`@capgo/capacitor-health`](https://github.com/Cap-go/capacitor-health) (pulled in by Swift Package Manager from its `8.13.0` tag) and sends them to the `health_sync` action. Lean mass is worked out from each body-fat reading and the weigh-in taken with it.
+
+- iOS asks for permission the first time; change it later in **Settings > Health > Data Access & Devices > Log**.
+- The app catches up on the last 3 days when it opens (at most every 30 minutes). **Sync Apple Health** on Today's Body card pulls 7 days; the Apple Health card on the Log tab pulls 30.
+- The project already has the HealthKit entitlement (`App/App.entitlements`) and the permission text in `Info.plist`. If Xcode complains about the HealthKit capability when signing, open **Signing & Capabilities** and add **HealthKit** with the + button so Xcode registers it for your team.

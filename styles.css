@@ -890,3 +890,42 @@ table.data td .sub { display: block; color: var(--ink-2); font-size: 13px; }
 .sub-fold > summary::-webkit-details-marker { display: none; }
 .sub-fold[open] > summary { margin-bottom: 8px; }
 .checkin .form-actions { margin-top: 16px; }
+
+/* Compare control: label above, six short options below. */
+.compare { display: block; margin-top: 14px; }
+.compare > span { display: block; margin-bottom: 6px; }
+.compare .seg { margin: 0; }
+.compare .seg button { padding-left: 0; padding-right: 0; font-size: 14px; }
+
+/* Thinking about food? — three one-tap buttons. */
+.thoughts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.thought-btn { min-height: 52px; border: 0; border-radius: 14px; padding: 8px 6px; font: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; background: var(--surface-2); color: var(--ink); }
+.thought-btn.strong { background: color-mix(in srgb, var(--s2) 18%, var(--surface-2)); }
+.thought-btn:active { transform: scale(.97); }
+.thought-btn:disabled { opacity: .5; }
+.quick-effect { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline); }
+.effect-chips { grid-auto-flow: row; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 0; background: none; }
+.effect-chips .chip { background: var(--surface-2); min-height: 40px; }
+
+/* The week after a shot: a small heat table, one hue, darker = higher within the row. */
+.shotweek { display: grid; gap: 4px; margin-top: 4px; }
+.sw-row { display: grid; grid-template-columns: 92px repeat(7, minmax(0, 1fr)); gap: 4px; align-items: center; }
+.sw-head span { font-size: 12px; font-weight: 600; color: var(--ink-2); text-align: center; }
+.sw-label { font-size: 13px; color: var(--ink-2); line-height: 1.2; }
+.sw-cell { display: grid; place-items: center; height: 34px; border-radius: 8px; font-family: var(--font-num); font-size: 14px; font-weight: 650; color: var(--ink);
+  background: color-mix(in srgb, var(--s3) calc(var(--a, 0) * 100%), var(--surface-2)); }
+.sw-cell.none { background: var(--surface-2); color: var(--ink-2); font-weight: 400; }
+
+/* Apple Health sync row. */
+.health-sync { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.health-sync .sync-meta { font-size: 13px; color: var(--ink-2); }
+.health-sync .sync-meta.err { color: var(--crit-ink); }
+
+/* Fast-loss note under the weight chart. */
+.callout.watch-note { display: block; margin-top: 14px; background: var(--warn-soft); }
+.callout.watch-note strong { color: var(--warn-ink); }
+
+table.data.compact th, table.data.compact td { padding: 8px 4px; font-size: 13px; }
+
+/* Keep focused fields and scrolled-to items clear of the tab bar. */
+html { scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom)); }

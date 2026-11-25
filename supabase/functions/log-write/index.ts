@@ -13,7 +13,7 @@ const ALLOWED_ORIGINS = [
 ];
 
 const FAIL_DELAY_MS = 600;
-const MAX_BODY_BYTES = 16_384;
+const MAX_BODY_BYTES = 32_768;
 const ACTIONS = new Set([
   "checkin_upsert",
   "earn_it",
@@ -23,6 +23,9 @@ const ACTIONS = new Set([
   "measurement",
   "vial_start",
   "profile_update",
+  "goal_set",
+  "food_thought",
+  "health_sync",
 ]);
 
 function corsHeaders(origin: string | null): Record<string, string> {
@@ -240,6 +243,74 @@ function validate(action: string, payload: Record<string, unknown>) {
     return checkRange("start_weight_lb", 50, 600) ||
       checkRange("goal_weight_lb", 50, 600) ||
       checkRange("height_in", 48, 90);
+  }
+  if (action === "food_thought") {
+    const at = asString(payload.at);
+    if (at && Number.isNaN(Date.parse(at))) return reject("at", "invalid_timestamp");
+    const note = asString(payload.note);
+    if (note && note.length > 500) return reject("note", "too_long");
+    return checkRange("strength", 1, 3, true);
+  }
+  if (action === "health_sync") {
+    const list = (key: string, max: number) => {
+      const v = payload[key];
+      if (v === undefined || v === null) return [];
+      if (!Array.isArray(v) || v.length > max) return null;
+      return v;
+    };
+    const days = list("days", 62);
+    const weights = list("weights", 200);
+    const body = list("body", 200);
+    const workouts = list("workouts", 100);
+    if (!days) return reject("days", "invalid_list");
+    if (!weights) return reject("weights", "invalid_list");
+    if (!body) return reject("body", "invalid_list");
+    if (!workouts) return reject("workouts", "invalid_list");
+    const inRange = (o: Record<string, unknown>, k: string, min: number, max: number) => {
+      const raw = asString(o[k]);
+      if (raw === undefined || raw === "") return true;
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= min && n <= max;
+    };
+    const isTime = (o: Record<string, unknown>, k: string) => {
+      const raw = asString(o[k]);
+      return !!raw && !Number.isNaN(Date.parse(raw));
+    };
+    for (const d of days) {
+      if (!isPlainObject(d) || !dayRe.test(asString(d.day) ?? "")) return reject("days.day", "invalid_date");
+      const ok = inRange(d, "steps", 0, 200000) && inRange(d, "distance_mi", 0, 200) &&
+        inRange(d, "active_kcal", 0, 20000) && inRange(d, "exercise_min", 0, 1440) &&
+        inRange(d, "stand_hours", 0, 24) && inRange(d, "resting_hr", 20, 220) &&
+        inRange(d, "hrv_ms", 1, 400) && inRange(d, "vo2max", 5, 100) && inRange(d, "sleep_hours", 0, 24);
+      if (!ok) return reject("days", "out_of_range");
+    }
+    for (const w of weights) {
+      if (!isPlainObject(w) || !isTime(w, "measured_at") || !inRange(w, "weight_lb", 50, 600)) return reject("weights", "invalid_entry");
+    }
+    for (const b of body) {
+      const metric = isPlainObject(b) ? asString(b.metric) : undefined;
+      if (!isPlainObject(b) || (metric !== "body_fat_pct" && metric !== "lean_mass_lb") || !isTime(b, "measured_at") || !inRange(b, "value", 0, 400)) {
+        return reject("body", "invalid_entry");
+      }
+    }
+    for (const k of workouts) {
+      if (!isPlainObject(k) || !isTime(k, "started_at") || (asString(k.activity) ?? "").length > 60 ||
+        !inRange(k, "duration_min", 0, 1440) || !inRange(k, "distance_mi", 0, 200) || !inRange(k, "active_kcal", 0, 20000) ||
+        !inRange(k, "avg_hr", 20, 250) || !inRange(k, "max_hr", 20, 250)) {
+        return reject("workouts", "invalid_entry");
+      }
+    }
+    return null;
+  }
+  if (action === "goal_set") {
+    const kind = (asString(payload.kind) ?? "").trim().toLowerCase();
+    if (kind !== "calories" && kind !== "protein") return reject("kind", "invalid_enum");
+    if (asString(payload.target) === undefined || asString(payload.target) === "") {
+      return reject("target", "required");
+    }
+    return kind === "calories"
+      ? checkRange("target", 800, 6000, true)
+      : checkRange("target", 20, 400, true);
   }
   return reject("action", "invalid_action");
 }

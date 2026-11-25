@@ -8,15 +8,16 @@ const GOAL_LB = 235;
 const TIRZ_START = new Date("2026-11-02T12:00:00-06:00");
 
 const SITE_LABELS = {
-  "Abd LR": "Abdomen, lower right",
-  "Abd LL": "Abdomen, lower left",
-  "Abd UR": "Abdomen, upper right",
-  "Abd UL": "Abdomen, upper left",
-  "Love L": "Love handle, left",
-  "Love R": "Love handle, right",
+  "Abd LR": "Lower right belly",
+  "Abd LL": "Lower left belly",
+  "Abd UR": "Upper right belly",
+  "Abd UL": "Upper left belly",
+  "Love L": "Left love handle",
+  "Love R": "Right love handle",
 };
 
 const PASS_KEY = "log.passcode";
+const CACHE_KEY = "log.cache"; // last dashboard payload, so the app opens with data while it refreshes
 let lastWidth = 0;
 
 const state = {
@@ -36,6 +37,10 @@ const state = {
   dayOffset: 0,
   daySlide: null,
   checkinOpen: false,
+  fromCache: false,
+  effectOpen: false,
+  healthBusy: false,
+  healthMsg: null,
   editTargets: false,
   targetsBusy: false,
   targetsMsg: null,
@@ -212,7 +217,9 @@ async function load(isRefresh, background) {
   try {
     const data = await fetchData();
     state.data = data;
+    state.fromCache = false;
     state.error = null;
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (_) { /* full or private mode: skip */ }
     if (state.passcode && !state.token) {
       try { localStorage.setItem(PASS_KEY, state.passcode); } catch (_) { /* ignore quota */ }
     }
@@ -220,7 +227,7 @@ async function load(isRefresh, background) {
     const unauthorized = err.message === "unauthorized";
     if (unauthorized && state.passcode && !state.token) {
       state.passcode = "";
-      try { localStorage.removeItem(PASS_KEY); } catch (_) { /* ignore */ }
+      try { localStorage.removeItem(PASS_KEY); localStorage.removeItem(CACHE_KEY); } catch (_) { /* ignore */ }
       state.data = null;
       state.error = "bad-passcode";
     } else if (!state.data) {
@@ -261,7 +268,7 @@ function lock() {
   state.error = null;
   state.loading = false;
   state.updating = false;
-  try { localStorage.removeItem(PASS_KEY); } catch (_) { /* ignore */ }
+  try { localStorage.removeItem(PASS_KEY); localStorage.removeItem(CACHE_KEY); } catch (_) { /* ignore */ }
   if (location.hash) {
     history.replaceState(null, "", location.pathname + location.search);
   }
@@ -512,6 +519,7 @@ function renderTopbar(data) {
   const title = state.tab === "today" ? dayTitle(viewKey()) : (TABS.find((t) => t.id === state.tab) || TABS[0]).label;
   const updated = state.error === "refresh-failed"
     ? `Couldn’t refresh. Showing data from ${fmtTimeCT(asOf)}.`
+    : state.fromCache ? `Saved data from ${fmtTimeCT(asOf).replace(" CT", "")}, refreshing…`
     : state.updating ? "Refreshing…" : `Updated ${fmtTimeCT(asOf).replace(" CT", "")}`;
   const sub = state.tab === "today" ? fmtLongDateYearCT(keyToNoon(viewKey())) : updated;
   return el("header", { class: "topbar" },
@@ -576,7 +584,7 @@ function renderHero(data, key) {
     el("div", { class: "hero-meta" }, `Weighed ${fmtDateCT(cur.at, true)}, ${fmtTimeCT(cur.at)}`),
     el("div", { class: "hero-chips" },
       el("span", { class: deltaCls }, `${signed(-lost)} lb since start`),
-      rp ? el("span", { class: "chip" }, `${signed(rp.weekly)} lb a week lately`) : null,
+      rp ? el("span", { class: "chip" + (lossRate(data) && lossRate(data).fast ? " watch" : "") }, `${signed(rp.weekly)} lb a week (${fmtNum(Math.abs(rp.weekly / cur.lb) * 100, 1)}%)`) : null,
     ),
     pct != null ? el("div", { class: "course" },
       el("div", { class: "course-track", role: "img", "aria-label": `${fmtNum(lost, 1)} of ${fmtNum(total, 1)} pounds to goal` },
@@ -874,6 +882,32 @@ function renderDayMeds(data, key) {
   );
 }
 
+/* Apple Health sync button and status. Only inside the Log iPhone app. */
+function renderHealthSync(full) {
+  if (!canSyncHealth()) return null;
+  const last = lastHealthSync();
+  const msg = state.healthMsg;
+  return el("div", { class: "health-sync" },
+    el("button", {
+      type: "button",
+      class: full ? "primary" : "",
+      disabled: state.healthBusy,
+      onClick: async () => {
+        state.healthBusy = true;
+        state.healthMsg = null;
+        render();
+        const r = await syncAppleHealth({ days: full ? 30 : 7 });
+        state.healthBusy = false;
+        state.healthMsg = r.ok
+          ? { ok: true, text: `Synced ${r.days} day${r.days === 1 ? "" : "s"}, ${r.weights} weigh-in${r.weights === 1 ? "" : "s"}, ${r.body} body reading${r.body === 1 ? "" : "s"}, ${r.workouts} workout${r.workouts === 1 ? "" : "s"}.` }
+          : { ok: false, text: r.reason };
+        if (r.ok) await load(true); else render();
+      },
+    }, state.healthBusy ? "Syncing…" : full ? "Sync the last 30 days" : "Sync Apple Health"),
+    el("span", { class: "sync-meta" + (msg && !msg.ok ? " err" : "") }, msg ? msg.text : last ? `Last synced ${fmtDateCT(new Date(last.at), false)}, ${fmtTimeCT(new Date(last.at)).replace(" CT", "")}` : "Not synced yet"),
+  );
+}
+
 function renderSignals(data, key) {
   const past = key && key !== todayKey();
   const h = past ? healthOn(data, key) : latestHealth(data);
@@ -886,7 +920,8 @@ function renderSignals(data, key) {
       metric("Resting HR", h.resting_hr != null ? fmtNum(h.resting_hr, 0) : "—", "bpm"),
       metric("HRV", h.hrv_ms != null ? fmtNum(h.hrv_ms, 0) : "—", "ms"),
     ),
-    el("p", { class: "caption" }, past ? "From Apple Health." : isToday ? "From Apple Health, today so far." : `From Apple Health, ${fmtShortDate(h.day)}. Newer days appear after the next import.`),
+    el("p", { class: "caption" }, past ? "From Apple Health." : isToday ? "From Apple Health, today so far." : `From Apple Health, ${fmtShortDate(h.day)}. ${canSyncHealth() ? "Sync to bring in newer days." : "Newer days appear after the next sync from the iPhone app."}`),
+    !past ? renderHealthSync() : null,
   );
 }
 
@@ -1006,6 +1041,7 @@ function renderTodayTab(data) {
     renderHero(data, key),
     renderFood(data, key),
     renderCheckinNudge(data, key),
+    renderFeelNow(data, key),
     isToday ? renderCountdowns(data) : null,
     isToday ? renderVerdict(data) : null,
     isToday ? renderMedSummary(data) : renderDayMeds(data, key),
@@ -1207,16 +1243,19 @@ function renderMedsTab(data) {
 
 /* Daily series that can sit under the weight chart. Same days, separate scale. */
 const OVERLAYS = [
-  { id: "none", label: "None" },
-  { id: "calories", label: "Calories", cls: "s2", title: "Calories", fmt: (v) => `${fmtNum(v, 0)} kcal` },
-  { id: "steps", label: "Steps", cls: "s4", title: "Steps", fmt: (v) => `${fmtNum(v, 0)} steps` },
-  { id: "sleep", label: "Sleep", cls: "s3", title: "Sleep", fmt: (v) => `${fmtNum(v, 1)} h sleep` },
+  { id: "none", label: "Off" },
+  { id: "calories", label: "Cal", cls: "s2", title: "Calories", fmt: (v) => `${fmtNum(v, 0)} kcal`, field: "calories", zero: true },
+  { id: "steps", label: "Steps", cls: "s4", title: "Steps", fmt: (v) => `${fmtNum(v, 0)} steps`, field: "steps", zero: true },
+  { id: "sleep", label: "Sleep", cls: "s3", title: "Sleep", fmt: (v) => `${fmtNum(v, 1)} h sleep`, field: "sleep_hours", zero: true },
+  { id: "rhr", label: "RHR", cls: "s3", title: "Resting heart rate", fmt: (v) => `${fmtNum(v, 0)} bpm resting`, field: "resting_hr" },
+  { id: "hrv", label: "HRV", cls: "s4", title: "HRV", fmt: (v) => `${fmtNum(v, 0)} ms HRV`, field: "hrv_ms" },
 ];
 
 function overlayDaily(data, id) {
+  const o = OVERLAYS.find((x) => x.id === id);
   const rows = id === "calories"
     ? (data.daily_totals || []).map((r) => [r.date, num(r.calories)])
-    : (data.daily_health || []).map((r) => [r.day, num(id === "steps" ? r.steps : r.sleep_hours)]);
+    : (data.daily_health || []).map((r) => [r.day, num(r[o.field])]);
   const out = new Map();
   for (const [key, v] of rows) if (key && v != null && v > 0) out.set(key, v);
   return out;
@@ -1319,7 +1358,7 @@ function renderWeightCard(data) {
           ovPts && ovPts.length ? { id: "ov", label: ov.title, cls: `${ov.cls} overlay-line`, type: "line", axis: "right", endDot: true, points: ovPts } : null,
         ].filter(Boolean),
         fmtRight: ov ? ovFmtAxis : undefined,
-        rightMin: 0,
+        rightMin: ov && ov.zero ? 0 : undefined,
         refs: goal != null ? [{ v: goal, label: `Goal ${fmtNum(goal, 0)}`, inDomain: range.id !== "all" ? Math.abs(goal - last.trend) < 30 : true }] : [],
         marks: TIRZ_START >= startT ? [{ t: TIRZ_START, label: "Tirzepatide" }] : [],
         snap: "trend",
@@ -1349,7 +1388,7 @@ function renderWeightCard(data) {
           : null;
   }
   const compare = el("div", { class: "compare" },
-    el("span", null, "Compare"),
+    el("span", null, "Compare with"),
     el("div", { class: "seg", role: "group", "aria-label": "Compare weight with" },
       ...OVERLAYS.map((o) => el("button", {
         type: "button",
@@ -1375,9 +1414,14 @@ function renderWeightCard(data) {
     ovNote ? el("p", { class: "strip-note" }, ovNote) : null,
     el("div", { class: "stats" },
       metric(`Change, ${range.label}`, `${signed(change)} lb`, "trend to trend"),
-      metric("Pace", rp ? `${signed(rp.weekly)} lb/wk` : "—", "last 4 weeks"),
+      metric("Pace", rp ? `${signed(rp.weekly)} lb/wk` : "—", rp ? `${fmtNum(Math.abs(rp.weekly / last.lb) * 100, 1)}% of body weight` : "last 4 weeks"),
       metric("Range", lows != null ? `${fmtNum(lows, 1)}–${fmtNum(highs, 1)}` : "—", "lowest to highest"),
     ),
+    lossRate(data) && lossRate(data).fast ? el("div", { class: "callout watch-note" },
+      el("div", null,
+        el("strong", null, `Losing ${fmtNum(lossRate(data).pct, 1)}% of body weight a week`),
+        el("span", null, "That’s above 1% a week over the last 4 weeks. Faster loss tends to take more muscle with it, so protein and strength work matter more right now."),
+      )) : null,
     el("p", { class: "caption" }, showProj
       ? `The trend smooths day-to-day water swings. The projection extends the straight-line fit since starting tirzepatide (${signed(proj.weekly, 2)} lb a week) six weeks out. It describes the past; it isn’t a prediction.`
       : "The trend smooths day-to-day water swings, so one high or low weigh-in barely moves it."),
@@ -1606,8 +1650,9 @@ function renderSideEffects(data) {
 }
 
 function renderMeasurements(data) {
-  const rows = data.measurements || [];
-  if (!rows.length) return card("Measurements", el("p", { class: "empty" }, "No body measurements yet. Log waist or other metrics on the Log tab."));
+  // Body fat and lean mass have their own card.
+  const rows = (data.measurements || []).filter((r) => r.metric !== "body_fat_pct" && r.metric !== "lean_mass_lb");
+  if (!rows.length) return card("Measurements", el("p", { class: "empty" }, "No tape measurements yet. Log waist or other metrics on the Log tab."));
   const byMetric = {};
   for (const r of rows) (byMetric[r.metric] ||= []).push(r);
   const charts = Object.entries(byMetric).map(([name, list]) => {
@@ -1678,20 +1723,32 @@ function renderExport(data) {
 }
 
 function renderTrendsTab(data) {
+  const section = (t) => el("h2", { class: "section-title" }, t);
   return el("div", { class: "stack" },
     renderWeightCard(data),
     renderStall(data),
+    section("Food"),
     renderFoodTrends(data),
+    renderProteinCard(data),
+    renderFoodThoughtsCard(data),
+    section("Your week on the medication"),
+    renderShotWeek(data),
     renderCycles(data),
     renderFeel(data),
     renderWearOff(data),
     renderSideEffects(data),
+    section("Body"),
+    renderHeartCard(data),
+    renderBodyComp(data),
+    renderMeasurements(data),
+    section("Training"),
+    renderRunning(data),
+    renderStepsCard(data),
+    renderWorkouts(data),
+    section("More"),
     renderExplorer(data),
     renderEarnWall(data),
-    renderStepsCard(data),
-    renderMeasurements(data),
     renderWeekly(data),
-    renderWorkouts(data),
     renderExport(data),
   );
 }
@@ -1834,7 +1891,19 @@ function boot() {
   } else {
     state.passcode = "";
   }
-  load(false);
+  // Open straight to the last data this phone saw, then refresh it in place.
+  if (hasCredential()) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+      if (cached && cached.as_of) { state.data = cached; state.fromCache = true; }
+    } catch (_) { /* ignore a bad cache */ }
+  }
+  if (state.data) { render(); load(true).then(() => autoSyncHealth()); }
+  else load(false).then(() => autoSyncHealth());
+}
+
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => { /* offline shell is optional */ }); });
 }
 
 /* Redraw charts when the width really differs from the one they were drawn at. */

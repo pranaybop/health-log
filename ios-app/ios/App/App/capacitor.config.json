@@ -12,5 +12,7 @@
 		"scrollEnabled": true,
 		"allowsLinkPreview": false
 	},
-	"packageClassList": []
+	"packageClassList": [
+		"HealthPlugin"
+	]
 }

@@ -10,9 +10,9 @@ Times display in America/Chicago. Meal macros may be estimates. Drug level is a 
 
 ## Frontend
 
-No build step and no dependencies. Scripts load in this order: `analytics.js` (pure calculations: weight smoothing, pace, drug level, cycles), `export.js` (prescriber CSV/PDF), `forms.js` (Log tab), `charts.js` (SVG charts with touch scrubbing, site map), `app.js` (state, tabs, rendering). `styles.css` follows the system light/dark setting. Bump the `?v=` query in `index.html` when shipping changes so iPhone Safari picks them up.
+No build step and no dependencies. Scripts load in this order: `analytics.js` (pure calculations: weight smoothing, pace, drug level, cycles), `export.js` (prescriber CSV/PDF), `forms.js` (Log tab and the check-in), `health.js` (Apple Health sync, only active inside the iPhone app), `charts.js` (SVG charts with touch scrubbing, site map), `insights.js` (food thoughts, the week after a shot, heart, body composition, running, protein hit rate), `app.js` (state, tabs, rendering). `sw.js` is a network-first offline shell for the site's own files; the last dashboard payload is kept in `localStorage` (`log.cache`) so the app opens with data and works offline. Lock clears it. `styles.css` follows the system light/dark setting. Bump the `?v=` query in `index.html` when shipping changes so iPhone Safari picks them up.
 
-Calorie and protein targets on Today come from active `log.goals` rows (`kind` `calories` / `protein`) when present; otherwise from targets set on the device (`localStorage` `log.targets`). Edit targets tries a `goal_set` write first and falls back to the device while that action isn't deployed.
+Calorie and protein targets on Today come from active `log.goals` rows (`kind` `calories` / `protein`, set with `goal_set`); a device-only fallback (`localStorage` `log.targets`) is used only if no goals row exists. Current targets: 2,200 kcal and 150 g protein.
 
 The weight chart's Compare control draws calories (`daily_totals`), steps or sleep (`daily_health`, last 365 days) as a bar strip under the chart on the same days, with its own scale. 1Y and All use weekly averages. The choice is kept on the device (`log.overlay`).
 
@@ -41,6 +41,9 @@ Both Edge Functions require `x-log-passcode` or `x-log-token`. Auth is a SHA-256
 - `measurement` — insert `{ metric, value, unit?, measured_at?, notes? }`
 - `vial_start` — insert a vial (`total_mg` or `total_units` required)
 - `profile_update` — update the single profile row (`start_weight_lb`, `goal_weight_lb`, `height_in`)
+- `goal_set` — `{ kind: calories|protein, target }`; marks the current active target of that kind `retired` and inserts the new one (no-op if unchanged)
+- `food_thought` — insert a one-tap "thinking about food" `{ strength?: 1–3, at?, note? }` into `log.food_thoughts`
+- `health_sync` — from the iPhone app: `days` (upsert into `log.daily_health` by day; fields not sent are kept), `weights`, `body` (`body_fat_pct`, `lean_mass_lb` into `log.measurements`) and `workouts`, all insert-only and skipping anything already logged at the same time
 
 Allowed injection sites: `Abd LR`, `Abd LL`, `Abd UR`, `Abd UL`, `Love L`, `Love R`. Compounds: `tirzepatide`, `retatrutide`.
 
@@ -63,9 +66,12 @@ Added for WeightSnap-parity:
 - `log.protocol` — `compound`, `display_name`, `typical_dose_mg`, `units`, `frequency`, `status` (`active`\|`paused`\|`retired`\|`as_needed`), `half_life_hours`, `started_on`, `next_site`, `notes`. Seeded: tirzepatide 3 mg weekly, active, 120 h, started 2026-11-02; retatrutide planned 2026-12-06, paused, 144 h, 20 units after mixing with 1 mL, `typical_dose_mg` null until known
 - `log.vials` — inventory for supply runway (`total_` / `remaining_` mg or units, concentration, expiry)
 - `log.measurements` — `measured_at`, `metric`, `value`, `unit`
-- `log.profile` — single row (`id = 1`): `start_weight_lb` (271.8), `goal_weight_lb` (235), `height_in`
+- `log.profile` — single row (`id = 1`): `start_weight_lb` (271.8), `goal_weight_lb` (235), `height_in` (73)
 - `log.goals` — optional targets; a weight goal of 235 lb by 2027-01-01 is seeded
 - `log.progress_photos` — metadata only; private Storage is not wired up
+- `log.food_thoughts` — `thought_at`, `strength` (1 passing thought, 2 strong pull, 3 craving), `note`
+
+The dashboard payload also carries `food_thoughts` (last 180 days) and `run_weeks` (running miles, runs and longest run per Monday week, last 26 weeks).
 
 All `log` tables have RLS enabled. Privileges are for `service_role` / `postgres` only. The Data API does not expose schema `log`; the app goes through the Edge Functions and `SECURITY DEFINER` RPCs `public.log_dashboard_payload()` and `public.log_write(text, jsonb)`.
 
@@ -75,4 +81,4 @@ Insert only. Never update or delete existing rows unless explicitly asked, excep
 
 ## Not feasible on the web
 
-Apple Health / HealthKit sync, home-screen widgets, an Apple Watch app, and AI body-fat estimates from photos. The app is a PWA (manifest + icons) so it can be added to the iPhone home screen.
+Home-screen widgets, an Apple Watch app, and AI body-fat estimates from photos. Apple Health sync needs the iPhone app in `ios-app/`. The app is a PWA (manifest + icons) so it can be added to the iPhone home screen.
