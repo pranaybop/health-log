@@ -5,7 +5,6 @@ const LOG_BOT_URL = "grokbot://app/v1/agent?id=81acb34c-2ba4-4bde-aa1b-98e865272
 const LOG_BOT_UNAVAILABLE = "Grok Bot isn’t installed.";
 const HALF_LIFE_DAYS = 5;
 const RETA_START = new Date("2026-12-06T12:00:00-06:00");
-const HALF_MARATHON = new Date("2026-12-13T08:00:00-06:00");
 const CHECKIN_PROMPT_HOUR = 18; // the "No check-in yet" prompt waits until 6 PM Central
 const GOAL_LB = 235;
 const TIRZ_START = new Date("2026-11-02T12:00:00-06:00");
@@ -480,18 +479,12 @@ const RANGES = [
   { id: "1y", label: "1Y", days: 365 },
   { id: "all", label: "All", days: null },
   { id: "glp1", label: "GLP-1", startFrom: "glp1" },
-  { id: "train", label: "Train", startFrom: "train" },
 ];
 
 function rangeStartAt(range, data, end, earliest) {
   if (range.startFrom === "glp1") return firstGlp1At(data) || TIRZ_START;
-  if (range.startFrom === "train") return trainingBlockAt(data);
   if (range.days) return new Date(end.getTime() - range.days * 86400000);
   return earliest;
-}
-
-function visibleRanges(data) {
-  return RANGES.filter((r) => r.startFrom !== "train" || trainingBlockAt(data));
 }
 
 /* Calorie and protein targets: a goals row wins (kind "calories" / "protein"); otherwise this device's setting. */
@@ -872,7 +865,6 @@ function renderCountdowns(data) {
   return el("section", { class: "counts", "aria-label": "Coming up" },
     next ? tile("Next dose", next, "dose") : (daysUntil(retaSwitchAt(data)) >= 0 ? tile("Retatrutide", retaSwitchAt(data), "dose") : null),
     next && daysUntil(RETA_START) >= 0 ? tile("Retatrutide", retaSwitchAt(data), "switch") : null,
-    daysUntil(HALF_MARATHON) >= 0 ? tile("Half marathon", HALF_MARATHON, "race") : null,
   );
 }
 
@@ -1132,7 +1124,6 @@ function renderTodayTab(data) {
     renderCheckinNudge(data, key),
     renderFeelNow(data, key),
     renderOffNormal(data, key),
-    isToday ? renderRaceCard(data) : null,
     isToday ? renderCountdowns(data) : null,
     isToday ? renderSwitchCard(data) : null,
     isToday ? renderVerdict(data) : null,
@@ -1397,7 +1388,7 @@ function renderWeightCard(data) {
   const parsed = parseWeights(data.weights || []);
   if (!parsed.length) return card("Weight", el("p", { class: "empty" }, "No weigh-ins yet. Log one on the Log tab."));
   const sm = smoothWeights(parsed);
-  const ranges = visibleRanges(data);
+  const ranges = RANGES;
   const range = ranges.find((r) => r.id === state.weightRange) || ranges.find((r) => r.id === "3m") || ranges[0];
   const last = sm[sm.length - 1];
   const end = new Date(Math.max(Date.now(), last.at.getTime()));
@@ -1426,7 +1417,7 @@ function renderWeightCard(data) {
     ...ranges.map((r) => el("button", {
       type: "button",
       "aria-pressed": range.id === r.id ? "true" : "false",
-      "aria-label": r.id === "glp1" ? "Since GLP-1" : r.id === "train" ? "Training block" : r.label,
+      "aria-label": r.id === "glp1" ? "Since GLP-1" : r.label,
       onClick: () => { state.weightRange = r.id; render(); },
     }, r.label)),
   );
@@ -1826,7 +1817,7 @@ function renderExport(data) {
       el("button", { type: "button", onClick: () => prescriberPrint(data) }, "Print or save PDF"),
       el("button", { type: "button", onClick: () => coachPackPrint(data) }, "4-week coach pack"),
     ),
-    el("p", { class: "caption" }, "The 4-week pack is a one-pager of recent weight, doses, mileage, protein hit rate, food thoughts and side effects, meant for a doctor or running coach."),
+    el("p", { class: "caption" }, "The 4-week pack is a one-pager of recent weight, doses, protein hit rate, food thoughts and side effects, meant for a doctor."),
     el("p", { class: "caption" }, "Not possible on the web: Apple Health sync, home-screen widgets, an Apple Watch app, or body-fat estimates from photos."),
   );
 }
@@ -1838,9 +1829,9 @@ function renderTrendsTab(data) {
     summary: () => [renderTrendSummary(data), renderWeightCard(data)],
     weight: () => [renderWeightCard(data), renderStall(data), renderBodyComp(data)],
     food: () => [renderFoodTrends(data), renderMaintenance(data), renderProteinCard(data), renderFoodThoughtsCard(data)],
-    meds: () => [renderShotWeek(data), renderAppetiteByLevel(data), renderRetaVsTirz(data), renderCycles(data), renderFeel(data), renderWearOff(data), renderLongRunTiming(data), renderSideEffects(data)],
+    meds: () => [renderShotWeek(data), renderAppetiteByLevel(data), renderRetaVsTirz(data), renderCycles(data), renderFeel(data), renderWearOff(data), renderSideEffects(data)],
     body: () => [renderOffNormalTrends(data), renderHeartCard(data), renderMoreHealth(data), renderMeasurements(data)],
-    training: () => [renderRunning(data), renderStepsCard(data), renderWorkouts(data)],
+    training: () => [renderStepsCard(data), renderWorkouts(data)],
     more: () => [renderExplorer(data), renderEarnWall(data), renderWeekly(data), renderExport(data)],
   };
   return el("div", { class: "stack" }, renderTrendNav(active), ...sections[active]());

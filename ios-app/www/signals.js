@@ -510,16 +510,5 @@ function renderTrendSummary(data) {
     rec.checked.length < 2 ? "Needs Apple Health data" : rec.off.length ? rec.off.map((c) => `${c.s.lower} ${fmtSignalDiff(c)}`).join(", ") : `${rec.checked.length} signals in their usual range`,
     rhr.length > 1 ? sparkline(rhr, t30, now) : null));
 
-  // Training, this week (Monday on)
-  const mon = weekMonday(today);
-  const runs = (data.workouts || []).filter((w) => isRunWorkout(w) && parseTs(w.started_at) && dateKeyCT(parseTs(w.started_at)) >= mon);
-  const miles = runs.reduce((a, w) => a + (num(w.distance_mi) || 0), 0);
-  const longest = runs.reduce((a, w) => Math.max(a, num(w.distance_mi) || 0), 0);
-  const weeks = (data.run_weeks || []).slice(-8).map((w) => ({ t: keyToNoon(w.week), v: num(w.miles) || 0 }));
-  tiles.push(summaryTile("training", "Running, this week",
-    `${fmtNum(miles, 1)} mi`,
-    runs.length ? `${runs.length} run${runs.length === 1 ? "" : "s"}, longest ${fmtNum(longest, 1)} mi` : "No runs yet this week",
-    weeks.length > 1 ? sparkline(weeks, new Date(weeks[0].t.getTime() - 86400000), now) : null));
-
   return el("section", { class: "sum-grid", "aria-label": "Summary" }, ...tiles);
 }

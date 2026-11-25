@@ -163,7 +163,7 @@ function makeFixture() {
     if (k >= shift(TODAY, -39)) put("wrist_temp_f", k, r2(95.6 + jitter(0.25)));
   }
 
-  /* ---------- workouts and running weeks ---------- */
+  /* ---------- workouts ---------- */
   const workouts = [];
   for (const k of [...runDays].filter((d) => d >= "2026-09-15")) {
     const long = dow(k) === 6;
@@ -175,17 +175,6 @@ function makeFixture() {
     workouts.push({ id: `lift-${k}`, started_at: localIso(k, 18), ended_at: localIso(k, 18.75), activity: "traditional strength training", duration_min: 45, distance_mi: null, active_kcal: 210, avg_hr: 118, max_hr: 141, indoor: true, source: "Apple Watch" });
   }
   workouts.sort((a, b) => (a.started_at < b.started_at ? 1 : -1));
-  const run_weeks = [];
-  const weeks = new Map();
-  for (const w of workouts.filter((x) => x.activity === "running")) {
-    const wk = monday(w.started_at.slice(0, 10));
-    const s = weeks.get(wk) || { week: wk, runs: 0, miles: 0, longest_mi: 0, minutes: 0 };
-    s.runs += 1; s.miles += w.distance_mi; s.longest_mi = Math.max(s.longest_mi, w.distance_mi); s.minutes += w.duration_min;
-    weeks.set(wk, s);
-  }
-  for (const s of [...weeks.values()].sort((a, b) => (a.week < b.week ? -1 : 1)).slice(-8)) {
-    run_weeks.push({ week: s.week, runs: s.runs, miles: r1(s.miles), longest_mi: r1(s.longest_mi), minutes: Math.round(s.minutes) });
-  }
 
   /* ---------- check-ins: food noise tracks the drug level ---------- */
   const checkins = [];
@@ -301,7 +290,6 @@ function makeFixture() {
     profile: { start_weight_lb: 248, goal_weight_lb: 215, height_in: 70, notes: null },
     goals: [{ id: "g1", kind: "weight", target: 215, unit: "lb", due_on: "2027-03-01", notes: null, status: "active" }],
     food_thoughts,
-    run_weeks,
     health_metrics: hm,
   };
 }

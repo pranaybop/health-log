@@ -355,7 +355,7 @@ button.link {
 .callout.done strong { color: var(--good-ink); }
 .callout button { flex: none; }
 
-.counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.counts { display: flex; gap: 10px; }
 .count {
   background: var(--surface);
   border-radius: 18px;
@@ -363,12 +363,12 @@ button.link {
   display: grid;
   gap: 2px;
   min-width: 0;
+  flex: 1 1 0;
 }
 .count-label { font-size: 13px; color: var(--ink-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .count-num { font-family: var(--font-num); font-size: 30px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; }
 .count-num small { font-size: 14px; font-weight: 600; color: var(--ink-2); letter-spacing: 0; }
 .count-date { font-size: 13px; color: var(--ink-2); }
-.count.race .count-num { color: var(--s2); }
 
 .med-level { display: grid; gap: 2px; margin-bottom: 12px; }
 .med-level .big { font-family: var(--font-num); font-size: 40px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.05; }
@@ -1045,7 +1045,7 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: none; }
 @media (prefers-reduced-motion: reduce) { .ptr.spin svg { animation-duration: 2s; } .ptr.settle { transition: none; } }
 
 
-/* Extra range chips (GLP-1 / Train) wrap on a narrow phone. */
+/* The GLP-1 range chip wraps with the others on a narrow phone. */
 .seg.wrap { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (min-width: 520px) {
   .seg.wrap { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: 1fr; }
@@ -1194,6 +1194,7 @@ html.native-tabs .tabnav { display: none; }
 
 /* ---------- Trends: summary tiles ---------- */
 .sum-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.sum-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .sum-tile {
   display: flex;
   flex-direction: column;

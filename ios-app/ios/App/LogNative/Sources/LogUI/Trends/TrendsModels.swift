@@ -49,7 +49,6 @@ struct TrWeightModel {
     var loss: TrendsCalc.LossRate?
     var glp1: Date
     var reta: Date
-    var train: Date?
     var overlays: [String: [String: Double]]
     var recent: [[String]]
 
@@ -65,7 +64,6 @@ struct TrWeightModel {
         loss = TrendsCalc.lossRate(sm)
         glp1 = TrendsCalc.firstGlp1At(d)
         reta = TrendsCalc.retaSwitchAt(d)
-        train = TrendsCalc.trainingBlockAt(d)
         var ov: [String: [String: Double]] = [:]
         for o in TrOverlay.all where o.id != "none" { ov[o.id] = TrendsCalc.overlayDaily(d, o.id, now: now) }
         overlays = ov
@@ -129,7 +127,7 @@ struct TrRange: Identifiable, Hashable {
     static let all = [
         TrRange(id: "1m", label: "1M", days: 30, a11y: "1M"), TrRange(id: "3m", label: "3M", days: 91, a11y: "3M"),
         TrRange(id: "1y", label: "1Y", days: 365, a11y: "1Y"), TrRange(id: "all", label: "All", days: nil, a11y: "All"),
-        TrRange(id: "glp1", label: "GLP-1", days: nil, a11y: "Since GLP-1"), TrRange(id: "train", label: "Train", days: nil, a11y: "Training block"),
+        TrRange(id: "glp1", label: "GLP-1", days: nil, a11y: "Since GLP-1"),
     ]
 }
 
@@ -171,7 +169,6 @@ struct TrMedsModel {
     var recaps: [TrendsCalc.CycleRecap]
     var feel: TrendsCalc.FeelReport
     var wearOff: TrendsCalc.WearOff
-    var longRun: TrendsCalc.LongRun
     var effects: [SideEffect]
 
     init(_ d: Dashboard, now: Date) {
@@ -181,7 +178,6 @@ struct TrMedsModel {
         recaps = TrendsCalc.cycleRecaps(d, now: now)
         feel = TrendsCalc.feelReport(d)
         wearOff = TrendsCalc.wearOff(d, now: now)
-        longRun = TrendsCalc.longRun(d, now: now)
         effects = Array(d.sideEffects.reversed())
     }
 }
@@ -327,13 +323,11 @@ struct TrBodyModel {
 // MARK: - Training
 
 struct TrTrainingModel {
-    var running: TrendsCalc.Running
     var steps: (days: [TrendsCalc.Column], average: Double, count: Int)?
     var workouts: [Workout]
     var workoutCount: Int
 
     init(_ d: Dashboard, now: Date) {
-        running = TrendsCalc.running(d, now: now)
         steps = TrendsCalc.steps(d, now: now)
         workouts = Array(d.workouts.prefix(8))
         workoutCount = (d.workoutCount ?? 0) > 0 ? d.workoutCount! : d.workouts.count
