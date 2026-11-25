@@ -300,7 +300,7 @@ struct MLAutoClear: ViewModifier {
     @Binding var message: MLMessage?
     func body(content: Content) -> some View {
         content.task(id: message) {
-            guard let m = message, m.ok else { return }
+            guard let m = message, m.ok, !MLDebug.flag("-sampleMessages") else { return }
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             if message == m { withAnimation { message = nil } }
         }

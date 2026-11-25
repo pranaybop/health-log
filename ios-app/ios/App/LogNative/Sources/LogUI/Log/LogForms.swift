@@ -33,6 +33,9 @@ struct MLWeighInCard: View {
             MLMessageView(message: message)
         }
         .modifier(MLAutoClear(message: $message))
+        .onAppear {
+            if MLDebug.flag("-sampleMessages") { message = MLMessage(ok: true, text: "Logged 241.2 lb.") }
+        }
     }
 
     private func save() {
@@ -80,6 +83,9 @@ struct MLEarnItCard: View {
             MLMessageView(message: message)
         }
         .modifier(MLAutoClear(message: $message))
+        .onAppear {
+            if MLDebug.flag("-sampleMessages") { message = MLMessage(ok: false, text: "Could not save: Couldn’t reach the log. Check your connection.") }
+        }
     }
 
     private func send(_ earned: Bool) {

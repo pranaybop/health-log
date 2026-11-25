@@ -105,12 +105,24 @@ struct MLHairline: View {
 /// Debug-only launch arguments for the CI screenshots.
 enum MLDebug {
     /// `-scrollTo <card id>`: scroll the screen to that card when it opens (debug builds only).
-    static var scrollTo: String? {
+    static var scrollTo: String? { arg("-scrollTo") }
+
+    /// The value after a launch argument, in debug builds only.
+    static func arg(_ name: String) -> String? {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
-        if let i = args.firstIndex(of: "-scrollTo"), i + 1 < args.count { return args[i + 1] }
+        if let i = args.firstIndex(of: name), i + 1 < args.count { return args[i + 1] }
         #endif
         return nil
+    }
+
+    /// Whether a launch argument is present, in debug builds only.
+    static func flag(_ name: String) -> Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains(name)
+        #else
+        return false
+        #endif
     }
 }
 

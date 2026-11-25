@@ -107,7 +107,7 @@ struct MLHalfLifeChart: View {
         .chartXAxis {
             AxisMarks(values: [0.0, 7.0, 14.0]) { value in
                 AxisGridLine().foregroundStyle(LogColor.grid)
-                AxisValueLabel {
+                AxisValueLabel(anchor: value.index == 0 ? .topLeading : (value.index == 2 ? .topTrailing : .top)) {
                     if let v = value.as(Double.self) { Text(v == 0 ? "Dose" : "Day \(Fmt.num(v, 0))") }
                 }
             }

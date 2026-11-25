@@ -18,3 +18,5 @@ log-side log light -scrollTo side
 log-measure log light -scrollTo measure
 log-vial log light -scrollTo vial
 log-recon log light -scrollTo recon
+log-checkin-saved log light -checkinDay 2026-11-24
+log-messages log dark -scrollTo weigh -sampleMessages

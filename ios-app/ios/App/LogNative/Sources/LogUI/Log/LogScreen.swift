@@ -38,7 +38,7 @@ public struct LogScreen: View {
                 }
                 LogCard("Today’s check-in") {
                     Caption("How the day went. Everything is optional, and saving again updates today’s answers.")
-                    CheckinForm(day: LogTime.today())
+                    CheckinForm(day: MLDebug.arg("-checkinDay") ?? LogTime.today())
                 }
                 .id("checkin")
                 MLWeighInCard().id("weigh")
