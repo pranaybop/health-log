@@ -51,12 +51,14 @@ struct TrSummaryTileView: View {
 
 struct TrWeightSectionView: View {
     var m: TrWeightSection
+    var photos: [ProgressPhoto] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TrWeightCard(m: m.weight).id("weight")
             TrStallCard(s: m.stall).id("stall")
             TrBodyCompCard(b: m.body, now: m.weight.now).id("body-comp")
+            ProgressPhotosCard(photos: photos).id("photos")
         }
     }
 }

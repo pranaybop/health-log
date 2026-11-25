@@ -16,6 +16,7 @@ log-dark log dark
 log-weigh log light -scrollTo weigh
 log-reminders log light -scrollTo reminders
 log-reminders-dark log dark -scrollTo reminders
+log-photo log light -scrollTo weigh -samplePhoto
 log-dose log light -scrollTo dose
 log-dose-dark log dark -scrollTo dose
 log-side log light -scrollTo side

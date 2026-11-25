@@ -51,6 +51,10 @@ const state = {
   mealBotNote: null,
   gateLetters: false,
   openForms: { threetap: true },
+  photoOffer: null,
+  photoBusy: false,
+  photoNote: null,
+  photoDeleteId: null,
 };
 
 function readToken() {
@@ -1825,12 +1829,68 @@ function renderExport(data) {
   );
 }
 
+function photoWhen(p) {
+  if (p.day) return fmtShortDate(p.day);
+  const at = parseTs(p.taken_at);
+  return at ? fmtDateCT(at, false) : "—";
+}
+
+function renderProgressPhotos(data) {
+  const photos = (data.progress_photos || []).slice().sort((a, b) => String(b.taken_at || b.day || "").localeCompare(String(a.taken_at || a.day || "")));
+  if (!photos.length) {
+    return card("Progress photos", el("p", { class: "empty" }, "After a weigh-in you can add a private photo. It shows up here with the date and weight."));
+  }
+  return card("Progress photos",
+    state.photoNote ? el("p", { class: "caption" }, state.photoNote) : null,
+    el("div", { class: "photo-row" }, ...photos.map((p) => {
+      const when = photoWhen(p);
+      const wt = p.weight_lb != null && p.weight_lb !== "" ? `${fmtNum(p.weight_lb, 1)} lb` : "";
+      const confirming = state.photoDeleteId === p.id;
+      return el("figure", { class: "photo-tile" },
+        p.url
+          ? el("img", { src: p.url, alt: `Progress photo, ${when}${wt ? `, ${wt}` : ""}` })
+          : el("div", { class: "photo-missing" }, "Photo unavailable"),
+        el("figcaption", null,
+          el("span", null, when),
+          wt ? el("span", { class: "photo-wt" }, wt) : null,
+        ),
+        p.id ? el("button", {
+          type: "button",
+          class: "photo-delete",
+          "aria-label": confirming ? `Confirm delete photo from ${when}` : `Delete photo from ${when}`,
+          onClick: () => deleteProgressPhoto(p),
+        }, confirming ? "Delete?" : "Delete") : null,
+      );
+    })),
+  );
+}
+
+async function deleteProgressPhoto(p) {
+  if (!p.id) return;
+  if (state.photoDeleteId !== p.id) {
+    state.photoDeleteId = p.id;
+    render();
+    return;
+  }
+  state.photoDeleteId = null;
+  state.photoNote = null;
+  try {
+    await writeLog("progress_photo_delete", { id: p.id });
+    await load(true);
+  } catch (err) {
+    state.photoNote = err && err.message === "unauthorized"
+      ? "Passcode was rejected. Lock and unlock again."
+      : "Couldn’t delete the photo.";
+    render();
+  }
+}
+
 /* Trends, one section at a time: a summary that opens each section, then the detail cards. */
 function renderTrendsTab(data) {
   const active = trendSection();
   const sections = {
     summary: () => [renderTrendSummary(data), renderWeightCard(data)],
-    weight: () => [renderWeightCard(data), renderStall(data), renderBodyComp(data)],
+    weight: () => [renderWeightCard(data), renderStall(data), renderBodyComp(data), renderProgressPhotos(data)],
     food: () => [renderFoodTrends(data), renderMaintenance(data), renderProteinCard(data), renderFoodThoughtsCard(data)],
     meds: () => [renderShotWeek(data), renderAppetiteByLevel(data), renderRetaVsTirz(data), renderCycles(data), renderFeel(data), renderWearOff(data), renderSideEffects(data)],
     body: () => [renderOffNormalTrends(data), renderHeartCard(data), renderMoreHealth(data), renderMeasurements(data)],

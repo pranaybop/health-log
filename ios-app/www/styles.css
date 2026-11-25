@@ -1125,6 +1125,68 @@ html.ptr-on, html.ptr-on body { overscroll-behavior-y: none; }
 .bars + .hm-group { margin-top: 20px; }
 
 .app-version { margin: 8px 0 0; text-align: center; font-size: 13px; color: var(--ink-2); }
+
+/* Progress photos: a quiet offer under a weigh-in, and a sideways timeline. */
+.photo-offer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.photo-offer .caption { margin: 0 0 8px; }
+.photo-offer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.photo-file {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 16px;
+  overflow: hidden;
+}
+.photo-file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+.photo-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 4px;
+}
+.photo-tile { flex: 0 0 168px; scroll-snap-align: start; margin: 0; }
+.photo-tile img, .photo-missing {
+  width: 168px;
+  height: 224px;
+  object-fit: cover;
+  border-radius: 16px;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.photo-tile figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.photo-tile .photo-wt { font-family: var(--font-num); font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.photo-delete {
+  margin-top: 4px;
+  min-height: 36px;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--crit-ink);
+  font-size: 14px;
+}
 table.plan-steps tr.on td { font-weight: 650; color: var(--ink); }
 table.plan-steps tr.on td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 8px; }
 table.plan-steps tr.done td { color: var(--ink-2); }

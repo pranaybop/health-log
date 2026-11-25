@@ -10,36 +10,48 @@ struct MLMessage: Equatable {
     var text: String
 }
 
+/// A save, plus the raw log-write body (so a weigh-in can offer a photo for that row).
+struct MLWriteOutcome {
+    var message: MLMessage
+    var body: [String: Any]
+}
+
 /// Sends a log-write action the way forms.js handleWrite does, with its wording.
 @MainActor
 enum MLWrite {
     static func send(_ store: LogStore, _ action: String, _ payload: [String: Any], success: String) async -> MLMessage {
-        let msg: MLMessage
+        await sendDetailed(store, action, payload, success: success).message
+    }
+
+    static func sendDetailed(_ store: LogStore, _ action: String, _ payload: [String: Any], success: String) async -> MLWriteOutcome {
+        let outcome: MLWriteOutcome
         do {
             let r = try await store.write(action, payload)
             if r.isEmpty {
-                msg = MLMessage(ok: false, text: "Could not save: write_failed")
+                outcome = MLWriteOutcome(message: MLMessage(ok: false, text: "Could not save: write_failed"), body: r)
             } else if let ok = r["ok"] as? Bool, ok == false {
                 let err = (r["error"] as? String) ?? "write_failed"
                 let field = (r["field"] as? String).map { " (\($0))" } ?? ""
-                msg = MLMessage(ok: false, text: "Could not save: \(err)\(field)")
+                outcome = MLWriteOutcome(message: MLMessage(ok: false, text: "Could not save: \(err)\(field)"), body: r)
             } else {
-                msg = MLMessage(ok: true, text: success)
+                outcome = MLWriteOutcome(message: MLMessage(ok: true, text: success), body: r)
             }
         } catch let e as LogError {
-            msg = e == .unauthorized
-                ? MLMessage(ok: false, text: "Passcode was rejected. Lock and unlock again.")
-                : MLMessage(ok: false, text: "Could not save: \(e.message)")
+            let text = e == .unauthorized
+                ? "Passcode was rejected. Lock and unlock again."
+                : "Could not save: \(e.message)"
+            outcome = MLWriteOutcome(message: MLMessage(ok: false, text: text), body: [:])
         } catch {
-            msg = MLMessage(ok: false, text: "Could not save: \(error.localizedDescription)")
+            outcome = MLWriteOutcome(message: MLMessage(ok: false, text: "Could not save: \(error.localizedDescription)"), body: [:])
         }
+        let msg = outcome.message
         UIAccessibility.post(notification: .announcement, argument: msg.text)
         if msg.ok {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         } else {
             UINotificationFeedbackGenerator().notificationOccurred(.error)
         }
-        return msg
+        return outcome
     }
 }
 
@@ -300,7 +312,7 @@ struct MLAutoClear: ViewModifier {
     @Binding var message: MLMessage?
     func body(content: Content) -> some View {
         content.task(id: message) {
-            guard let m = message, m.ok, !MLDebug.flag("-sampleMessages") else { return }
+            guard let m = message, m.ok, !MLDebug.flag("-sampleMessages"), !MLDebug.flag("-samplePhoto") else { return }
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             if message == m { withAnimation { message = nil } }
         }

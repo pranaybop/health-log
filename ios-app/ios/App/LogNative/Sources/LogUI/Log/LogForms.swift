@@ -24,6 +24,7 @@ struct MLWeighInCard: View {
     @State private var notes = ""
     @State private var busy = false
     @State private var message: MLMessage?
+    @State private var offer: WeighOffer?
 
     var body: some View {
         LogCard("Weigh-in") {
@@ -31,10 +32,22 @@ struct MLWeighInCard: View {
             MLInput(label: "Notes", text: $notes, maxLength: 200)
             MLSaveButton(title: "Save weigh-in", busy: busy, action: save)
             MLMessageView(message: message)
+            if let offer {
+                WeighPhotoOffer(offer: offer) {
+                    self.offer = nil
+                } onSaved: {
+                    self.offer = nil
+                    message = MLMessage(ok: true, text: "Photo saved.")
+                }
+            }
         }
         .modifier(MLAutoClear(message: $message))
         .onAppear {
             if MLDebug.flag("-sampleMessages") { message = MLMessage(ok: true, text: "Logged 241.2 lb.") }
+            if MLDebug.flag("-samplePhoto") {
+                message = MLMessage(ok: true, text: "Logged 241.2 lb.")
+                offer = WeighOffer(weightLb: 241.2, weightId: nil, takenAt: "2026-11-24T15:00:00Z")
+            }
         }
     }
 
@@ -48,10 +61,19 @@ struct MLWeighInCard: View {
         busy = true
         message = nil
         Task {
-            let m = await MLWrite.send(store, "weigh_in", payload, success: "Logged \(w) lb.")
+            let outcome = await MLWrite.sendDetailed(store, "weigh_in", payload, success: "Logged \(w) lb.")
             busy = false
-            withAnimation { message = m }
-            if m.ok { weight = ""; notes = "" }
+            withAnimation { message = outcome.message }
+            if outcome.message.ok {
+                weight = ""
+                notes = ""
+                let lb = MLJSON.double(outcome.body["weight_lb"]) ?? Double(w) ?? 0
+                offer = WeighOffer(
+                    weightLb: lb,
+                    weightId: MLJSON.string(outcome.body["id"]),
+                    takenAt: MLJSON.string(outcome.body["measured_at"]) ?? MLTime.iso(Date())
+                )
+            }
         }
     }
 }
