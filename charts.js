@@ -489,9 +489,12 @@ function siteMap(rot) {
 function dataView(summary, headers, rows) {
   return el("details", { class: "dataview" },
     el("summary", null, summary),
-    el("table", { class: "data" },
-      el("thead", null, el("tr", null, ...headers.map((h, i) => el("th", { class: i ? "num" : null }, h)))),
-      el("tbody", null, ...rows.map((r) => el("tr", null, ...r.map((c, i) => el("td", { class: i ? "num" : null }, c))))),
+    // Wide tables scroll sideways in their own box instead of making the page wider than the screen.
+    el("div", { class: "table-scroll" },
+      el("table", { class: "data" },
+        el("thead", null, el("tr", null, ...headers.map((h, i) => el("th", { class: i ? "num" : null }, h)))),
+        el("tbody", null, ...rows.map((r) => el("tr", null, ...r.map((c, i) => el("td", { class: i ? "num" : null }, c))))),
+      ),
     ),
   );
 }

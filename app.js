@@ -1052,7 +1052,7 @@ function renderWeekStrip(data) {
 function attachDaySwipe(node, data) {
   let sx = 0, sy = 0, st = 0, armed = false;
   node.addEventListener("touchstart", (e) => {
-    armed = e.touches.length === 1 && !e.target.closest("input, textarea, select, .checkin-form, .targets-editor, .chart-wrap");
+    armed = e.touches.length === 1 && !e.target.closest("input, textarea, select, .checkin-form, .targets-editor, .chart-wrap, .table-scroll");
     if (!armed) return;
     sx = e.touches[0].clientX;
     sy = e.touches[0].clientY;
@@ -2036,7 +2036,7 @@ window.addEventListener("touchstart", (e) => {
   ptr.start = null;
   if (!ptrEnabled() || ptr.busy || e.touches.length !== 1 || window.scrollY > 0) return;
   if (!state.data || !hasCredential() || document.body.classList.contains("locked")) return;
-  if (e.target.closest("input, textarea, select, .chart-wrap, .week-strip")) return;
+  if (e.target.closest("input, textarea, select, .chart-wrap, .week-strip, .table-scroll")) return;
   ptr.start = { x: e.touches[0].clientX, y: e.touches[0].clientY, dir: null };
 }, { passive: true });
 
