@@ -1,0 +1,458 @@
+const WRITE_URL = "https://qnbshmenmurdaogslmrj.supabase.co/functions/v1/log-write";
+
+async function writeLog(action, payload) {
+  const res = await fetch(WRITE_URL, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    cache: "no-store",
+    referrerPolicy: "no-referrer",
+    body: JSON.stringify({ action, payload }),
+  });
+  let body = null;
+  try { body = await res.json(); } catch (_) { body = null; }
+  if (res.status === 401) throw new Error("unauthorized");
+  if (!body || body.ok === false) {
+    const field = body && body.field ? ` (${body.field})` : "";
+    const err = (body && body.error) || "write_failed";
+    throw new Error(`${err}${field}`);
+  }
+  if (!res.ok) throw new Error((body && body.error) || "write_failed");
+  return body;
+}
+
+function field(label, input) {
+  return el("label", { class: "field" }, label, input);
+}
+
+function input(attrs) {
+  return el("input", attrs);
+}
+
+function select(attrs, options, value) {
+  const s = el("select", attrs, ...options.map((o) => {
+    const opt = el("option", { value: o.value }, o.label);
+    if (String(value ?? "") === String(o.value)) opt.selected = true;
+    return opt;
+  }));
+  return s;
+}
+
+function chips(name, options, current) {
+  const wrap = el("div", { class: "chips", role: "group" });
+  wrap.dataset.name = name;
+  wrap.dataset.value = current || "";
+  for (const o of options) {
+    const btn = el("button", {
+      type: "button",
+      class: "chip" + (current === o.value ? " on" : ""),
+      "aria-pressed": current === o.value,
+      onClick: () => {
+        wrap.dataset.value = o.value;
+        for (const b of wrap.querySelectorAll("button")) {
+          const on = b.textContent === o.label || b.dataset.value === o.value;
+        }
+        for (const b of wrap.querySelectorAll(".chip")) {
+          const on = b.dataset.value === o.value;
+          b.classList.toggle("on", on);
+          b.setAttribute("aria-pressed", on ? "true" : "false");
+        }
+      },
+    }, o.label);
+    btn.dataset.value = o.value;
+    wrap.append(btn);
+  }
+  return wrap;
+}
+
+function chipValue(wrap) {
+  return (wrap && wrap.dataset.value) || "";
+}
+
+function rangeField(label, name, min, max, value) {
+  const out = el("span", { class: "n" }, value == null || value === "" ? "—" : String(value));
+  const r = input({ type: "range", name, min, max, step: "1", value: value ?? min });
+  if (value == null || value === "") r.value = "";
+  // Keep a usable default in the middle if empty; track unset via dataset
+  r.dataset.unset = value == null || value === "" ? "1" : "0";
+  if (r.dataset.unset === "1") r.value = String(Math.round((min + max) / 2));
+  out.textContent = r.dataset.unset === "1" ? "—" : r.value;
+  r.addEventListener("input", () => {
+    r.dataset.unset = "0";
+    out.textContent = r.value;
+  });
+  return el("label", { class: "field" }, label, el("div", { class: "range" }, r, out));
+}
+
+function setFormMessage(ok, text) {
+  state.formMessage = { ok, text };
+}
+
+async function handleWrite(action, payload, success) {
+  try {
+    state.formBusy = true;
+    render();
+    await writeLog(action, payload);
+    setFormMessage(true, success);
+    await load(true);
+  } catch (err) {
+    setFormMessage(false, err.message === "unauthorized" ? "Passcode was rejected. Lock and unlock again." : `Could not save: ${err.message}`);
+    state.formBusy = false;
+    render();
+  } finally {
+    state.formBusy = false;
+  }
+}
+
+function todayCheckin(data) {
+  const key = todayKey();
+  return (data.checkins || []).find((c) => c.day === key) || null;
+}
+
+function renderToast() {
+  if (!state.formMessage) return null;
+  return el("p", { class: "toast " + (state.formMessage.ok ? "ok" : "err") }, state.formMessage.text);
+}
+
+function renderThreeTap(data) {
+  const cur = todayCheckin(data) || {};
+  const ate = chips("ate_vs_usual", [
+    { value: "less", label: "Ate less" },
+    { value: "usual", label: "Usual" },
+    { value: "more", label: "Ate more" },
+  ], cur.ate_vs_usual);
+  const moved = chips("moved_vs_usual", [
+    { value: "less", label: "Moved less" },
+    { value: "usual", label: "Usual" },
+    { value: "more", label: "Moved more" },
+  ], cur.moved_vs_usual);
+  const feel = chips("dose_feel", [
+    { value: "strong", label: "Strong" },
+    { value: "fading", label: "Fading" },
+    { value: "not_feeling_it", label: "Not feeling it" },
+  ], cur.dose_feel);
+  return card("3-tap check-in",
+    el("p", { class: "caption" }, "Today in America/Chicago. A later deep check-in will keep these answers."),
+    el("div", { class: "log-form" },
+      el("div", { class: "field" }, "Ate vs usual", ate),
+      el("div", { class: "field" }, "Moved vs usual", moved),
+      el("div", { class: "field" }, "Dose feel", feel),
+      el("div", { class: "form-actions" },
+        el("button", {
+          type: "button",
+          class: "primary",
+          disabled: state.formBusy,
+          onClick: () => {
+            const payload = {};
+            if (chipValue(ate)) payload.ate_vs_usual = chipValue(ate);
+            if (chipValue(moved)) payload.moved_vs_usual = chipValue(moved);
+            if (chipValue(feel)) payload.dose_feel = chipValue(feel);
+            if (!Object.keys(payload).length) {
+              setFormMessage(false, "Pick at least one of the three.");
+              render();
+              return;
+            }
+            handleWrite("checkin_upsert", payload, "Saved today’s 3-tap check-in.");
+          },
+        }, "Save check-in"),
+      ),
+    ),
+  );
+}
+
+function renderDeepCheckin(data) {
+  const cur = todayCheckin(data) || {};
+  const mood = rangeField("Mood", "mood", 1, 10, cur.mood);
+  const noise = rangeField("Food noise", "food_noise", 1, 10, cur.food_noise);
+  const energy = rangeField("Energy", "energy", 1, 10, cur.energy);
+  const sleepQ = rangeField("Sleep quality", "sleep_quality", 1, 10, cur.sleep_quality);
+  const sleepH = field("Sleep hours", input({ type: "number", name: "sleep_hours", min: "0", max: "24", step: "0.1", value: cur.sleep_hours ?? "", inputmode: "decimal" }));
+  const ex = field("Exercise minutes", input({ type: "number", name: "exercise_minutes", min: "0", max: "1440", step: "1", value: cur.exercise_minutes ?? "", inputmode: "numeric" }));
+  const steps = field("Steps", input({ type: "number", name: "steps", min: "0", step: "1", value: cur.steps ?? "", inputmode: "numeric" }));
+  const rhr = field("Resting HR", input({ type: "number", name: "resting_hr", min: "20", max: "220", step: "1", value: cur.resting_hr ?? "", inputmode: "numeric" }));
+  const kcal = field("Active calories", input({ type: "number", name: "active_calories", min: "0", step: "1", value: cur.active_calories ?? "", inputmode: "numeric" }));
+  const notes = field("Notes", el("textarea", { name: "notes" }, cur.notes || ""));
+  const form = el("div", { class: "log-form" }, mood, noise, energy, sleepQ, sleepH, ex, steps, rhr, kcal, notes);
+  const valOf = (sel) => form.querySelector(`[name="${sel}"]`);
+  const maybe = (name, integer) => {
+    const node = valOf(name);
+    if (!node) return;
+    if (node.type === "range" && node.dataset.unset === "1") return;
+    const v = (node.value || "").trim();
+    if (v === "") return;
+    return integer ? parseInt(v, 10) : Number(v);
+  };
+  return card("Deep check-in",
+    form,
+    el("div", { class: "form-actions" },
+      el("button", {
+        type: "button",
+        class: "primary",
+        disabled: state.formBusy,
+        onClick: () => {
+          const payload = {};
+          for (const k of ["mood", "food_noise", "energy", "sleep_quality", "exercise_minutes", "steps", "resting_hr", "active_calories"]) {
+            const v = maybe(k, true);
+            if (v != null && !Number.isNaN(v)) payload[k] = v;
+          }
+          const sh = maybe("sleep_hours", false);
+          if (sh != null && !Number.isNaN(sh)) payload.sleep_hours = sh;
+          const n = valOf("notes").value.trim();
+          if (n) payload.notes = n;
+          if (!Object.keys(payload).length) {
+            setFormMessage(false, "Fill in at least one deep-check-in field.");
+            render();
+            return;
+          }
+          handleWrite("checkin_upsert", payload, "Saved today’s deep check-in.");
+        },
+      }, "Save deep check-in"),
+    ),
+  );
+}
+
+function renderWeighIn() {
+  const wt = field("Weight (lb)", input({ type: "number", name: "weight_lb", min: "50", max: "600", step: "0.1", inputmode: "decimal", required: true }));
+  const notes = field("Notes", input({ type: "text", name: "notes", maxlength: "200" }));
+  const box = el("div", { class: "log-form" }, wt, notes);
+  return card("Weigh-in",
+    box,
+    el("div", { class: "form-actions" },
+      el("button", {
+        type: "button",
+        class: "primary",
+        disabled: state.formBusy,
+        onClick: () => {
+          const weight_lb = box.querySelector("[name=weight_lb]").value.trim();
+          if (!weight_lb) {
+            setFormMessage(false, "Enter a weight.");
+            render();
+            return;
+          }
+          const payload = { weight_lb };
+          const n = box.querySelector("[name=notes]").value.trim();
+          if (n) payload.notes = n;
+          handleWrite("weigh_in", payload, `Logged ${weight_lb} lb.`);
+        },
+      }, "Save weigh-in"),
+    ),
+  );
+}
+
+function renderDoseForm(data) {
+  const rot = siteRotation(data);
+  const active = (data.protocol || []).find((p) => p.status === "active") || {};
+  const compound = select({ name: "compound" }, [
+    { value: "tirzepatide", label: "Tirzepatide" },
+    { value: "retatrutide", label: "Retatrutide" },
+  ], active.compound || "tirzepatide");
+  const mg = field("Dose (mg)", input({ type: "number", name: "dose_mg", min: "0.05", max: "50", step: "0.05", value: active.typical_dose_mg ?? 3, inputmode: "decimal" }));
+  const units = field("Units (optional)", input({ type: "number", name: "units", min: "0", max: "1000", step: "1", value: active.units ?? "", inputmode: "numeric" }));
+  const site = chips("site", SITES.map((s) => ({ value: s, label: s })), rot.next || rot.lastSite || "");
+  const skip = el("label", { class: "field", style: { display: "flex", alignItems: "center", gap: "8px" } },
+    input({ type: "checkbox", name: "skipped" }),
+    "Mark as skipped",
+  );
+  skip.querySelector("input").style.width = "auto";
+  skip.querySelector("input").style.minHeight = "auto";
+  const notes = field("Notes", input({ type: "text", name: "notes" }));
+  const box = el("div", { class: "log-form" },
+    field("Compound", compound), mg, units,
+    el("div", { class: "field" }, "Injection site", site),
+    skip, notes,
+  );
+  return card("Log a dose",
+    el("p", { class: "caption" }, rot.next ? `Suggested next site: ${rot.next}.` : "Pick the site you used."),
+    box,
+    el("div", { class: "form-actions" },
+      el("button", {
+        type: "button",
+        class: "primary",
+        disabled: state.formBusy,
+        onClick: () => {
+          const skipped = box.querySelector("[name=skipped]").checked;
+          const payload = { compound: compound.value, skipped };
+          const dose = box.querySelector("[name=dose_mg]").value.trim();
+          const u = box.querySelector("[name=units]").value.trim();
+          const n = box.querySelector("[name=notes]").value.trim();
+          if (!skipped) {
+            if (!dose) {
+              setFormMessage(false, "Enter a dose in mg, or mark the shot as skipped.");
+              render();
+              return;
+            }
+            payload.dose_mg = dose;
+          } else if (dose) payload.dose_mg = dose;
+          if (u) payload.units = u;
+          if (chipValue(site)) payload.site = chipValue(site);
+          if (n) payload.notes = n;
+          handleWrite("dose_log", payload, skipped ? "Logged a skipped dose." : `Logged ${payload.compound} ${payload.dose_mg || ""} mg.`);
+        },
+      }, "Save dose"),
+    ),
+  );
+}
+
+function renderSideEffectForm() {
+  const effect = field("Effect", input({ type: "text", name: "effect", maxlength: "80", placeholder: "Headache, nausea…" }));
+  const sev = rangeField("Severity", "severity", 1, 10, 5);
+  // default severity to 5, already set
+  sev.querySelector("input").dataset.unset = "0";
+  sev.querySelector(".n").textContent = "5";
+  const notes = field("Notes", input({ type: "text", name: "notes" }));
+  const box = el("div", { class: "log-form" }, effect, sev, notes);
+  return card("Side effect",
+    box,
+    el("div", { class: "form-actions" },
+      el("button", {
+        type: "button",
+        class: "primary",
+        disabled: state.formBusy,
+        onClick: () => {
+          const name = box.querySelector("[name=effect]").value.trim();
+          const severity = box.querySelector("[name=severity]").value;
+          if (!name) {
+            setFormMessage(false, "Name the side effect.");
+            render();
+            return;
+          }
+          const payload = { effect: name, severity };
+          const n = box.querySelector("[name=notes]").value.trim();
+          if (n) payload.notes = n;
+          handleWrite("side_effect_upsert", payload, `Logged ${name}.`);
+        },
+      }, "Save side effect"),
+    ),
+  );
+}
+
+function renderEarnIt(data) {
+  const cur = todayCheckin(data);
+  const status = cur && cur.earned === true ? "You earned it today." : cur && cur.earned === false ? "Marked as not earned today." : "Not marked yet today.";
+  return card("Earn It",
+    el("p", { class: "caption" }, status),
+    el("div", { class: "form-actions" },
+      el("button", { type: "button", class: "primary", disabled: state.formBusy, onClick: () => handleWrite("earn_it", { earned: true }, "Earned it.") }, "Yes, earned it"),
+      el("button", { type: "button", disabled: state.formBusy, onClick: () => handleWrite("earn_it", { earned: false }, "Marked as not earned.") }, "Not today"),
+    ),
+  );
+}
+
+function renderMeasurementForm() {
+  const metric = field("Metric", select({ name: "metric" }, [
+    { value: "waist", label: "Waist" },
+    { value: "chest", label: "Chest" },
+    { value: "hip", label: "Hip" },
+    { value: "neck", label: "Neck" },
+    { value: "thigh", label: "Thigh" },
+    { value: "arm", label: "Arm" },
+  ], "waist"));
+  const value = field("Value", input({ type: "number", name: "value", min: "0", max: "1000", step: "0.1", inputmode: "decimal" }));
+  const unit = field("Unit", select({ name: "unit" }, [
+    { value: "in", label: "in" },
+    { value: "cm", label: "cm" },
+    { value: "lb", label: "lb" },
+    { value: "kg", label: "kg" },
+    { value: "%", label: "%" },
+  ], "in"));
+  const box = el("div", { class: "log-form" }, metric, value, unit);
+  return card("Measurement",
+    box,
+    el("div", { class: "form-actions" },
+      el("button", {
+        type: "button",
+        class: "primary",
+        disabled: state.formBusy,
+        onClick: () => {
+          const v = box.querySelector("[name=value]").value.trim();
+          if (!v) {
+            setFormMessage(false, "Enter a measurement.");
+            render();
+            return;
+          }
+          handleWrite("measurement", {
+            metric: box.querySelector("[name=metric]").value,
+            value: v,
+            unit: box.querySelector("[name=unit]").value,
+          }, "Saved measurement.");
+        },
+      }, "Save measurement"),
+    ),
+  );
+}
+
+function renderVialForm() {
+  const compound = field("Compound", select({ name: "compound" }, [
+    { value: "tirzepatide", label: "Tirzepatide" },
+    { value: "retatrutide", label: "Retatrutide" },
+  ], "tirzepatide"));
+  const label = field("Label (optional)", input({ type: "text", name: "label", maxlength: "80" }));
+  const totalMg = field("Total mg", input({ type: "number", name: "total_mg", min: "0", step: "0.1", inputmode: "decimal" }));
+  const totalU = field("Total units", input({ type: "number", name: "total_units", min: "0", step: "1", inputmode: "numeric" }));
+  const conc = field("Concentration (mg/mL, optional)", input({ type: "number", name: "concentration_mg_per_ml", min: "0", step: "0.1", inputmode: "decimal" }));
+  const exp = field("Expires on", input({ type: "date", name: "expired_on" }));
+  const notes = field("Notes", input({ type: "text", name: "notes" }));
+  const box = el("div", { class: "log-form" }, compound, label, totalMg, totalU, conc, exp, notes);
+  return card("Start a vial",
+    box,
+    el("div", { class: "form-actions" },
+      el("button", {
+        type: "button",
+        class: "primary",
+        disabled: state.formBusy,
+        onClick: () => {
+          const payload = { compound: box.querySelector("[name=compound]").value };
+          for (const k of ["label", "total_mg", "total_units", "concentration_mg_per_ml", "expired_on", "notes"]) {
+            const v = box.querySelector(`[name=${k}]`).value.trim();
+            if (v) payload[k] = v;
+          }
+          if (!payload.total_mg && !payload.total_units) {
+            setFormMessage(false, "Enter total mg or total units.");
+            render();
+            return;
+          }
+          handleWrite("vial_start", payload, "Vial added.");
+        },
+      }, "Save vial"),
+    ),
+  );
+}
+
+function renderReconCalc() {
+  const vial = field("Vial amount (mg)", input({ type: "number", name: "vial_mg", min: "0", step: "0.1", value: "", inputmode: "decimal" }));
+  const dil = field("Diluent (mL)", input({ type: "number", name: "diluent_ml", min: "0", step: "0.1", value: "1", inputmode: "decimal" }));
+  const dose = field("Desired dose (mg)", input({ type: "number", name: "want_mg", min: "0", step: "0.05", inputmode: "decimal" }));
+  const out = el("p", { class: "caption" }, "This stays on your device and is not saved. Assumes 100 units = 1 mL.");
+  const box = el("div", { class: "log-form" }, vial, dil, dose, out);
+  const recalc = () => {
+    const v = Number(box.querySelector("[name=vial_mg]").value);
+    const m = Number(box.querySelector("[name=diluent_ml]").value);
+    const w = Number(box.querySelector("[name=want_mg]").value);
+    if (!(v > 0) || !(m > 0) || !(w > 0)) {
+      out.textContent = "This stays on your device and is not saved. Assumes 100 units = 1 mL.";
+      return;
+    }
+    const units = (w / v) * m * 100;
+    const conc = v / m;
+    out.textContent = `${fmtNum(units, 1)} units · ${fmtNum(conc, 2)} mg/mL after mixing. Not saved.`;
+  };
+  box.querySelectorAll("input").forEach((i) => i.addEventListener("input", recalc));
+  return card("Reconstitution calculator",
+    el("p", { class: "caption" }, "For the planned retatrutide start: mix the vial with 1 mL, then 20 units is the planned first dose. mg equivalent is still unknown."),
+    box,
+  );
+}
+
+function renderLogTab(data) {
+  return el("div", null,
+    renderToast(),
+    renderThreeTap(data),
+    renderDeepCheckin(data),
+    renderEarnIt(data),
+    renderWeighIn(),
+    renderDoseForm(data),
+    renderSideEffectForm(),
+    renderMeasurementForm(),
+    renderVialForm(),
+    renderReconCalc(),
+  );
+}
