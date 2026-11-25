@@ -41,6 +41,8 @@ const state = {
   effectOpen: false,
   healthBusy: false,
   healthMsg: null,
+  healthBackfill: null,
+  openMetrics: [],
   editTargets: false,
   targetsBusy: false,
   targetsMsg: null,
@@ -883,10 +885,22 @@ function renderDayMeds(data, key) {
 }
 
 /* Apple Health sync button and status. Only inside the Log iPhone app. */
+function healthSyncSummary(r) {
+  const parts = [
+    [r.days, "day"], [r.weights, "weigh-in"], [r.body, "body reading"], [r.workouts, "workout"],
+  ].filter(([n]) => n).map(([n, w]) => `${fmtNum(n, 0)} ${w}${n === 1 ? "" : "s"}`);
+  if (r.metrics) parts.push(`${fmtNum(r.metrics, 0)} other value${r.metrics === 1 ? "" : "s"}`);
+  if (!parts.length) return "Synced. Nothing new in Apple Health.";
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+  return `Synced ${list}.`;
+}
+
 function renderHealthSync(full) {
   if (!canSyncHealth()) return null;
   const last = lastHealthSync();
   const msg = state.healthMsg;
+  const b = backfillState();
+  const bfText = backfillText(b);
   return el("div", { class: "health-sync" },
     el("button", {
       type: "button",
@@ -898,13 +912,21 @@ function renderHealthSync(full) {
         render();
         const r = await syncAppleHealth({ days: full ? 30 : 7 });
         state.healthBusy = false;
-        state.healthMsg = r.ok
-          ? { ok: true, text: `Synced ${r.days} day${r.days === 1 ? "" : "s"}, ${r.weights} weigh-in${r.weights === 1 ? "" : "s"}, ${r.body} body reading${r.body === 1 ? "" : "s"}, ${r.workouts} workout${r.workouts === 1 ? "" : "s"}.` }
-          : { ok: false, text: r.reason };
+        state.healthMsg = r.ok ? { ok: true, text: healthSyncSummary(r) } : { ok: false, text: r.reason };
         if (r.ok) await load(true); else render();
       },
     }, state.healthBusy ? "Syncing…" : full ? "Sync the last 30 days" : "Sync Apple Health"),
+    full ? el("button", {
+      type: "button",
+      class: "backfill-btn",
+      disabled: !!b.running,
+      onClick: () => {
+        const cur = backfillState();
+        backfillHealth({ restart: !!cur.done }).then((res) => { if (res && res.values) load(true, true); });
+      },
+    }, backfillButtonLabel(b)) : null,
     el("span", { class: "sync-meta" + (msg && !msg.ok ? " err" : "") }, msg ? msg.text : last ? `Last synced ${fmtDateCT(new Date(last.at), false)}, ${fmtTimeCT(new Date(last.at)).replace(" CT", "")}` : "Not synced yet"),
+    el("span", { class: "sync-meta backfill-status", hidden: !bfText, "aria-live": "polite" }, bfText),
   );
 }
 
@@ -1740,6 +1762,7 @@ function renderTrendsTab(data) {
     section("Body"),
     renderHeartCard(data),
     renderBodyComp(data),
+    renderMoreHealth(data),
     renderMeasurements(data),
     section("Training"),
     renderRunning(data),
@@ -1924,6 +1947,94 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") goToDay(state.data, (state.dayOffset || 0) - 1);
   else if (e.key === "ArrowRight") goToDay(state.data, (state.dayOffset || 0) + 1);
 });
+
+/* ---------- pull to refresh (home-screen app and the Log iPhone app) ---------- */
+// Pull down from the top of any tab: syncs the last two days from Apple Health when it can,
+// then reloads. Browsers in a tab already have their own pull to refresh, so it stays off there.
+const PTR_TRIGGER = 64;
+const ptr = { start: null, pull: 0, busy: false, node: null };
+
+function ptrEnabled() {
+  return isStandalone() || canSyncHealth();
+}
+
+function ptrNode() {
+  if (!ptr.node) {
+    ptr.node = el("div", { class: "ptr", "aria-hidden": "true" });
+    ptr.node.innerHTML = ICONS.refresh;
+    document.body.append(ptr.node);
+  }
+  return ptr.node;
+}
+
+function ptrSet(px, settle) {
+  ptr.pull = px;
+  const n = ptrNode();
+  n.classList.toggle("settle", !!settle);
+  n.classList.toggle("on", px > 0);
+  n.classList.toggle("ready", px >= PTR_TRIGGER);
+  n.style.setProperty("--pull", `${px}px`);
+  n.style.setProperty("--p", String(Math.min(1, px / PTR_TRIGGER)));
+}
+
+async function pullRefresh() {
+  ptr.busy = true;
+  const n = ptrNode();
+  ptrSet(PTR_TRIGGER, true);
+  n.classList.add("spin");
+  try {
+    if (canSyncHealth() && !state.healthBusy) {
+      state.healthBusy = true;
+      const r = await syncAppleHealth({ days: 2 });
+      state.healthBusy = false;
+      state.healthMsg = r.ok ? null : { ok: false, text: r.reason };
+    }
+    await load(true, true);
+  } finally {
+    ptr.busy = false;
+    n.classList.remove("spin");
+    ptrSet(0, true);
+  }
+}
+
+window.addEventListener("touchstart", (e) => {
+  ptr.start = null;
+  if (!ptrEnabled() || ptr.busy || e.touches.length !== 1 || window.scrollY > 0) return;
+  if (!state.data || !hasCredential() || document.body.classList.contains("locked")) return;
+  if (e.target.closest("input, textarea, select, .chart-wrap, .week-strip")) return;
+  ptr.start = { x: e.touches[0].clientX, y: e.touches[0].clientY, dir: null };
+}, { passive: true });
+
+window.addEventListener("touchmove", (e) => {
+  if (!ptr.start) return;
+  const t = e.touches[0];
+  const dx = t.clientX - ptr.start.x;
+  const dy = t.clientY - ptr.start.y;
+  if (!ptr.start.dir) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    ptr.start.dir = dy > 0 && Math.abs(dy) > Math.abs(dx) * 1.5 ? "down" : "other";
+  }
+  if (ptr.start.dir !== "down" || window.scrollY > 0) {
+    if (ptr.pull) ptrSet(0, true);
+    ptr.start = null;
+    return;
+  }
+  ptrSet(Math.min(110, Math.max(0, dy) * 0.5));
+}, { passive: true });
+
+window.addEventListener("touchend", () => {
+  if (!ptr.start) return;
+  ptr.start = null;
+  if (ptr.pull >= PTR_TRIGGER) pullRefresh();
+  else if (ptr.pull) ptrSet(0, true);
+}, { passive: true });
+
+window.addEventListener("touchcancel", () => {
+  ptr.start = null;
+  if (ptr.pull && !ptr.busy) ptrSet(0, true);
+}, { passive: true });
+
+document.documentElement.classList.toggle("ptr-on", ptrEnabled());
 
 window.addEventListener("hashchange", boot);
 boot();

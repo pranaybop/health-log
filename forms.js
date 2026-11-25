@@ -467,7 +467,7 @@ function renderReconCalc() {
 function renderLogTab(data) {
   return el("div", { class: "stack" },
     renderToast(),
-    canSyncHealth() ? card("Apple Health", el("p", { class: "caption first" }, "Steps, sleep, resting heart rate, HRV, weigh-ins, body fat and workouts. The app also catches up on its own when it opens."), renderHealthSync(true)) : null,
+    canSyncHealth() ? card("Apple Health", el("p", { class: "caption first" }, "Activity, sleep stages, heart rate, breathing, blood oxygen, blood pressure, glucose, temperature, energy, water, weigh-ins, body fat and workouts. When the app opens it catches up on recent days and keeps backfilling your history."), renderHealthSync(true)) : null,
     renderCheckinCard(data),
     el("div", { class: "grid two" }, renderWeighIn(), renderEarnIt(data)),
     el("h2", { class: "section-title" }, "More to log"),

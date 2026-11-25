@@ -10,13 +10,15 @@ Times display in America/Chicago. Meal macros may be estimates. Drug level is a 
 
 ## Frontend
 
-No build step and no dependencies. Scripts load in this order: `analytics.js` (pure calculations: weight smoothing, pace, drug level, cycles), `export.js` (prescriber CSV/PDF), `forms.js` (Log tab and the check-in), `health.js` (Apple Health sync, only active inside the iPhone app), `charts.js` (SVG charts with touch scrubbing, site map), `insights.js` (food thoughts, the week after a shot, heart, body composition, running, protein hit rate), `app.js` (state, tabs, rendering). `sw.js` is a network-first offline shell for the site's own files; the last dashboard payload is kept in `localStorage` (`log.cache`) so the app opens with data and works offline. Lock clears it. `styles.css` follows the system light/dark setting. Bump the `?v=` query in `index.html` when shipping changes so iPhone Safari picks them up.
+No build step and no dependencies. Scripts load in this order: `analytics.js` (pure calculations: weight smoothing, pace, drug level, cycles), `export.js` (prescriber CSV/PDF), `forms.js` (Log tab and the check-in), `health.js` (Apple Health sync, only active inside the iPhone app), `charts.js` (SVG charts with touch scrubbing, site map), `insights.js` (food thoughts, the week after a shot, heart, body composition, more from Apple Health, running, protein hit rate), `app.js` (state, tabs, rendering). `sw.js` is a network-first offline shell for the site's own files; the last dashboard payload is kept in `localStorage` (`log.cache`) so the app opens with data and works offline. Lock clears it. `styles.css` follows the system light/dark setting. Bump the `?v=` query in `index.html` when shipping changes so iPhone Safari picks them up.
 
 Calorie and protein targets on Today come from active `log.goals` rows (`kind` `calories` / `protein`, set with `goal_set`); a device-only fallback (`localStorage` `log.targets`) is used only if no goals row exists. Current targets: 2,200 kcal and 150 g protein.
 
 The weight chart's Compare control draws calories (`daily_totals`), steps or sleep (`daily_health`, last 365 days) as a bar strip under the chart on the same days, with its own scale. 1Y and All use weekly averages. The choice is kept on the device (`log.overlay`).
 
 Today shows one day at a time: swipe left or right on the cards (or use the week strip, the month picker, or the arrow keys) to move between days. Past days show that day's weight or trend, food, check-in, medication level, Apple Health numbers and meals. The check-in is one full form (three taps plus mood, food noise, energy, sleep and activity) that opens in place on Today for whichever day is showing, and also sits on the Log tab. The "No check-in yet" prompt appears from 6 PM Central.
+
+In the home-screen app and the iPhone app, pull down from the top of any tab to refresh (inside the iPhone app it also syncs the last two days from Apple Health first). In a normal browser tab the browser's own pull to refresh does the reloading.
 
 `ios-app/` is an optional iPhone app shell (Capacitor) that loads this site; see `ios-app/README.md`. It isn't part of the web build.
 
@@ -44,6 +46,7 @@ Both Edge Functions require `x-log-passcode` or `x-log-token`. Auth is a SHA-256
 - `goal_set` — `{ kind: calories|protein, target }`; marks the current active target of that kind `retired` and inserts the new one (no-op if unchanged)
 - `food_thought` — insert a one-tap "thinking about food" `{ strength?: 1–3, at?, note? }` into `log.food_thoughts`
 - `health_sync` — from the iPhone app: `days` (upsert into `log.daily_health` by day; fields not sent are kept), `weights`, `body` (`body_fat_pct`, `lean_mass_lb` into `log.measurements`) and `workouts`, all insert-only and skipping anything already logged at the same time
+- `health_metrics` — from the iPhone app: `{ metrics: [{ day, metric, value, unit? }] }` (up to 800), upserted on `(day, metric)` into `log.health_metrics` by `public.log_health_metrics(jsonb)`
 
 Allowed injection sites: `Abd LR`, `Abd LL`, `Abd UR`, `Abd UL`, `Love L`, `Love R`. Compounds: `tirzepatide`, `retatrutide`.
 
@@ -70,10 +73,11 @@ Added for WeightSnap-parity:
 - `log.goals` — optional targets; a weight goal of 235 lb by 2027-01-01 is seeded
 - `log.progress_photos` — metadata only; private Storage is not wired up
 - `log.food_thoughts` — `thought_at`, `strength` (1 passing thought, 2 strong pull, 3 craving), `note`
+- `log.health_metrics` — PK `(day, metric)`: every other daily Apple Health number (`value`, `unit`, `source`, `updated_at`). Metrics: `heart_rate_avg` / `_min` / `_max`, `respiratory_rate`, `spo2_avg` / `_min`, `bp_systolic` / `bp_diastolic`, `glucose_avg` / `_min` / `_max`, `body_temp_f`, `basal_temp_f`, `wrist_temp_f`, `sleep_in_bed_h`, `sleep_core_min`, `sleep_deep_min`, `sleep_rem_min`, `sleep_awake_min`, `basal_kcal`, `total_kcal`, `dietary_kcal`, `water_oz`, `flights`, `cycling_mi`, `mindful_min`, `state_of_mind`, `height_in`
 
-The dashboard payload also carries `food_thoughts` (last 180 days) and `run_weeks` (running miles, runs and longest run per Monday week, last 26 weeks).
+The dashboard payload also carries `food_thoughts` (last 180 days), `run_weeks` (running miles, runs and longest run per Monday week, last 26 weeks) and `health_metrics` (`{ metric: [[day, value], ...] }`, last 120 days).
 
-All `log` tables have RLS enabled. Privileges are for `service_role` / `postgres` only. The Data API does not expose schema `log`; the app goes through the Edge Functions and `SECURITY DEFINER` RPCs `public.log_dashboard_payload()` and `public.log_write(text, jsonb)`.
+All `log` tables have RLS enabled. Privileges are for `service_role` / `postgres` only. The Data API does not expose schema `log`; the app goes through the Edge Functions and `SECURITY DEFINER` RPCs `public.log_dashboard_payload()`, `public.log_write(text, jsonb)` and `public.log_health_metrics(jsonb)`.
 
 ## Write rules (for Log, Claude, or the app)
 

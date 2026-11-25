@@ -27,12 +27,13 @@ function niceStep(span, count) {
 }
 
 function niceTicks(lo, hi, count) {
-  if (!(hi > lo)) { hi = lo + 1; lo -= 1; }
+  // A flat series (or one that only differs by rounding error) gets a ±1 range around its value.
+  if (!(hi - lo > Math.max(Math.abs(lo), Math.abs(hi)) * 1e-9)) { const mid = (lo + hi) / 2; hi = mid + 1; lo = mid - 1; }
   const step = niceStep(hi - lo, count || 4);
   const start = Math.floor(lo / step) * step;
   const end = Math.ceil(hi / step) * step;
   const ticks = [];
-  for (let v = start; v <= end + step / 2; v += step) ticks.push(Number(v.toFixed(6)));
+  for (let v = start; v <= end + step / 2 && ticks.length < 50; v += step) ticks.push(Number(v.toFixed(6)));
   return { ticks, lo: start, hi: end };
 }
 

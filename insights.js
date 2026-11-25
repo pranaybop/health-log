@@ -364,3 +364,184 @@ function renderRunning(data) {
     el("p", { class: "caption" }, "Runs from Apple Health. Sleep is the nightly average, energy comes from check-ins, kcal is the average on days with food logged."),
   );
 }
+
+/* ---------- More from Apple Health (log.health_metrics, last 120 days) ---------- */
+
+const axisMinutes = (v) => (v >= 60 ? `${fmtNum(v / 60, 1)} h` : `${Math.round(v)} min`);
+
+function fmtMinutes(min) {
+  const m = Math.round(min);
+  if (m < 60) return [String(m), "min"];
+  const h = Math.floor(m / 60);
+  return [`${h} h ${m % 60}`, "min"];
+}
+
+const MORE_HEALTH = [
+  ["Heart and breathing", [
+    { id: "heart_rate_avg", label: "Heart rate, daily average", unit: "bpm", d: 0 },
+    { id: "heart_rate_min", label: "Lowest heart rate", unit: "bpm", d: 0 },
+    { id: "heart_rate_max", label: "Highest heart rate", unit: "bpm", d: 0 },
+    { id: "respiratory_rate", label: "Breathing rate", unit: "/min", d: 1 },
+    { id: "spo2_avg", label: "Blood oxygen", unit: "%", d: 0 },
+    { id: "spo2_min", label: "Lowest blood oxygen", unit: "%", d: 0 },
+    { id: "bp_systolic", pair: "bp_diastolic", label: "Blood pressure", unit: "mmHg", d: 0 },
+  ]],
+  ["Sleep", [
+    { id: "sleep_in_bed_h", label: "Time in bed", unit: "h", d: 1 },
+    { id: "sleep_core_min", axis: axisMinutes, label: "Core sleep", fmt: fmtMinutes },
+    { id: "sleep_deep_min", axis: axisMinutes, label: "Deep sleep", fmt: fmtMinutes },
+    { id: "sleep_rem_min", axis: axisMinutes, label: "REM sleep", fmt: fmtMinutes },
+    { id: "sleep_awake_min", axis: axisMinutes, label: "Awake during the night", fmt: fmtMinutes },
+    { id: "wrist_temp_f", label: "Wrist temperature while asleep", unit: "°F", d: 1 },
+  ]],
+  ["Energy and food", [
+    { id: "total_kcal", label: "Total energy burned", unit: "kcal", d: 0 },
+    { id: "basal_kcal", label: "Resting energy", unit: "kcal", d: 0 },
+    { id: "dietary_kcal", label: "Calories logged in Health", unit: "kcal", d: 0 },
+    { id: "water_oz", label: "Water", unit: "fl oz", d: 0 },
+  ]],
+  ["Activity", [
+    { id: "flights", label: "Flights climbed", unit: "", d: 0 },
+    { id: "cycling_mi", label: "Cycling distance", unit: "mi", d: 1 },
+    { id: "mindful_min", label: "Mindful minutes", unit: "min", d: 0 },
+  ]],
+  ["Other", [
+    { id: "glucose_avg", label: "Blood glucose, average", unit: "mg/dL", d: 0 },
+    { id: "glucose_min", label: "Lowest blood glucose", unit: "mg/dL", d: 0 },
+    { id: "glucose_max", label: "Highest blood glucose", unit: "mg/dL", d: 0 },
+    { id: "body_temp_f", label: "Body temperature", unit: "°F", d: 1 },
+    { id: "basal_temp_f", label: "Basal body temperature", unit: "°F", d: 1 },
+    { id: "state_of_mind", label: "Mood, from −1 to +1", fmt: (v) => [signed(v, 2), ""], axis: (v) => signed(v, 1) },
+    { id: "height_in", label: "Height", fmt: (v) => [`${Math.floor(v / 12)}′${fmtNum(v % 12, 0)}″`, ""], axis: (v) => `${fmtNum(v, 1)} in` },
+  ]],
+];
+
+function metricPoints(data, id) {
+  const rows = (data.health_metrics || {})[id] || [];
+  return rows
+    .map(([day, v]) => ({ key: day, t: keyToNoon(day), v: Number(v) }))
+    .filter((p) => p.key && Number.isFinite(p.v))
+    .sort((a, b) => (a.key < b.key ? -1 : 1));
+}
+
+function metricParts(def, v, pairV) {
+  if (def.fmt) return def.fmt(v);
+  const main = pairV != null ? `${fmtNum(v, def.d)}/${fmtNum(pairV, def.d)}` : fmtNum(v, def.d);
+  return [main, def.unit];
+}
+
+const TIGHT_UNITS = ["%", "°F", "/min"];
+
+function metricText(def, v, pairV) {
+  const [a, b] = metricParts(def, v, pairV);
+  return b ? (TIGHT_UNITS.includes(b) ? `${a}${b}` : `${a}\u00a0${b}`) : a;
+}
+
+function sparkline(pts, t0, t1) {
+  const w = 56;
+  const h = 22;
+  const svg = svgEl("svg", { class: "hm-spark", viewBox: `0 0 ${w} ${h}`, width: w, height: h, "aria-hidden": "true", focusable: "false" });
+  const recent = pts.filter((p) => p.t >= t0);
+  if (!recent.length) return svg;
+  const lo = Math.min(...recent.map((p) => p.v));
+  const hi = Math.max(...recent.map((p) => p.v));
+  const X = (t) => 2 + ((t - t0) / (t1 - t0)) * (w - 4);
+  const Y = (v) => (hi === lo ? h / 2 : 3 + (1 - (v - lo) / (hi - lo)) * (h - 6));
+  if (recent.length > 1) {
+    svg.append(svgEl("path", { d: recent.map((p, i) => `${i ? "L" : "M"}${X(p.t).toFixed(1)},${Y(p.v).toFixed(1)}`).join("") }));
+  }
+  const last = recent[recent.length - 1];
+  svg.append(svgEl("circle", { cx: X(last.t).toFixed(1), cy: Y(last.v).toFixed(1), r: 2.2 }));
+  return svg;
+}
+
+function metricChart(def, pts, pairPts) {
+  const t1 = new Date();
+  const t0 = new Date(t1.getTime() - 120 * 86400000);
+  const smooth = (list) => list.map((p) => {
+    const win = list.filter((q) => q.key <= p.key && q.key >= shiftDay(p.key, -6));
+    return { t: p.t, key: p.key, v: win.reduce((a, q) => a + q.v, 0) / win.length };
+  });
+  const last = pts[pts.length - 1];
+  const pairOn = (key) => (pairPts ? pairPts.find((p) => p.key === key) : null);
+  const lastPair = pairOn(last.key);
+  const ro = readout(metricText(def, last.v, lastPair ? lastPair.v : null), `${fmtShortDate(last.key)}. The line is a 7-day average.`);
+  const series = [
+    { id: "d", cls: "s1 faint", type: "dots", r: 2, points: pts },
+    { id: "s", cls: "s1", type: "smooth", endDot: true, points: smooth(pts) },
+  ];
+  if (pairPts && pairPts.length) {
+    series.push({ id: "d2", cls: "s2 faint", type: "dots", r: 2, points: pairPts });
+    series.push({ id: "s2", cls: "s2", type: "smooth", endDot: true, points: smooth(pairPts) });
+  }
+  // Axis labels: one decimal only when the ticks fall between whole numbers.
+  const fmtY = def.axis || ((v) => fmtNum(v, Math.abs(v - Math.round(v)) < 1e-6 ? 0 : Math.max(1, def.d)));
+  return el("div", { class: "hm-chart" },
+    ro.node,
+    timeChart({
+      t0, t1, height: 140, aria: `${def.label}, last 120 days`, fmtY,
+      series,
+      snap: "d",
+      onScrub: (r) => {
+        if (!r) return ro.reset();
+        const p = pairOn(r.point.key || dateKeyCT(r.point.t));
+        ro.set(metricText(def, r.point.v, p ? p.v : null), fmtDateCT(r.point.t, true));
+      },
+    }),
+  );
+}
+
+function renderMoreHealth(data) {
+  const t1 = new Date();
+  const t30 = new Date(t1.getTime() - 30 * 86400000);
+  const open = state.openMetrics || (state.openMetrics = []);
+  const groups = [];
+  for (const [title, defs] of MORE_HEALTH) {
+    const rows = [];
+    for (const def of defs) {
+      const pts = metricPoints(data, def.id);
+      if (!pts.length) continue;
+      const pairPts = def.pair ? metricPoints(data, def.pair) : null;
+      const last = pts[pts.length - 1];
+      const lastPair = pairPts ? pairPts.find((p) => p.key === last.key) : null;
+      const month = pts.filter((p) => p.t >= t30);
+      const monthPair = pairPts ? pairPts.filter((p) => p.t >= t30) : [];
+      const avg = month.length > 1 ? month.reduce((a, p) => a + p.v, 0) / month.length : null;
+      const avgPair = monthPair.length > 1 ? monthPair.reduce((a, p) => a + p.v, 0) / monthPair.length : null;
+      const [main, unit] = metricParts(def, last.v, lastPair ? lastPair.v : null);
+      const sub = `${fmtShortDate(last.key)}${avg != null ? `. 30-day average ${metricText(def, avg, avgPair)}` : ""}`;
+      const row = el("details", {
+        class: "hm-row",
+        onToggle: () => {
+          const i = open.indexOf(def.id);
+          if (row.open) {
+            if (i < 0) open.push(def.id);
+            if (!row.querySelector(".hm-chart")) row.append(metricChart(def, pts, pairPts));
+          } else if (i >= 0) open.splice(i, 1);
+        },
+      },
+        el("summary", null,
+          el("span", { class: "hm-label" }, def.label),
+          sparkline(pts, t30, t1),
+          el("span", { class: "hm-val" }, main, unit ? el("small", null, TIGHT_UNITS.includes(unit) ? unit : `\u00a0${unit}`) : null),
+          el("span", { class: "hm-sub" }, sub),
+        ),
+      );
+      if (open.includes(def.id)) {
+        row.open = true;
+        row.append(metricChart(def, pts, pairPts));
+      }
+      rows.push(row);
+    }
+    if (rows.length) groups.push(el("h3", { class: "hm-group" }, title), el("div", { class: "hm-list" }, ...rows));
+  }
+  if (!groups.length) {
+    if (!canSyncHealth()) return null;
+    return card("More from Apple Health",
+      el("p", { class: "caption first" }, "Nothing here yet. Heart rate, breathing, blood oxygen, sleep stages, energy and the rest show up after the next sync."));
+  }
+  return card("More from Apple Health",
+    ...groups,
+    el("p", { class: "caption" }, "Synced from Apple Health by the Log iPhone app. Tap a row for the last 120 days."),
+  );
+}

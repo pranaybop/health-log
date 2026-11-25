@@ -26,6 +26,7 @@ const ACTIONS = new Set([
   "goal_set",
   "food_thought",
   "health_sync",
+  "health_metrics",
 ]);
 
 function corsHeaders(origin: string | null): Record<string, string> {
@@ -302,6 +303,21 @@ function validate(action: string, payload: Record<string, unknown>) {
     }
     return null;
   }
+  if (action === "health_metrics") {
+    const v = payload.metrics;
+    if (!Array.isArray(v) || v.length === 0 || v.length > 800) return reject("metrics", "invalid_list");
+    for (const m of v) {
+      if (!isPlainObject(m)) return reject("metrics", "invalid_entry");
+      const day = asString(m.day) ?? "";
+      const metric = asString(m.metric) ?? "";
+      const value = Number(asString(m.value));
+      const unit = asString(m.unit) ?? "";
+      if (!dayRe.test(day) || !/^[a-z0-9_]{2,40}$/.test(metric) || !Number.isFinite(value) || Math.abs(value) > 100000 || unit.length > 12) {
+        return reject("metrics", "invalid_entry");
+      }
+    }
+    return null;
+  }
   if (action === "goal_set") {
     const kind = (asString(payload.kind) ?? "").trim().toLowerCase();
     if (kind !== "calories" && kind !== "protein") return reject("kind", "invalid_enum");
@@ -371,10 +387,10 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data, error } = await admin.rpc("log_write", {
-      p_action: action,
-      p_payload: payload,
-    });
+    // Apple Health daily metrics have their own function; everything else goes through log_write.
+    const { data, error } = action === "health_metrics"
+      ? await admin.rpc("log_health_metrics", { p_payload: payload })
+      : await admin.rpc("log_write", { p_action: action, p_payload: payload });
     if (error) {
       console.error("log_write", error.message);
       return json(cors, 500, { ok: false, error: "query_failed" });
