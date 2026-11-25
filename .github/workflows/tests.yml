@@ -11,7 +11,7 @@ on:
         default: false
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "cursor/**"]
     paths:
       - "ios-app/www/**"
       - "tests/**"

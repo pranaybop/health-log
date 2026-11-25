@@ -1,9 +1,10 @@
 import Foundation
 
 // Meds-tab calculations, ported from ios-app/www: plannedDoses, levelPoints, siteRotation,
-// vialRunway, titrationHistory (analytics.js), planRows, planSteps (signals.js), retaSwitchAt,
-// firstRetaDose, compoundRunway (focus.js) and siteLabel (app.js). Results match the web app on
-// the same data; MedsTests checks them against the made-up fixture.
+// vialRunway, titrationHistory (analytics.js), planRows, planSteps (signals.js),
+// firstRetaDose, compoundRunway (focus.js) and siteLabel (app.js). retaSwitchAt is the
+// shared Analytics function. Results match the web app on the same data; MedsTests
+// checks them against the made-up fixture.
 
 /// One shot for the level model: a time, an amount and a compound.
 public struct Shot: Hashable, Sendable {
@@ -230,12 +231,6 @@ extension Analytics {
 
     public static func protocolRow(_ d: Dashboard, _ compound: String) -> ProtocolRow? {
         d.protocols.first { ($0.compound ?? "").lowercased() == compound }
-    }
-
-    /// The retatrutide protocol's start, else Dec 6.
-    public static func retaSwitchAt(_ d: Dashboard) -> Date {
-        if let s = protocolRow(d, "retatrutide")?.startedOn, !s.isEmpty { return LogTime.noon(s) }
-        return LogTime.retaStart
     }
 
     public static func firstRetaDose(_ d: Dashboard) -> Dose? {

@@ -12,6 +12,10 @@ const fixture = makeFixture();
 const writes = [];
 const errors = [];
 let passed = 0;
+// Dashboard GETs. A save's toast is painted when its reload starts, and Log is
+// drawn again when that GET returns, so the counters can wait out the redraw.
+let dashStarted = 0;
+let dashFinished = 0;
 
 function check(name, ok, detail) {
   console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  " + detail : ""}`);
@@ -42,7 +46,10 @@ let goalSetLive = false;
     const ok = req.headers()["x-log-passcode"] === PASS;
     if (!ok) return route.fulfill({ status: 401, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: false, error: "unauthorized" }) });
     if (req.url().endsWith("/log-dashboard")) {
-      return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify(fixture) });
+      dashStarted += 1;
+      await route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify(fixture) });
+      dashFinished += 1;
+      return;
     }
     const body = JSON.parse(req.postData() || "{}");
     writes.push(body);
@@ -75,6 +82,23 @@ let goalSetLive = false;
 
   // Full-page captures briefly change the emulated viewport, which fires resize; let any redraw settle.
   const shot = async (name, full = true) => { await page.screenshot({ path: path.join(OUT, `${SCHEME}-${name}.png`), fullPage: full }); if (full) await page.waitForTimeout(300); };
+
+  // Tap a save and wait until its toast is up and the follow-up dashboard reload
+  // has redrawn Log. The toast appears at the start of that reload, so waiting
+  // only for it lets the next fill land in a form the redraw then throws away
+  // (the light-mode "Saved measurement." timeout). A real missed save still
+  // fails: the success toast never shows, or the recorded payload is wrong.
+  const save = async (button, toast) => {
+    const before = dashStarted;
+    await page.tap(button);
+    await page.waitForSelector(toast);
+    const deadline = Date.now() + 15000;
+    while (dashFinished < before + 1 || dashStarted !== dashFinished) {
+      if (Date.now() > deadline) throw new Error(`dashboard reload did not finish after ${toast}`);
+      await page.waitForTimeout(20);
+    }
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  };
 
   // Lock screen
   await page.goto(BASE);
@@ -362,16 +386,13 @@ let goalSetLive = false;
   // A background refresh or a rotate must not wipe a half-filled form.
   await page.evaluate(async () => { await load(true, true); window.dispatchEvent(new Event("resize")); });
   await page.waitForTimeout(250);
-  await page.tap("text=Save check-in");
-  await page.waitForSelector(".toast.ok");
+  await save("text=Save check-in", ".toast.ok");
   const lw = writes[writes.length - 1];
   check("Log check-in saves the full check-in", lw.action === "checkin_upsert" && lw.payload.day === "2026-11-24" && lw.payload.ate_vs_usual === "less" && lw.payload.moved_vs_usual === "more" && lw.payload.dose_feel === "strong" && lw.payload.energy === 6, JSON.stringify(lw));
   await page.fill("[name=weight_lb]", "256.4");
-  await page.tap("text=Save weigh-in");
-  await page.waitForSelector(".toast.ok >> text=Logged 256.4 lb.");
+  await save("text=Save weigh-in", ".toast.ok >> text=Logged 256.4 lb.");
   check("weigh-in writes", writes[writes.length - 1].action === "weigh_in" && writes[writes.length - 1].payload.weight_lb === "256.4");
-  await page.tap("text=Yes, earned it");
-  await page.waitForSelector(".toast.ok >> text=Earned it.");
+  await save("text=Yes, earned it", ".toast.ok >> text=Earned it.");
   check("earn it writes", writes[writes.length - 1].action === "earn_it" && writes[writes.length - 1].payload.earned === true);
 
   for (const t of ["Log a dose", "Side effect", "Measurement", "Start a vial", "Reconstitution calculator"]) {
@@ -384,25 +405,21 @@ let goalSetLive = false;
   // dose
   check("dose sites use plain names", (await page.locator(".chips[data-name=site] .chip").allTextContents()).join("|") === "Lower right belly|Lower left belly|Upper right belly|Upper left belly|Left love handle|Right love handle");
   await page.tap(".chips[data-name=site] >> text=Right love handle");
-  await page.tap("text=Save dose");
-  await page.waitForSelector(".toast.ok >> text=Logged tirzepatide 3 mg.");
+  await save("text=Save dose", ".toast.ok >> text=Logged tirzepatide 3 mg.");
   const dw = writes[writes.length - 1];
   check("dose writes with site", dw.action === "dose_log" && dw.payload.site === "Love R" && String(dw.payload.dose_mg) === "3", JSON.stringify(dw));
   check("folds stay open after a save", await page.$eval("details.fold:has(.fold-title:text-is('Side effect'))", (d) => d.open).catch(() => false));
   // side effect
   await page.fill("[name=effect]", "Nausea");
-  await page.tap("text=Save side effect");
-  await page.waitForSelector(".toast.ok >> text=Logged Nausea.");
+  await save("text=Save side effect", ".toast.ok >> text=Logged Nausea.");
   check("side effect writes", writes[writes.length - 1].action === "side_effect_upsert");
   // measurement
   await page.fill("[name=value]", "44.5");
-  await page.tap("text=Save measurement");
-  await page.waitForSelector(".toast.ok >> text=Saved measurement.");
+  await save("text=Save measurement", ".toast.ok >> text=Saved measurement.");
   check("measurement writes", writes[writes.length - 1].payload.metric === "waist" && writes[writes.length - 1].payload.value === "44.5");
   // vial
   await page.fill("[name=total_mg]", "20");
-  await page.tap("text=Save vial");
-  await page.waitForSelector(".toast.ok >> text=Vial added.");
+  await save("text=Save vial", ".toast.ok >> text=Vial added.");
   check("vial writes", writes[writes.length - 1].action === "vial_start");
   // recon calc
   await page.fill("[name=vial_mg]", "10");
