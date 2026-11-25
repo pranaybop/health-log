@@ -182,7 +182,31 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
         }
         if nativeLock {
             Task { await store.start() }
+            // Like the web app: refresh every minute while open, and on coming back to the app
+            // (with an Apple Health catch-up when the native sync is on).
+            let center = NotificationCenter.default
+            center.addObserver(self, selector: #selector(appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+            center.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+            center.addObserver(self, selector: #selector(appWillResignActive), name: UIApplication.willResignActiveNotification, object: nil)
         }
+    }
+
+    private var refreshTimer: Timer?
+
+    @objc private func appWillEnterForeground() {
+        Task { await store.refresh(syncHealth: true) }
+    }
+
+    @objc private func appDidBecomeActive() {
+        refreshTimer?.invalidate()
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            Task { @MainActor in await LogStore.shared.refresh() }
+        }
+    }
+
+    @objc private func appWillResignActive() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
     }
 
     override func viewDidAppear(_ animated: Bool) {
