@@ -126,6 +126,7 @@ let goalSetLive = false;
   // Today
   await shot("10-today");
   check("hero shows current weight", (await page.textContent(".hero-num")).includes("238.6"), await page.textContent(".hero-num"));
+  check("today keeps the switch card and drops the race", (await page.locator("h2:text-is('BMW Dallas Half')").count()) === 0 && (await page.locator(".count-label", { hasText: "Half marathon" }).count()) === 0 && (await page.locator("h2:text-is('Retatrutide switch')").count()) === 1 && (await page.locator(".counts .count").count()) === 2);
   check("food card without targets offers set", await page.isVisible("text=Set targets"));
   await page.tap("text=Set targets");
   await page.fill("[name=t_cal]", "500");
@@ -301,7 +302,7 @@ let goalSetLive = false;
   const chips = await page.locator(".trend-chip").allTextContents();
   check("Trends has its section chips", chips.join("|") === "Summary|Weight|Food|Meds|Body|Training|More", chips.join("|"));
   const tiles = page.locator(".sum-tile");
-  check("summary shows six tiles", (await tiles.count()) === 6 && /Recovery\s*3 of 4 off/.test(await tiles.nth(4).innerText()) && /Weight\s*2\d\d\.\d lb/.test(await tiles.nth(0).innerText()), (await tiles.allInnerTexts()).map((t) => t.replace(/\n/g, " ")).join(" | "));
+  check("summary shows five tiles", (await tiles.count()) === 5 && /Recovery\s*3 of 4 off/.test(await tiles.nth(4).innerText()) && /Weight\s*2\d\d\.\d lb/.test(await tiles.nth(0).innerText()), (await tiles.allInnerTexts()).map((t) => t.replace(/\n/g, " ")).join(" | "));
   check("summary doesn't draw every card", (await page.locator("section.card h2:text-is('Heart')").count()) === 0 && (await page.locator("section.card").count()) <= 2);
   await page.locator(".trend-nav").screenshot({ path: path.join(OUT, `${SCHEME}-29-trend-nav.png`) });
   await tiles.nth(4).tap();
@@ -311,7 +312,7 @@ let goalSetLive = false;
     await page.locator(`.trend-chip:text-is("${label}")`).tap();
     await page.waitForTimeout(200);
   };
-  const sections = { Food: ["Calories and protein", "Maintenance calories", "Protein target", "Food thoughts"], Meds: ["The week after a shot", "Appetite by drug level", "Retatrutide vs tirzepatide"], Body: ["Off your normal", "Heart", "More from Apple Health"], Weight: ["Weight", "Body composition"], Training: ["Running"] };
+  const sections = { Food: ["Calories and protein", "Maintenance calories", "Protein target", "Food thoughts"], Meds: ["The week after a shot", "Appetite by drug level", "Retatrutide vs tirzepatide"], Body: ["Off your normal", "Heart", "More from Apple Health"], Weight: ["Weight", "Body composition"], Training: ["Steps", "Workouts"] };
   for (const [label, titles] of Object.entries(sections)) {
     await go(label);
     for (const t of titles) check(`Trends > ${label} shows ${t}`, (await page.locator(`section.card h2:text-is("${t}")`).count()) === 1);
@@ -357,6 +358,7 @@ let goalSetLive = false;
   await page.locator("section.card:has(h2:text-is('Food thoughts'))").screenshot({ path: path.join(OUT, `${SCHEME}-39-thoughts.png`) });
 
   await go("Meds");
+  check("meds keeps the switch comparison and drops long-run timing", (await page.locator("h2:text-is('Long-run timing')").count()) === 0 && (await page.locator("h2:text-is('Retatrutide vs tirzepatide')").count()) === 1 && (await page.locator("h2:text-is('The week after a shot')").count()) === 1);
   // Appetite by drug level
   const ab = page.locator("section.card:has(h2:text-is('Appetite by drug level'))");
   const abText = await ab.innerText();
@@ -372,7 +374,8 @@ let goalSetLive = false;
   await page.locator("section.card:has(h2:text-is('The week after a shot'))").screenshot({ path: path.join(OUT, `${SCHEME}-35-shotweek.png`) });
 
   await go("Training");
-  await page.locator("section.card:has(h2:text-is('Running'))").screenshot({ path: path.join(OUT, `${SCHEME}-38-running.png`) });
+  check("training shows steps and workouts, not a running card", (await page.locator("h2:text-is('Running')").count()) === 0 && (await page.locator("h2:text-is('Steps')").count()) === 1 && (await page.locator("h2:text-is('Workouts')").count()) === 1);
+  await page.locator("section.card:has(h2:text-is('Steps'))").screenshot({ path: path.join(OUT, `${SCHEME}-38-steps.png`) });
   await go("Summary");
 
   // Log

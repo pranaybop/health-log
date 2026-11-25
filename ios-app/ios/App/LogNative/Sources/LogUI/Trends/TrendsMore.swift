@@ -182,7 +182,7 @@ struct TrExportCard: View {
             .controlSize(.large)
             .tint(LogColor.accent)
             Caption("CSV has meals, weigh-ins, doses, check-ins, side effects and measurements. JSON has everything the app loaded.")
-            Caption("The 4-week pack is a one-pager of recent weight, doses, mileage, protein hit rate, food thoughts and side effects, meant for a doctor or running coach.")
+            Caption("The 4-week pack is a one-pager of recent weight, doses, protein hit rate, food thoughts and side effects, meant for a doctor.")
         }
     }
 

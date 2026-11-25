@@ -290,22 +290,6 @@ extension Analytics.Trends {
             .min { ($0.takenDate ?? .distantFuture) < ($1.takenDate ?? .distantFuture) }
     }
 
-    /// Start of the current training stretch: the first run week or run after a gap over two weeks.
-    public static func trainingBlockAt(_ d: Dashboard) -> Date? {
-        var keys = Set<String>()
-        for w in d.runWeeks where !w.week.isEmpty && (w.miles ?? 0) > 0 { keys.insert(w.week) }
-        for w in d.workouts where w.isRun { if let t = w.startedDate { keys.insert(LogTime.dayKey(t)) } }
-        let uniq = keys.sorted()
-        guard var start = uniq.last else { return nil }
-        var i = uniq.count - 2
-        while i >= 0 {
-            if LogTime.dayDiff(uniq[i + 1], uniq[i]) > 14 { break }
-            start = uniq[i]
-            i -= 1
-        }
-        return LogTime.noon(start)
-    }
-
     public struct Stall: Hashable, Sendable {
         public var ready: Bool
         public var stalled: Bool
@@ -1032,64 +1016,6 @@ extension Analytics.Trends {
                           foodNoise: avg(\.foodNoise), sleepQuality: avg(\.sleepQuality))
     }
 
-    public struct LongRun: Hashable, Sendable {
-        public var hasDoses: Bool
-        public var hasData: Bool
-        public var energy: [Double?]
-        public var hrv: [Double?]
-        public var miles: [Double?]
-        public var takeaway: String
-    }
-
-    /// renderLongRunTiming: energy, HRV and run miles by day since the shot.
-    public static func longRun(_ d: Dashboard, now: Date) -> LongRun {
-        let doses = d.doses.filter { $0.skipped != true && $0.takenDate != nil }
-        guard !doses.isEmpty else { return LongRun(hasDoses: false, hasData: false, energy: [], hrv: [], miles: [], takeaway: "") }
-        let today = LogTime.today(now)
-        var checkins: [String: Checkin] = [:]
-        for c in d.checkins { checkins[c.day] = c }
-        var health: [String: DailyHealth] = [:]
-        for r in d.dailyHealth { health[r.day] = r }
-        var runs: [String: [Double]] = [:]
-        for w in d.workouts where w.isRun { if let t = w.startedDate { runs[LogTime.dayKey(t), default: []].append(w.distanceMi ?? 0) } }
-        var e = [(sum: Double, n: Int)](repeating: (0, 0), count: 7)
-        var h = e
-        var m = e
-        let days = doses.map { LogTime.dayKey($0.takenDate!) }
-        for start in days {
-            let next = days.first { $0 > start }
-            for i in 0...6 {
-                let k = LogTime.shift(start, i)
-                if k > today { continue }
-                if let next, k >= next { continue }
-                if let v = checkins[k]?.energy { e[i].sum += v; e[i].n += 1 }
-                if let v = health[k]?.hrvMs { h[i].sum += v; h[i].n += 1 }
-                if let list = runs[k], !list.isEmpty { m[i].sum += list.reduce(0, +); m[i].n += 1 }
-            }
-        }
-        func avgs(_ r: [(sum: Double, n: Int)]) -> [Double?] { r.map { $0.n > 0 ? $0.sum / Double($0.n) : nil } }
-        let has = (e + h + m).contains { $0.n > 0 }
-        func best(_ r: [(sum: Double, n: Int)], minN: Int) -> (i: Int, v: Double, n: Int)? {
-            var out: (i: Int, v: Double, n: Int)?
-            for i in r.indices where r[i].n >= minN {
-                let v = r[i].sum / Double(r[i].n)
-                if out == nil || v > out!.v { out = (i, v, r[i].n) }
-            }
-            return out
-        }
-        let bestRun = best(m, minN: 1)
-        let bestEnergy = best(e, minN: 2)
-        var takeaway = "More shot weeks with runs will show which day of the cycle has carried the longest efforts."
-        if let b = bestRun {
-            takeaway = "Runs have averaged \(num(b.v, 1)) mi on day \(b.i) after a shot\(b.n > 1 ? ", from \(b.n) days" : "")."
-            if let eb = bestEnergy, eb.i != b.i { takeaway += " Energy has scored highest on day \(eb.i)." }
-            takeaway += " Use this as a history, not a prescription, when timing a long run or the race."
-        } else if let eb = bestEnergy {
-            takeaway = "Energy has scored highest on day \(eb.i) after a shot. Runs will join this once they sync."
-        }
-        return LongRun(hasDoses: true, hasData: has, energy: avgs(e), hrv: avgs(h), miles: avgs(m), takeaway: takeaway)
-    }
-
     /// planDoseText: "Tirzepatide 3.0 mg (30 units)"
     public static func planDoseText(_ r: DosePlanRow) -> String {
         "\(capitalize(r.compound ?? "")) \(num(r.doseMg, 1)) mg\(r.units.map { " (\(num($0)) units)" } ?? "")"
@@ -1274,46 +1200,6 @@ extension Analytics.Trends {
 // MARK: - Training
 
 extension Analytics.Trends {
-    public struct Running: Hashable, Sendable {
-        public var raceDays: Int
-        public var weeks: [Column]
-        public var details: [String: String]
-        public var thisWeek: Double
-        public var longest4: Double
-        public var rows: [[String]]
-    }
-
-    /// renderRunning: 12 weeks of miles and how the last 6 weeks went.
-    public static func running(_ d: Dashboard, now: Date) -> Running {
-        var byWeek: [String: RunWeek] = [:]
-        for w in d.runWeeks { byWeek[w.week] = w }
-        let today = LogTime.today(now)
-        let monday = LogTime.monday(today)
-        let keys = (0..<12).map { LogTime.shift(monday, -7 * (11 - $0)) }
-        let weeks = keys.map { k in Column(key: k, value: byWeek[k] == nil ? 0 : byWeek[k]!.miles, isToday: k == monday) }
-        let longest4 = keys.suffix(4).compactMap { byWeek[$0] }.reduce(0.0) { max($0, $1.longestMi ?? 0) }
-        var details: [String: String] = [:]
-        for k in keys {
-            if let w = byWeek[k] {
-                let runs = Int(w.runs ?? 0)
-                details[k] = "Week of \(short(k)), \(num(w.runs)) run\(s(runs)), longest \(num(w.longestMi, 1)) mi"
-            } else {
-                details[k] = "Week of \(short(k)), no runs"
-            }
-        }
-        let rows: [[String]] = keys.suffix(6).reversed().map { k in
-            let end = LogTime.shift(k, 6)
-            let sleep = Analytics.mean(d.dailyHealth.filter { $0.day >= k && $0.day <= end }.compactMap { $0.sleepHours })
-            let energy = Analytics.mean(d.checkins.filter { $0.day >= k && $0.day <= end }.compactMap { $0.energy })
-            let kcal = Analytics.mean(d.dailyTotals.filter { $0.date >= k && $0.date <= end }.compactMap { $0.calories })
-            let w = byWeek[k]
-            return [short(k), w.map { num($0.miles, 1) } ?? "0", w.map { num($0.longestMi, 1) } ?? "—",
-                    sleep.map { "\(num($0, 1)) h" } ?? "—", energy.map { num($0, 1) } ?? "—", kcal.map { num($0) } ?? "—"]
-        }
-        return Running(raceDays: LogTime.daysUntil(LogTime.halfMarathon, now: now), weeks: weeks, details: details,
-                       thisWeek: byWeek[monday]?.miles ?? 0, longest4: longest4, rows: rows)
-    }
-
     /// renderStepsCard: the last 30 days; nil below 3 days with data.
     public static func steps(_ d: Dashboard, now: Date) -> (days: [Column], average: Double, count: Int)? {
         var byDay: [String: Double?] = [:]
@@ -1467,16 +1353,6 @@ extension Analytics.Trends {
             : "\(rec.checked.count) signals in their usual range"
         tiles.append(SummaryTile(section: "body", label: "Recovery", value: recValue, sub: recSub,
                                  spark: rhr.count > 1 ? rhr : [], sparkFrom: t30, sparkTo: now))
-
-        let mon = LogTime.monday(today)
-        let runs = d.workouts.filter { w in w.isRun && w.startedDate.map { LogTime.dayKey($0) >= mon } == true }
-        let miles = runs.reduce(0.0) { $0 + ($1.distanceMi ?? 0) }
-        let longest = runs.reduce(0.0) { max($0, $1.distanceMi ?? 0) }
-        let weeks = d.runWeeks.suffix(8).map { Point(key: $0.week, value: $0.miles ?? 0) }
-        tiles.append(SummaryTile(section: "training", label: "Running, this week", value: "\(num(miles, 1)) mi",
-                                 sub: runs.isEmpty ? "No runs yet this week" : "\(runs.count) run\(s(runs.count)), longest \(num(longest, 1)) mi",
-                                 spark: weeks.count > 1 ? Array(weeks) : [],
-                                 sparkFrom: (weeks.first?.at ?? now).addingTimeInterval(-86400), sparkTo: now))
         return tiles
     }
 }
@@ -1584,7 +1460,7 @@ extension Analytics.Trends {
         """
     }
 
-    /// coachPackWindow: the last 28 days on one page, for a doctor or running coach.
+    /// coachPackWindow: the last 28 days on one page, for a doctor.
     public static func coachPackHTML(_ d: Dashboard, now: Date, proteinTarget: Double?) -> String {
         let toKey = LogTime.today(now)
         let fromKey = LogTime.shift(toKey, -27)
@@ -1594,10 +1470,6 @@ extension Analytics.Trends {
         let foodDays = d.dailyTotals.filter { inWin($0.date) && $0.proteinG != nil }
         let hits = proteinTarget.map { t in foodDays.filter { ($0.proteinG ?? 0) >= t }.count }
         let avgPro = Analytics.mean(foodDays.compactMap { $0.proteinG })
-        let monday = LogTime.monday(toKey)
-        let weeks = d.runWeeks.filter { !$0.week.isEmpty && $0.week >= LogTime.shift(fromKey, -6) && $0.week <= monday }
-        let miles = weeks.reduce(0.0) { $0 + ($1.miles ?? 0) }
-        let longest = weeks.reduce(0.0) { max($0, $1.longestMi ?? 0) }
         let thoughts = d.foodThoughts.filter { inWin($0.thoughtDate.map(LogTime.dayKey)) }
         let strong = thoughts.filter { ($0.strength ?? 0) >= 2 }.count
         let effects = d.sideEffects.filter { inWin($0.recordedOn) }
@@ -1614,7 +1486,6 @@ extension Analytics.Trends {
             row("Current weight", j.map { "\(num($0.current.lb, 1)) lb" } ?? "—"),
             row("Weight in this window", weightText),
             row("Protein hit rate", proteinText),
-            row("Running miles", weeks.isEmpty ? "No run weeks in this window" : "\(num(miles, 1)) mi across \(weeks.count) week\(s(weeks.count)); longest run \(num(longest, 1)) mi"),
             row("Food thoughts", thoughts.isEmpty ? "None logged" : "\(thoughts.count) logged, \(strong) strong pull or craving"),
             row("Side effects", effects.isEmpty ? "None logged" : "\(effects.count) logged"),
             row("Doses", doses.isEmpty ? "None logged" : "\(doses.count) in this window"),
@@ -1624,9 +1495,6 @@ extension Analytics.Trends {
         }.joined()
         let effectRows = effects.map { e in
             "<tr><td>\(short(e.recordedOn))</td><td>\(html(e.effect))</td><td>\(raw(e.severity) ?? "")</td><td>\(html(e.notes))</td></tr>"
-        }.joined()
-        let weekRows = weeks.map { w in
-            "<tr><td>\(short(w.week))</td><td>\(num(w.miles, 1))</td><td>\(num(w.longestMi, 1))</td><td>\(raw(w.runs) ?? "")</td></tr>"
         }.joined()
         let none = "<tr><td colspan=4>None in this window</td></tr>"
         return """
@@ -1646,8 +1514,6 @@ extension Analytics.Trends {
         <table class="kv">\(summary)</table>
         <h2>Doses</h2>
         <table><tr><th>Date</th><th>Compound</th><th>Dose</th><th>Site</th></tr>\(doseRows.isEmpty ? none : doseRows)</table>
-        <h2>Weekly running</h2>
-        <table><tr><th>Week of</th><th>Miles</th><th>Longest</th><th>Runs</th></tr>\(weekRows.isEmpty ? none : weekRows)</table>
         <h2>Side effects</h2>
         <table><tr><th>Date</th><th>Effect</th><th>Severity</th><th>Notes</th></tr>\(effectRows.isEmpty ? none : effectRows)</table>
         <p class="muted">Meal macros may be estimates. Drug level is not included. This pack covers the last 28 days only.</p>
