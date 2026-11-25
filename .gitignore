@@ -1,0 +1,7 @@
+*.token
+*.pem
+.env
+.env.*
+.DS_Store
+node_modules/
+.token-sha256
