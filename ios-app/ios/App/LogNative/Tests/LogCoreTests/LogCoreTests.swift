@@ -176,7 +176,7 @@ final class LogCoreTests: XCTestCase {
         let todayWeigh = ReminderPlanner.requests(done, settings: daily, now: morning).filter { $0.route == "weigh" }
         XCTAssertEqual(todayWeigh.first?.day, "2026-11-25")
         XCTAssertEqual(ReminderPlanner.requests(open, settings: daily, now: morning).first { $0.route == "weigh" }?.day, "2026-11-24")
-        XCTAssertTrue(habits.allSatisfy { $0.day == nil })
+        XCTAssertTrue(habits.allSatisfy { $0.day != nil })
 
         let shot = ReminderSettings(shot: true, shotHour: 9)
         XCTAssertEqual(ReminderPlanner.requests(open, settings: shot, now: evening).map(\.id), [
