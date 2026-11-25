@@ -55,10 +55,7 @@ function renderMaintenance(data) {
     m.fromLogs != null ? "From your food logs and weight trend, last 4 full weeks" : m.watch != null ? "Apple Watch, burned per day over the last 4 full weeks" : "Needs a week of Apple Watch days or two weeks of food logs");
   const t0 = new Date(keyToNoon(m.start).getTime() - 12 * 3600000);
   const t1 = new Date(keyToNoon(m.end).getTime() + 12 * 3600000);
-  const smooth = (pts) => pts.map((p) => {
-    const win = pts.filter((q) => q.key <= p.key && q.key >= shiftDay(p.key, -6));
-    return { t: p.t, key: p.key, v: win.reduce((a, q) => a + q.v, 0) / win.length };
-  });
+  const smooth = (pts) => rollingMean(pts, 7);
   const series = [];
   if (m.burn.length) {
     series.push({ id: "burn", cls: "s1 faint", type: "dots", r: 2.5, points: m.burn });
@@ -328,4 +325,201 @@ function renderAppetiteByLevel(data) {
     ) : el("p", { class: "strip-note" }, "Shows once you've tracked food thoughts for 3 days. Tap a food-thought button on Today when one hits."),
     el("p", { class: "caption" }, "Level is the modeled amount of the medication you're on, as a share of the peak a weekly dose at your latest amount settles at (half-life 5 days for tirzepatide, 6 for retatrutide), so it reads the same across dose changes and the switch. Food thoughts are divided by the hours you spent in each band. A dash means no data in that band yet."),
   );
+}
+
+/* ---------- Dose plan (log.dose_plan, from the titration sheet) ---------- */
+
+function planRows(data) {
+  return (data.dose_plan || [])
+    .filter((r) => r.planned_on && num(r.dose_mg) != null)
+    .map((r) => ({ ...r, dose_mg: num(r.dose_mg), units: num(r.units) }))
+    .sort((a, b) => (a.planned_on < b.planned_on ? -1 : 1));
+}
+
+/* The next planned dose that hasn't been logged yet (today counts until a dose is logged today). */
+function nextPlanned(data) {
+  const today = todayKey();
+  const loggedDays = new Set((data.doses || []).filter((d) => !d.skipped && parseTs(d.taken_at)).map((d) => dateKeyCT(parseTs(d.taken_at))));
+  return planRows(data).find((r) => r.planned_on >= today && !loggedDays.has(r.planned_on)) || null;
+}
+
+function planDoseText(r) {
+  const name = capitalize(r.compound || "");
+  return `${name} ${fmtNum(r.dose_mg, 1)} mg${r.units != null ? ` (${fmtNum(r.units, 0)} units)` : ""}`;
+}
+
+/* Consecutive weeks at the same compound and dose form a step. */
+function planSteps(rows) {
+  const steps = [];
+  for (const r of rows) {
+    const last = steps[steps.length - 1];
+    if (last && last.compound === r.compound && last.dose_mg === r.dose_mg) { last.to = r.planned_on; last.weeks += 1; }
+    else steps.push({ compound: r.compound, dose_mg: r.dose_mg, units: r.units, from: r.planned_on, to: r.planned_on, weeks: 1 });
+  }
+  return steps;
+}
+
+function renderDosePlan(data) {
+  const rows = planRows(data);
+  if (!rows.length) return null;
+  const next = nextPlanned(data);
+  const steps = planSteps(rows);
+  const reta = rows.filter((r) => r.compound === "retatrutide");
+  const total = reta.reduce((a, r) => a + r.dose_mg, 0);
+  const today = todayKey();
+  const usedSoFar = reta.filter((r) => r.planned_on < (next ? next.planned_on : "9999")).reduce((a, r) => a + r.dose_mg, 0);
+  const stepUp = next ? rows.find((r) => r.planned_on > next.planned_on && r.compound === next.compound && r.dose_mg > next.dose_mg) : null;
+  const when = (key) => {
+    const d = daysUntil(keyToNoon(key));
+    return `${fmtDateCT(keyToNoon(key), true)}, ${daysWord(d)}`;
+  };
+  const currentStep = next ? steps.find((s) => next.planned_on >= s.from && next.planned_on <= s.to) : null;
+  return card("Dose plan",
+    next ? el("p", { class: "lead" }, `Next: ${planDoseText(next)}${next.week ? `, week ${next.week} of ${reta.length}` : ""}.`) : el("p", { class: "lead" }, "Every planned dose is done."),
+    next ? el("div", { class: "props" },
+      prop("When", when(next.planned_on)),
+      next.vial_draw ? prop("Draw from", next.vial_draw) : null,
+      next.notes ? prop("Note", next.notes) : null,
+      stepUp ? prop("Next step-up", `${fmtNum(stepUp.dose_mg, 1)} mg${stepUp.units != null ? ` (${fmtNum(stepUp.units, 0)} units)` : ""} on ${fmtDateCT(keyToNoon(stepUp.planned_on), true)}`) : null,
+      reta.length ? prop("Retatrutide used", `${fmtNum(usedSoFar, 1)} of ${fmtNum(total, 0)} mg planned`) : null,
+    ) : null,
+    el("div", { class: "table-scroll" }, el("table", { class: "data compact plan-steps" },
+      el("thead", null, el("tr", null, el("th", null, "Dose"), el("th", null, "Sundays"), el("th", { class: "num" }, "Weeks"))),
+      el("tbody", null, ...steps.map((s) => el("tr", { class: s === currentStep ? "on" : s.to < today ? "done" : null },
+        el("td", null, `${s.compound === "tirzepatide" ? "Tirz " : ""}${fmtNum(s.dose_mg, 1)} mg${s.units != null ? `, ${fmtNum(s.units, 0)} u` : ""}`),
+        el("td", null, s.from === s.to ? fmtShortDate(s.from) : `${fmtShortDate(s.from)} – ${fmtShortDate(s.to)}`),
+        el("td", { class: "num" }, String(s.weeks)),
+      ))),
+    )),
+    el("p", { class: "caption" }, "From your titration sheet. The plan is a guide; what you actually take is what you log. 1 mg = 10 units at 10 mg/mL."),
+  );
+}
+
+/* ---------- Trends: sections and the summary ---------- */
+
+const TREND_SECTIONS = [
+  { id: "summary", label: "Summary" },
+  { id: "weight", label: "Weight" },
+  { id: "food", label: "Food" },
+  { id: "meds", label: "Meds" },
+  { id: "body", label: "Body" },
+  { id: "training", label: "Training" },
+  { id: "more", label: "More" },
+];
+const TREND_SECTION_KEY = "log.trendsSection";
+
+function trendSection() {
+  if (!state.trendSection) {
+    try { state.trendSection = localStorage.getItem(TREND_SECTION_KEY) || "summary"; } catch (_) { state.trendSection = "summary"; }
+  }
+  return TREND_SECTIONS.some((s) => s.id === state.trendSection) ? state.trendSection : "summary";
+}
+
+function setTrendSection(id) {
+  state.trendSection = id;
+  try { localStorage.setItem(TREND_SECTION_KEY, id); } catch (_) { /* private mode */ }
+  render();
+  window.scrollTo(0, 0);
+}
+
+function renderTrendNav(active) {
+  const nav = el("nav", { class: "trend-nav", "aria-label": "Trends sections" },
+    el("div", { class: "trend-track" },
+      ...TREND_SECTIONS.map((s) => el("button", {
+        type: "button",
+        class: "trend-chip",
+        "aria-current": s.id === active ? "page" : null,
+        onClick: () => { if (s.id !== trendSection()) setTrendSection(s.id); },
+      }, s.label)),
+    ),
+  );
+  // Keep the chosen section in view when the row scrolls sideways.
+  requestAnimationFrame(() => {
+    const on = nav.querySelector('[aria-current="page"]');
+    const track = nav.querySelector(".trend-track");
+    if (on && track && (on.offsetLeft < track.scrollLeft || on.offsetLeft + on.offsetWidth > track.scrollLeft + track.clientWidth)) {
+      track.scrollLeft = on.offsetLeft - 16;
+    }
+  });
+  return nav;
+}
+
+function summaryTile(id, label, value, sub, spark) {
+  return el("button", { type: "button", class: "sum-tile", onClick: () => setTrendSection(id) },
+    el("span", { class: "sum-label" }, label),
+    el("span", { class: "sum-value" }, value),
+    el("span", { class: "sum-sub" }, sub),
+    spark || null,
+  );
+}
+
+function renderTrendSummary(data) {
+  const now = new Date();
+  const today = todayKey();
+  const t30 = new Date(now.getTime() - 30 * 86400000);
+  const tiles = [];
+
+  // Weight
+  const sm = smoothWeights(parseWeights(data.weights || []));
+  const last = sm[sm.length - 1];
+  const rate = trendRate(sm, 28);
+  tiles.push(summaryTile("weight", "Weight",
+    last ? `${fmtNum(last.trend, 1)} lb` : "—",
+    rate != null ? `${signed(rate, 1)} lb a week, 4-week trend` : "Needs more weigh-ins",
+    last ? sparkline(sm.filter((w) => w.at >= t30).map((w) => ({ t: w.at, v: w.trend })), t30, now) : null));
+
+  // Food, last 7 days
+  const t = getTargets(data);
+  const week = lastNDays(7).map((k) => totalsOn(data, k)).filter((r) => r && num(r.calories) != null);
+  const kcal = week.length ? week.reduce((a, r) => a + num(r.calories), 0) / week.length : null;
+  const pro = week.length ? week.reduce((a, r) => a + (num(r.protein_g) || 0), 0) / week.length : null;
+  const hits = t.protein != null ? week.filter((r) => num(r.protein_g) >= t.protein).length : null;
+  tiles.push(summaryTile("food", "Food, last 7 days",
+    kcal != null ? `${fmtNum(kcal, 0)} kcal` : "Not logged",
+    kcal != null ? `${fmtNum(pro, 0)} g protein a day${hits != null ? `, target hit ${hits} of ${week.length}` : ""}` : "Log meals to see averages",
+    sparkline(lastNDays(30).map((k) => ({ k, r: totalsOn(data, k) })).filter((x) => x.r && num(x.r.calories) != null).map((x) => ({ t: keyToNoon(x.k), v: num(x.r.calories) })), t30, now)));
+
+  // Maintenance
+  const m = maintenanceEstimate(data);
+  const best = m.fromLogs != null ? m.fromLogs : m.watch;
+  tiles.push(summaryTile("food", "Maintenance",
+    best != null ? `${fmtNum(Math.round(best / 10) * 10, 0)} kcal` : "—",
+    m.fromLogs != null ? "From food logs and weight" : m.watch != null ? "Apple Watch estimate" : "Needs more data",
+    m.burn.length ? sparkline(m.burn, new Date(keyToNoon(m.start).getTime() - 43200000), now) : null));
+
+  // Medication
+  const share = levelShareAt(data, now);
+  const next = nextPlanned(data);
+  const levelPts = [];
+  for (let i = 13; i >= 0; i--) {
+    const at = new Date(now.getTime() - i * 86400000);
+    const s = levelShareAt(data, at);
+    if (s != null) levelPts.push({ t: at, v: s });
+  }
+  tiles.push(summaryTile("meds", "Medication",
+    share != null ? `${fmtNum(share * 100, 0)}% of peak` : "No doses yet",
+    next ? `Next: ${planDoseText(next)}, ${fmtDateCT(keyToNoon(next.planned_on), true)}` : "Estimated level now",
+    levelPts.length > 1 ? sparkline(levelPts, new Date(now.getTime() - 14 * 86400000), now) : null));
+
+  // Recovery
+  let rec = offNormal(data, today);
+  if (rec.checked.length < 2) rec = offNormal(data, shiftDay(today, -1));
+  const rhr = (data.daily_health || []).filter((r) => num(r.resting_hr) != null).map((r) => ({ t: keyToNoon(r.day), v: num(r.resting_hr) })).filter((p) => p.t >= t30);
+  tiles.push(summaryTile("body", "Recovery",
+    rec.checked.length < 2 ? "—" : rec.off.length >= 2 ? `${rec.off.length} of ${rec.checked.length} off` : "Normal",
+    rec.checked.length < 2 ? "Needs Apple Health data" : rec.off.length ? rec.off.map((c) => `${c.s.lower} ${fmtSignalDiff(c)}`).join(", ") : `${rec.checked.length} signals in their usual range`,
+    rhr.length > 1 ? sparkline(rhr, t30, now) : null));
+
+  // Training, this week (Monday on)
+  const mon = weekMonday(today);
+  const runs = (data.workouts || []).filter((w) => isRunWorkout(w) && parseTs(w.started_at) && dateKeyCT(parseTs(w.started_at)) >= mon);
+  const miles = runs.reduce((a, w) => a + (num(w.distance_mi) || 0), 0);
+  const longest = runs.reduce((a, w) => Math.max(a, num(w.distance_mi) || 0), 0);
+  const weeks = (data.run_weeks || []).slice(-8).map((w) => ({ t: keyToNoon(w.week), v: num(w.miles) || 0 }));
+  tiles.push(summaryTile("training", "Running, this week",
+    `${fmtNum(miles, 1)} mi`,
+    runs.length ? `${runs.length} run${runs.length === 1 ? "" : "s"}, longest ${fmtNum(longest, 1)} mi` : "No runs yet this week",
+    weeks.length > 1 ? sparkline(weeks, new Date(weeks[0].t.getTime() - 86400000), now) : null));
+
+  return el("section", { class: "sum-grid", "aria-label": "Summary" }, ...tiles);
 }

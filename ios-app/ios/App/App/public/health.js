@@ -53,7 +53,7 @@ function healthPlugin() {
 }
 
 function canSyncHealth() {
-  return !!healthPlugin();
+  return !window.LOG_DEMO && !!healthPlugin();
 }
 
 function readJSON(key) {
@@ -495,7 +495,7 @@ async function syncAppleHealth(opts) {
 }
 
 function fmtMonthYear(key) {
-  return new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "short", year: "numeric" }).format(keyToNoon(key));
+  return FMT_MONTH_YEAR.format(keyToNoon(key));
 }
 
 function backfillText(b) {

@@ -8,6 +8,7 @@ const runs = [
   ["health.test.js"],
   ["offline.test.js"],
   ["fit.test.js"],
+  ["shell.test.js"],
 ];
 const failed = [];
 for (const [file, arg] of runs) {

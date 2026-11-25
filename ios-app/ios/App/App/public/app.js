@@ -99,34 +99,57 @@ function parseTs(v) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function partsInTZ(date) {
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-  const map = {};
-  for (const p of fmt.formatToParts(date)) map[p.type] = p.value;
-  return map;
+/* Central-time formatting. Building an Intl.DateTimeFormat is slow, and these run thousands of
+   times per screen, so the formatters are made once and recent answers are remembered. */
+const FMT_PARTS = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ,
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  weekday: "short",
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+const FMT_KEY = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+const FMT_HOUR = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", hourCycle: "h23" });
+const FMT_WEEKDAY = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long" });
+const FMT_LONG = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" });
+const FMT_LONG_YEAR = new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: "numeric" });
+const FMT_MONTH_YEAR = new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "short", year: "numeric" });
+
+function memoByTime(fn, max) {
+  const cache = new Map();
+  return (date) => {
+    const t = date instanceof Date ? date.getTime() : new Date(date).getTime();
+    let v = cache.get(t);
+    if (v === undefined) {
+      v = fn(new Date(t));
+      if (cache.size >= max) cache.delete(cache.keys().next().value);
+      cache.set(t, v);
+    }
+    return v;
+  };
 }
 
+const partsCached = memoByTime((date) => {
+  const map = {};
+  for (const p of FMT_PARTS.formatToParts(date)) map[p.type] = p.value;
+  return Object.freeze(map);
+}, 4000);
+
+function partsInTZ(date) {
+  return partsCached(date);
+}
+
+const dateKeyCached = memoByTime((date) => FMT_KEY.format(date), 20000);
+
 function dateKeyCT(date) {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return fmt.format(date);
+  return dateKeyCached(date);
 }
 
 function hourCT(date) {
-  return Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(date)) % 24;
+  return Number(FMT_HOUR.format(date)) % 24;
 }
 
 function fmtTimeCT(date) {
@@ -193,6 +216,8 @@ function hasCredential() {
 }
 
 async function fetchData() {
+  // Simulator check in CI only (debug builds with "-demo"): made-up data shipped as demo.json.
+  if (window.LOG_DEMO) return (await fetch("demo.json", { cache: "no-store" })).json();
   const res = await fetch(API_URL, {
     headers: authHeaders(),
     cache: "no-store",
@@ -222,14 +247,13 @@ async function load(isRefresh, background) {
     state.fromCache = false;
     state.error = null;
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (_) { /* full or private mode: skip */ }
-    if (state.passcode && !state.token) {
-      try { localStorage.setItem(PASS_KEY, state.passcode); } catch (_) { /* ignore quota */ }
-    }
+    if (state.passcode && !state.token) storePasscode(state.passcode);
   } catch (err) {
     const unauthorized = err.message === "unauthorized";
     if (unauthorized && state.passcode && !state.token) {
       state.passcode = "";
-      try { localStorage.removeItem(PASS_KEY); localStorage.removeItem(CACHE_KEY); } catch (_) { /* ignore */ }
+      clearPasscode();
+      try { localStorage.removeItem(CACHE_KEY); } catch (_) { /* ignore */ }
       state.data = null;
       state.error = "bad-passcode";
     } else if (!state.data) {
@@ -270,7 +294,8 @@ function lock() {
   state.error = null;
   state.loading = false;
   state.updating = false;
-  try { localStorage.removeItem(PASS_KEY); localStorage.removeItem(CACHE_KEY); } catch (_) { /* ignore */ }
+  clearPasscode();
+  try { localStorage.removeItem(CACHE_KEY); } catch (_) { /* ignore */ }
   if (location.hash) {
     history.replaceState(null, "", location.pathname + location.search);
   }
@@ -436,7 +461,7 @@ function dayTitle(key) {
   if (off === 0) return "Today";
   if (off === -1) return "Yesterday";
   const d = keyToNoon(key);
-  if (off > -7) return new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long" }).format(d);
+  if (off > -7) return FMT_WEEKDAY.format(d);
   return fmtDateYearCT(d);
 }
 
@@ -513,18 +538,7 @@ function tabNav() {
     ...TABS.map((t) => el("button", {
       type: "button",
       "aria-current": state.tab === t.id ? "page" : null,
-      onClick: () => {
-        if (state.tab === t.id) {
-          if (t.id === "today" && state.dayOffset) { state.daySlide = "next"; state.dayOffset = 0; render(); }
-          window.scrollTo({ top: 0, behavior: "smooth" });
-          return;
-        }
-        state.tab = t.id;
-        state.formMessage = null;
-        state.checkinOpen = false;
-        render();
-        window.scrollTo(0, 0);
-      },
+      onClick: () => selectTab(t.id),
     }, icon(t.id), el("span", null, t.label))),
   );
 }
@@ -550,13 +564,13 @@ function renderTopbar(data) {
 }
 
 function fmtLongDateCT(date) {
-  return new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" }).format(date);
+  return FMT_LONG.format(date);
 }
 
 function fmtLongDateYearCT(date) {
   const sameYear = partsInTZ(date).year === partsInTZ(new Date()).year;
   return sameYear ? fmtLongDateCT(date)
-    : new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(date);
+    : FMT_LONG_YEAR.format(date);
 }
 
 function fmtDateYearCT(date) {
@@ -872,7 +886,11 @@ function renderMedSummary(data) {
     ),
     el("div", { class: "props" },
       prop("Last dose", lastDose ? `${fmtNum(lastDose.dose_mg, 1)} mg ${capitalize(lastDose.compound || "")}, ${fmtDateCT(parseTs(lastDose.taken_at), true)}` : "—"),
-      prop("Next dose", next ? `${fmtDateCT(next, true)}, ${daysWord(daysUntil(next))}` : `Retatrutide starts ${fmtDateCT(RETA_START, true)}`),
+      (() => {
+        const plan = nextPlanned(data);
+        if (plan) return prop("Next dose", `${planDoseText(plan)}, ${fmtDateCT(keyToNoon(plan.planned_on), true)} (${daysWord(daysUntil(keyToNoon(plan.planned_on)))})`);
+        return prop("Next dose", next ? `${fmtDateCT(next, true)}, ${daysWord(daysUntil(next))}` : `Retatrutide starts ${fmtDateCT(RETA_START, true)}`);
+      })(),
       prop("Next site", rot.next ? (SITE_LABELS[rot.next] || rot.next) : "—"),
     ),
   );
@@ -1091,7 +1109,6 @@ function renderTodayTab(data) {
     isToday ? el("p", { class: "install" + (state.error === "refresh-failed" ? " err" : "") }, state.error === "refresh-failed"
       ? `Couldn’t refresh. Showing data from ${fmtTimeCT(parseTs(data.as_of) || new Date())}.`
       : `Updated ${fmtTimeCT(parseTs(data.as_of) || new Date())}. Refreshes every minute.`) : null,
-    isToday && !isStandalone() ? el("p", { class: "install" }, "Add to Home Screen: in Safari, tap Share, then Add to Home Screen. Your passcode stays on this phone.") : null,
   );
   state.daySlide = null;
   attachDaySwipe(body, data);
@@ -1184,7 +1201,7 @@ function renderTitration(data) {
   );
 }
 
-/* Identical unopened vials collapse into one line ("Aavant 12 mg, 10 vials"). */
+/* Identical unopened vials collapse into one line ("Brand 12 mg, 10 vials"). */
 function groupVials(items) {
   const groups = new Map();
   for (const v of items) {
@@ -1273,6 +1290,7 @@ function renderMedsTab(data) {
   return el("div", { class: "stack" },
     renderLevelCard(data),
     renderSiteMap(data),
+    renderDosePlan(data),
     renderTitration(data),
     renderSwitchCard(data),
     renderProtocol(data),
@@ -1778,44 +1796,20 @@ function renderExport(data) {
   );
 }
 
+/* Trends, one section at a time: a summary that opens each section, then the detail cards. */
 function renderTrendsTab(data) {
-  const section = (t) => el("h2", { class: "section-title" }, t);
-  return el("div", { class: "stack" },
-    renderWeightCard(data),
-    renderStall(data),
-    section("Food"),
-    renderFoodTrends(data),
-    renderMaintenance(data),
-    renderProteinCard(data),
-    renderFoodThoughtsCard(data),
-    section("Your week on the medication"),
-    renderShotWeek(data),
-    renderAppetiteByLevel(data),
-    renderCycles(data),
-    renderFeel(data),
-    renderWearOff(data),
-    renderLongRunTiming(data),
-    renderRetaVsTirz(data),
-    renderSideEffects(data),
-    section("Body"),
-    renderHeartCard(data),
-    renderOffNormalTrends(data),
-    renderBodyComp(data),
-    renderMoreHealth(data),
-    renderMeasurements(data),
-    section("Training"),
-    renderRunning(data),
-    renderStepsCard(data),
-    renderWorkouts(data),
-    section("More"),
-    renderExplorer(data),
-    renderEarnWall(data),
-    renderWeekly(data),
-    renderExport(data),
-  );
+  const active = trendSection();
+  const sections = {
+    summary: () => [renderTrendSummary(data), renderWeightCard(data)],
+    weight: () => [renderWeightCard(data), renderStall(data), renderBodyComp(data)],
+    food: () => [renderFoodTrends(data), renderMaintenance(data), renderProteinCard(data), renderFoodThoughtsCard(data)],
+    meds: () => [renderShotWeek(data), renderAppetiteByLevel(data), renderRetaVsTirz(data), renderCycles(data), renderFeel(data), renderWearOff(data), renderLongRunTiming(data), renderSideEffects(data)],
+    body: () => [renderOffNormalTrends(data), renderHeartCard(data), renderMoreHealth(data), renderMeasurements(data)],
+    training: () => [renderRunning(data), renderStepsCard(data), renderWorkouts(data)],
+    more: () => [renderExplorer(data), renderEarnWall(data), renderWeekly(data), renderExport(data)],
+  };
+  return el("div", { class: "stack" }, renderTrendNav(active), ...sections[active]());
 }
-
-/* ---------- app, gate, states ---------- */
 
 function renderApp(data) {
   const body = state.tab === "meds" ? renderMedsTab(data)
@@ -1935,6 +1929,7 @@ function render() {
   root.innerHTML = "";
   const gate = !hasCredential() || state.error === "bad-passcode" || state.error === "empty-passcode";
   document.body.classList.toggle("locked", gate || (state.error && !state.data));
+  syncShell(!!(gate || (state.error && !state.data)));
   if (gate) root.append(renderGate());
   else if (state.loading && !state.data) root.append(renderLoading());
   else if (state.error === "unauthorized") root.append(renderUnauthorized());
@@ -1945,14 +1940,76 @@ function render() {
   }
 }
 
-function boot() {
-  state.token = readToken();
-  if (!state.token) {
-    try { state.passcode = localStorage.getItem(PASS_KEY) || ""; }
-    catch (_) { state.passcode = ""; }
-  } else {
-    state.passcode = "";
+/* ---------- the native shell (iPhone app 1.2+) ---------- */
+// Inside the app, LogShell.swift sets window.LOG_NATIVE before this runs: the tab bar is native and
+// the passcode lives in the Keychain. In a browser (and the tests) none of this applies.
+const NATIVE = window.LOG_NATIVE || null;
+const nativeTabs = !!(NATIVE && NATIVE.tabs);
+document.documentElement.classList.toggle("native-tabs", nativeTabs);
+
+function shellPost(message) {
+  try {
+    const h = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.logShell;
+    return h ? Promise.resolve(h.postMessage(message)).catch(() => null) : Promise.resolve(null);
+  } catch (_) {
+    return Promise.resolve(null);
   }
+}
+
+function storePasscode(code) {
+  if (window.LOG_DEMO) return;
+  if (NATIVE && NATIVE.keychain) {
+    shellPost({ type: "setPasscode", passcode: code });
+    try { localStorage.removeItem(PASS_KEY); } catch (_) { /* ignore */ }
+    return;
+  }
+  try { localStorage.setItem(PASS_KEY, code); } catch (_) { /* ignore quota */ }
+}
+
+function clearPasscode() {
+  if (NATIVE && NATIVE.keychain) shellPost({ type: "clearPasscode" });
+  try { localStorage.removeItem(PASS_KEY); } catch (_) { /* ignore */ }
+}
+
+async function readPasscode() {
+  if (window.LOG_DEMO) return "demo";
+  let local = "";
+  try { local = localStorage.getItem(PASS_KEY) || ""; } catch (_) { /* ignore */ }
+  if (!(NATIVE && NATIVE.keychain)) return local;
+  const saved = await shellPost({ type: "getPasscode" });
+  if (saved) return String(saved);
+  // Moving from 1.1, which kept it in the web view's storage: hand it to the Keychain once.
+  if (local) storePasscode(local);
+  return local;
+}
+
+/* The native tab bar picked a tab (or the current one again). */
+function selectTab(id) {
+  if (!TABS.some((t) => t.id === id)) return;
+  if (state.tab === id) {
+    if (id === "today" && state.dayOffset) { state.daySlide = "next"; state.dayOffset = 0; render(); }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+  state.tab = id;
+  state.formMessage = null;
+  state.checkinOpen = false;
+  render();
+  window.scrollTo(0, 0);
+}
+window.logShellSelectTab = selectTab;
+
+/* Keep the native tab bar in step with the page: hidden on the lock screen, following tab changes. */
+const shellSeen = { tab: null, locked: null };
+function syncShell(locked) {
+  if (!nativeTabs) return;
+  if (shellSeen.locked !== locked) { shellSeen.locked = locked; shellPost({ type: "locked", locked }); }
+  if (!locked && shellSeen.tab !== state.tab) { shellSeen.tab = state.tab; shellPost({ type: "tab", tab: state.tab }); }
+}
+
+async function boot() {
+  state.token = readToken();
+  state.passcode = state.token ? "" : await readPasscode();
   // Open straight to the last data this phone saw, then refresh it in place.
   if (hasCredential()) {
     try {
@@ -1961,7 +2018,10 @@ function boot() {
     } catch (_) { /* ignore a bad cache */ }
   }
   if (state.data) { render(); load(true).then(() => autoSyncHealth()); }
-  else load(false).then(() => autoSyncHealth());
+  else load(false).then(() => {
+    if (window.LOG_DEMO && window.LOG_DEMO.tab) selectTab(window.LOG_DEMO.tab);
+    autoSyncHealth();
+  });
 }
 
 // The iPhone app ships its files inside the app, so it needs no service worker (and WKWebView has none).

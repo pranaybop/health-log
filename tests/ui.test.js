@@ -205,6 +205,7 @@ let goalSetLive = false;
   const sw = writes[writes.length - 1];
   check("side effect from Today", sw.action === "side_effect_upsert" && sw.payload.effect === "Nausea" && String(sw.payload.severity) === "4" && (await page.locator(".quick-effect").count()) === 0, JSON.stringify(sw));
   check("verdict uses the same start as Today", /from your 248(\.0)? lb start/.test(await page.textContent(".verdict")), await page.textContent(".verdict"));
+  check("Today's next dose comes from the plan", /Next dose\s*Tirzepatide 3(\.0)? mg, Sun, Nov 29/.test(await page.locator("section.card:has(h2:text-is('Medication'))").first().innerText()));
   check("hero shows pace as % of body weight", /lb a week \(\d+\.\d%\)/.test(await page.textContent(".hero-chips")), await page.textContent(".hero-chips"));
   const offCard = page.locator("section.card:has(h2:text-is('Off your normal'))");
   check("Today flags a day with 3 of 4 recovery signals off", (await offCard.count()) === 1 && /3 of 4 recovery signals are off your normal/.test(await offCard.innerText()) && (await offCard.locator(".signal-row.off").count()) === 3, (await offCard.count()) ? (await offCard.innerText()).replace(/\n/g, " | ") : "no card");
@@ -226,6 +227,10 @@ let goalSetLive = false;
   await page.waitForTimeout(100);
   check("drug level scrub updates readout", await page.$eval(".readout", (n) => n.classList.contains("live")));
   await lvl.screenshot({ path: path.join(OUT, `${SCHEME}-21-level-scrub.png`) });
+  const dp = page.locator("section.card:has(h2:text-is('Dose plan'))");
+  const dpText = await dp.innerText();
+  check("dose plan shows the next planned dose and the steps", /Next: Tirzepatide 3(\.0)? mg\./.test(dpText) && /When\s*Sun, Nov 29/.test(dpText) && /Retatrutide used\s*0(\.0)? of 36 mg planned/.test(dpText) && (await dp.locator("tbody tr").count()) === 4, dpText.replace(/\n/g, " | "));
+  await dp.screenshot({ path: path.join(OUT, `${SCHEME}-22-dose-plan.png`) });
 
   // Trends
   await page.tap(".tabnav >> text=Trends");
@@ -266,9 +271,29 @@ let goalSetLive = false;
   await page.tap(`.compare >> text=RHR`);
   check("resting HR overlay", (await wcard.locator(".legend").innerText()).includes("Resting heart rate"));
   await page.tap(`.compare >> text=Off`);
-  for (const t of ["Maintenance calories", "Protein target", "Food thoughts", "The week after a shot", "Appetite by drug level", "Retatrutide vs tirzepatide", "Heart", "Off your normal", "Body composition", "More from Apple Health", "Running"]) {
-    check(`Trends shows ${t}`, (await page.locator(`section.card h2:text-is("${t}")`).count()) === 1);
+  check("overlay off removes the line", (await wcard.locator("svg.chart .overlay-line").count()) === 0 && (await wcard.locator("svg.chart text.tick.right").count()) === 0);
+
+  // Trends is in sections now: a summary first, then one section at a time.
+  const chips = await page.locator(".trend-chip").allTextContents();
+  check("Trends has its section chips", chips.join("|") === "Summary|Weight|Food|Meds|Body|Training|More", chips.join("|"));
+  const tiles = page.locator(".sum-tile");
+  check("summary shows six tiles", (await tiles.count()) === 6 && /Recovery\s*3 of 4 off/.test(await tiles.nth(4).innerText()) && /Weight\s*2\d\d\.\d lb/.test(await tiles.nth(0).innerText()), (await tiles.allInnerTexts()).map((t) => t.replace(/\n/g, " ")).join(" | "));
+  check("summary doesn't draw every card", (await page.locator("section.card h2:text-is('Heart')").count()) === 0 && (await page.locator("section.card").count()) <= 2);
+  await page.locator(".trend-nav").screenshot({ path: path.join(OUT, `${SCHEME}-29-trend-nav.png`) });
+  await tiles.nth(4).tap();
+  await page.waitForTimeout(200);
+  check("a summary tile opens its section", (await page.locator(".trend-chip[aria-current=page]").textContent()) === "Body" && (await page.locator("section.card h2:text-is('Off your normal')").count()) === 1 && (await page.evaluate(() => localStorage.getItem("log.trendsSection"))) === "body");
+  const go = async (label) => {
+    await page.locator(`.trend-chip:text-is("${label}")`).tap();
+    await page.waitForTimeout(200);
+  };
+  const sections = { Food: ["Calories and protein", "Maintenance calories", "Protein target", "Food thoughts"], Meds: ["The week after a shot", "Appetite by drug level", "Retatrutide vs tirzepatide"], Body: ["Off your normal", "Heart", "More from Apple Health"], Weight: ["Weight", "Body composition"], Training: ["Running"] };
+  for (const [label, titles] of Object.entries(sections)) {
+    await go(label);
+    for (const t of titles) check(`Trends > ${label} shows ${t}`, (await page.locator(`section.card h2:text-is("${t}")`).count()) === 1);
   }
+
+  await go("Body");
   const more = page.locator("section.card:has(h2:text-is('More from Apple Health'))");
   check("More from Apple Health groups its rows", (await more.locator(".hm-group").allInnerTexts()).join("|") === "Heart and breathing|Sleep|Energy and food|Activity" && (await more.locator(".hm-row").count()) === 10, (await more.locator(".hm-group").allInnerTexts()).join("|"));
   const tk = more.locator(".hm-row", { hasText: "Total energy burned" });
@@ -279,8 +304,19 @@ let goalSetLive = false;
   check("a metric row opens to a chart", (await tk.locator(".hm-chart svg").count()) >= 1);
   await more.screenshot({ path: path.join(OUT, `${SCHEME}-37-more-health.png`) });
   await tk.locator("summary").tap();
+  // Off your normal on Trends
+  const on = page.locator("section.card:has(h2:text-is('Off your normal'))");
+  const onText = await on.innerText();
+  check("off-normal history marks flagged days", (await on.locator(".off-strip span").count()) === 60 && (await on.locator(".off-strip .flag").count()) >= 2 && /Nov 10/.test(onText) && /Today: 3 of 4 signals off/.test(onText), onText.replace(/\n/g, " | "));
+  await on.screenshot({ path: path.join(OUT, `${SCHEME}-53-off-normal-trends.png`) });
+  await page.locator("section.card:has(h2:text-is('Heart'))").screenshot({ path: path.join(OUT, `${SCHEME}-36-heart.png`) });
+
+  await go("Weight");
   const bc = await page.locator("section.card:has(h2:text-is('Body composition'))").innerText();
   check("body composition tiles", /BMI\s*34\.2/.test(bc) && /Body fat\s*35\.2%/.test(bc) && /Loss that was lean/.test(bc), bc.replace(/\n/g, " | "));
+  await page.locator("section.card:has(h2:text-is('Body composition'))").screenshot({ path: path.join(OUT, `${SCHEME}-37-body.png`) });
+
+  await go("Food");
   // Maintenance calories: from food logs + weight trend, and the watch's figure.
   const mc = page.locator("section.card:has(h2:text-is('Maintenance calories'))");
   const mcText = await mc.innerText();
@@ -294,6 +330,9 @@ let goalSetLive = false;
   await page.waitForTimeout(100);
   check("maintenance chart scrubs to a day", /kcal burned|Watch day skipped/.test(await mc.locator(".readout").textContent()), await mc.locator(".readout").textContent());
   await mc.screenshot({ path: path.join(OUT, `${SCHEME}-50-maintenance.png`) });
+  await page.locator("section.card:has(h2:text-is('Food thoughts'))").screenshot({ path: path.join(OUT, `${SCHEME}-39-thoughts.png`) });
+
+  await go("Meds");
   // Appetite by drug level
   const ab = page.locator("section.card:has(h2:text-is('Appetite by drug level'))");
   const abText = await ab.innerText();
@@ -304,19 +343,13 @@ let goalSetLive = false;
   const rvText = await rv.innerText();
   check("reta vs tirz shows the tirzepatide baseline", /tirzepatide baseline/.test(rvText) && /Resting heart rate\s*6\d bpm/.test(rvText) && /Burned a day\s*2,\d{3} kcal/.test(rvText) && /HRV\s*\d+ ms/.test(rvText), rvText.replace(/\n/g, " | "));
   await rv.screenshot({ path: path.join(OUT, `${SCHEME}-52-reta-vs-tirz.png`) });
-  // Off your normal on Trends
-  const on = page.locator("section.card:has(h2:text-is('Off your normal'))");
-  const onText = await on.innerText();
-  check("off-normal history marks flagged days", (await on.locator(".off-strip span").count()) === 60 && (await on.locator(".off-strip .flag").count()) >= 2 && /Nov 10/.test(onText) && /Today: 3 of 4 signals off/.test(onText), onText.replace(/\n/g, " | "));
-  await on.screenshot({ path: path.join(OUT, `${SCHEME}-53-off-normal-trends.png`) });
-  const swk = page.locator(".shotweek");
+  const swk = page.locator(".shotweek").first();
   check("week-after-shot table has data", (await swk.locator(".sw-cell:not(.none)").count()) >= 6);
   await page.locator("section.card:has(h2:text-is('The week after a shot'))").screenshot({ path: path.join(OUT, `${SCHEME}-35-shotweek.png`) });
-  await page.locator("section.card:has(h2:text-is('Heart'))").screenshot({ path: path.join(OUT, `${SCHEME}-36-heart.png`) });
-  await page.locator("section.card:has(h2:text-is('Body composition'))").screenshot({ path: path.join(OUT, `${SCHEME}-37-body.png`) });
+
+  await go("Training");
   await page.locator("section.card:has(h2:text-is('Running'))").screenshot({ path: path.join(OUT, `${SCHEME}-38-running.png`) });
-  await page.locator("section.card:has(h2:text-is('Food thoughts'))").screenshot({ path: path.join(OUT, `${SCHEME}-39-thoughts.png`) });
-  check("overlay off removes the line", (await wcard.locator("svg.chart .overlay-line").count()) === 0 && (await wcard.locator("svg.chart text.tick.right").count()) === 0);
+  await go("Summary");
 
   // Log
   await page.tap(".tabnav >> text=Log");

@@ -235,7 +235,11 @@ function renderSwitchCard(data) {
   const rot = siteRotation(data);
   const next = rot.next ? (SITE_LABELS[rot.next] || rot.next) : "—";
   const p = protocolRow(data, "retatrutide");
-  const units = p && num(p.units) != null ? num(p.units) : 20;
+  const units = p && num(p.units) != null ? num(p.units) : null;
+  const mg = p && num(p.typical_dose_mg) != null ? num(p.typical_dose_mg) : null;
+  const doseText = units != null
+    ? `Take ${fmtNum(units, 0)} units${mg != null ? ` (${fmtNum(mg, 1)} mg at ${fmtNum(mg / (units / 100), 0)} mg/mL)` : ""}.`
+    : mg != null ? `Take ${fmtNum(mg, 1)} mg.` : "Take the planned first dose.";
   let headline;
   if (first) headline = `First retatrutide dose logged ${fmtDateCT(parseTs(first.taken_at), true)}.`;
   else if (days > 0) headline = `Switch in ${days} day${days === 1 ? "" : "s"}, ${fmtDateCT(start, true)}.`;
@@ -245,7 +249,7 @@ function renderSwitchCard(data) {
     el("p", { class: "lead" }, headline),
     el("ul", { class: "checklist" },
       el("li", null, el("span", { class: "box", "aria-hidden": "true" }), `Mix the vial with 1 mL.`),
-      el("li", null, el("span", { class: "box", "aria-hidden": "true" }), `Take ${fmtNum(units, 0)} units.`),
+      el("li", null, el("span", { class: "box", "aria-hidden": "true" }), doseText),
       el("li", null, el("span", { class: "box", "aria-hidden": "true" }), "Don’t overlap with tirzepatide — this is a switch, not a stack."),
       el("li", null, el("span", { class: "box", "aria-hidden": "true" }), `Next site: ${next}.`),
     ),
@@ -257,7 +261,7 @@ function renderSwitchCard(data) {
       el("span", null, el("i", { class: "key line s3 dashed" }), "Tirzepatide, 5 days"),
       el("span", null, el("i", { class: "key line s2" }), "Retatrutide, 6 days"),
     ),
-    el("p", { class: "caption" }, "The chart is relative remaining after a dose, not milligrams. A dose in mg isn’t set yet, so this only compares the 144-hour and 120-hour half-lives."),
+    el("p", { class: "caption" }, "The chart is the share left after a dose, not milligrams, so it compares the 144-hour and 120-hour half-lives on the same scale."),
   );
 }
 

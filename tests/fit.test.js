@@ -27,7 +27,11 @@ const check = checker();
       const scrollW = document.documentElement.scrollWidth;
       const wide = [...document.querySelectorAll("#app *")].filter((n) => {
         if (!n.checkVisibility() || getComputedStyle(n).position === "fixed") return false;
-        if (n.closest(".table-scroll") && n.closest(".table-scroll").getBoundingClientRect().right <= vw + 0.5) return false;
+        // Inside a box that scrolls sideways (a table, the Trends chips) is fine if the box fits.
+        for (let a = n.parentElement; a && a !== document.body; a = a.parentElement) {
+          const ox = getComputedStyle(a).overflowX;
+          if ((ox === "auto" || ox === "scroll") && a.getBoundingClientRect().right <= vw + 0.5) return false;
+        }
         return n.getBoundingClientRect().right > vw + 0.5;
       });
       const leaves = wide.filter((n) => !wide.some((m) => m !== n && n.contains(m)));
@@ -45,6 +49,16 @@ const check = checker();
     for (const tab of ["Meds", "Trends", "Log"]) {
       await page.tap(`.tabnav >> text=${tab}`);
       await page.waitForTimeout(300);
+      if (tab === "Trends") {
+        for (const sec of ["summary", "weight", "food", "meds", "body", "training", "more"]) {
+          await page.evaluate((id) => setTrendSection(id), sec);
+          await page.waitForTimeout(150);
+          await openAll();
+          await page.waitForTimeout(150);
+          views.push([`Trends ${sec}, folds open`, await measure()]);
+        }
+        continue;
+      }
       await openAll();
       await page.waitForTimeout(200);
       views.push([`${tab}, folds open`, await measure()]);

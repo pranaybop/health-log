@@ -439,7 +439,16 @@ function renderVialForm() {
   );
 }
 
-function renderReconCalc() {
+function retaMixNote(data) {
+  const p = (data && data.protocol || []).find((r) => String(r.compound || "").toLowerCase() === "retatrutide");
+  const units = p ? num(p.units) : null;
+  const mg = p ? num(p.typical_dose_mg) : null;
+  if (units == null || mg == null || !(units > 0)) return "For the retatrutide start: mix the vial with 1 mL, then use the units in your plan.";
+  const conc = mg / (units / 100);
+  return `For the retatrutide start: ${fmtNum(units, 0)} units is ${fmtNum(mg, 1)} mg at ${fmtNum(conc, 0)} mg/mL (a ${fmtNum(conc, 0)} mg vial mixed with 1 mL).`;
+}
+
+function renderReconCalc(data) {
   const vial = field("Vial amount (mg)", input({ type: "number", name: "vial_mg", min: "0", step: "0.1", value: "", inputmode: "decimal" }));
   const dil = field("Diluent (mL)", input({ type: "number", name: "diluent_ml", min: "0", step: "0.1", value: "1", inputmode: "decimal" }));
   const dose = field("Desired dose (mg)", input({ type: "number", name: "want_mg", min: "0", step: "0.05", inputmode: "decimal" }));
@@ -459,7 +468,7 @@ function renderReconCalc() {
   };
   box.querySelectorAll("input").forEach((i) => i.addEventListener("input", recalc));
   return fold("recon", "Reconstitution calculator", "Units to draw for a dose. Not saved",
-    el("p", { class: "caption first" }, "For the planned retatrutide start: mix the vial with 1 mL, then 20 units is the planned first dose. The mg equivalent is still unknown."),
+    el("p", { class: "caption first" }, retaMixNote(data)),
     box,
   );
 }
@@ -475,7 +484,7 @@ function renderLogTab(data) {
     renderSideEffectForm(),
     renderMeasurementForm(),
     renderVialForm(),
-    renderReconCalc(),
+    renderReconCalc(data),
     renderAppVersion(),
   );
 }

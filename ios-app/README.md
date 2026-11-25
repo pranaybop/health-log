@@ -8,6 +8,17 @@ The Log app (Capacitor 8). Since Nov 25, 2026 the app's files are built into the
 
 Nothing in this folder holds a passcode, token or key. Keep it that way.
 
+## The native shell (1.2)
+
+The app is going native in stages. Stage 1 (version 1.2) wraps the screens in native iOS:
+
+- **Tab bar:** a native `UITabBarController` (`ios/App/App/LogShell.swift`). Built with the iOS 26 SDK it is Liquid Glass on iOS 26 (and shrinks while you scroll down); older iOS gets the standard bar. The screens are still the web code in `www/`, in one web view that moves between the tabs, so nothing reloads.
+- **Passcode:** kept in the iPhone Keychain (this device only, readable after first unlock), not in the web view's storage. 1.1's stored passcode moves over on first launch.
+- **How the page and the shell talk:** `window.LOG_NATIVE` (set before the page's scripts run) tells the page it's inside the shell; the page posts `tab`, `locked`, `getPasscode`, `setPasscode` and `clearPasscode` to `window.webkit.messageHandlers.logShell`; the shell calls `window.logShellSelectTab(id)`.
+- **Simulator check:** the workflow's `simulator` job runs a debug build in the iPhone simulator with made-up data (`-demo <tab>`, debug builds only) and prints screenshots into its log.
+
+Next stages move screens to SwiftUI one at a time (Trends first), then Apple Health sync to native Swift with background refresh.
+
 ## Making changes
 
 1. Edit the files in `www/`.

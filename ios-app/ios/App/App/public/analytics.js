@@ -599,3 +599,20 @@ function nextSiteAfter(site) {
   if (!SITES.includes(site)) return SITES[0];
   return SITES[(SITES.indexOf(site) + 1) % SITES.length];
 }
+
+/* Trailing average over `days` calendar days (inclusive) for points sorted by `key` (YYYY-MM-DD),
+   in one pass. Returns { t, key, v } per point. */
+function rollingMean(pts, days) {
+  const span = (days || 7) - 1;
+  const dayNum = (k) => Date.parse(`${k}T00:00:00Z`) / 86400000;
+  const nums = pts.map((p) => dayNum(p.key));
+  const out = [];
+  let lo = 0;
+  let sum = 0;
+  for (let i = 0; i < pts.length; i++) {
+    sum += pts[i].v;
+    while (nums[i] - nums[lo] > span) { sum -= pts[lo].v; lo += 1; }
+    out.push({ t: pts[i].t, key: pts[i].key, v: sum / (i - lo + 1) });
+  }
+  return out;
+}

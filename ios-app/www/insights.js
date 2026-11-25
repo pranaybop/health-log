@@ -242,10 +242,7 @@ function renderHeartCard(data) {
     if (pts.length < 3) return null;
     const base = avgBetween(pts, shiftDay(tirzKey, -30), shiftDay(tirzKey, -1));
     const recent = avgBetween(pts, shiftDay(today, -6), today);
-    const smooth = pts.map((p) => {
-      const win = pts.filter((q) => q.key <= p.key && q.key >= shiftDay(p.key, -6));
-      return { t: p.t, v: win.reduce((a, q) => a + q.v, 0) / win.length, key: p.key };
-    });
+    const smooth = rollingMean(pts, 7);
     const ro = readout(recent ? `${fmtNum(recent.avg, 0)} ${unit}` : "—",
       recent ? `7-day average${base ? `. Before tirzepatide: ${fmtNum(base.avg, 0)}` : ""}` : "");
     const delta = recent && base ? recent.avg - base.avg : null;
@@ -458,10 +455,7 @@ function sparkline(pts, t0, t1) {
 function metricChart(def, pts, pairPts) {
   const t1 = new Date();
   const t0 = new Date(t1.getTime() - 120 * 86400000);
-  const smooth = (list) => list.map((p) => {
-    const win = list.filter((q) => q.key <= p.key && q.key >= shiftDay(p.key, -6));
-    return { t: p.t, key: p.key, v: win.reduce((a, q) => a + q.v, 0) / win.length };
-  });
+  const smooth = (list) => rollingMean(list, 7);
   const last = pts[pts.length - 1];
   const pairOn = (key) => (pairPts ? pairPts.find((p) => p.key === key) : null);
   const lastPair = pairOn(last.key);

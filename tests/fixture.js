@@ -248,6 +248,13 @@ function makeFixture() {
     { id: "p2", compound: "retatrutide", display_name: "Retatrutide", typical_dose_mg: null, units: 20, frequency: "weekly", status: "paused", half_life_hours: 144, started_on: "2026-12-06", next_site: null, notes: "Test protocol." },
   ];
 
+  /* ---------- a made-up dose plan: last tirzepatide week, then 12 retatrutide weeks ---------- */
+  const dose_plan = [{ planned_on: "2026-11-29", week: null, compound: "tirzepatide", dose_mg: 3, units: null, vial_draw: "Test vial A", notes: null }];
+  [2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4].forEach((mg, j) => dose_plan.push({
+    planned_on: shift("2026-12-06", 7 * j), week: j + 1, compound: "retatrutide", dose_mg: mg, units: mg * 10,
+    vial_draw: `Test vial ${j < 4 ? "B" : "C"} ${mg} mg (${mg * 10} u)`, notes: j === 0 ? "Test note: mix with 1 mL" : null,
+  }));
+
   /* ---------- weekly summary ---------- */
   const weekly = new Map();
   for (const w of weights) {
@@ -288,6 +295,7 @@ function makeFixture() {
     checkins,
     side_effects,
     protocol,
+    dose_plan,
     vials,
     measurements,
     profile: { start_weight_lb: 248, goal_weight_lb: 215, height_in: 70, notes: null },

@@ -220,6 +220,8 @@ const theme = process.argv[2] === "dark" ? "dark" : "light";
   // Trends card
   await page.tap(".tabnav >> text=Trends");
   await page.waitForTimeout(300);
+  await page.locator('.trend-chip:text-is("Body")').tap();
+  await page.waitForTimeout(300);
   const card = page.locator("section.card", { has: page.locator("h2:text-is('More from Apple Health')") });
   check("Trends shows More from Apple Health", (await card.count()) === 1);
   const hr = card.locator(".hm-row", { hasText: "Heart rate, daily average" });
