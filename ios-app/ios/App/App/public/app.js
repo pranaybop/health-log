@@ -1,5 +1,8 @@
 const API_URL = "https://qnbshmenmurdaogslmrj.supabase.co/functions/v1/log-dashboard";
 const TZ = "America/Chicago";
+// Opens the Log bot in the Grok Bot app. Same value as LogBot.urlString in LogNative.
+const LOG_BOT_URL = "grokbot://app/v1/agent?id=81acb34c-2ba4-4bde-aa1b-98e865272965";
+const LOG_BOT_UNAVAILABLE = "Grok Bot isn’t installed.";
 const HALF_LIFE_DAYS = 5;
 const RETA_START = new Date("2026-12-06T12:00:00-06:00");
 const CHECKIN_PROMPT_HOUR = 18; // the "No check-in yet" prompt waits until 6 PM Central
@@ -45,6 +48,7 @@ const state = {
   editTargets: false,
   targetsBusy: false,
   targetsMsg: null,
+  mealBotNote: null,
   gateLetters: false,
   openForms: { threetap: true },
 };
@@ -992,23 +996,54 @@ function renderMacros(today) {
 }
 
 function renderMeals(meals, past) {
-  return card("Meals",
-    meals.length
-      ? el("ul", { class: "list" },
-          ...meals.map((m) => el("li", { class: "meal" },
-            el("div", { class: "meal-main" },
-              el("span", { class: "meal-item" }, m.item || "—"),
-              el("span", { class: "meal-sub" },
-                [capitalize(m.meal_type || ""), parseTs(m.eaten_at) ? fmtTimeCT(parseTs(m.eaten_at)) : null, m.quantity || null].filter(Boolean).join(", ")),
-            ),
-            el("div", { class: "meal-nums" },
-              el("span", { class: "kcal" }, fmtNum(m.calories, 0), el("small", null, " kcal")),
-              el("span", { class: "pro" }, `${fmtNum(m.protein_g, 0)} g protein`),
-            ),
-          )),
-        )
-      : el("p", { class: "empty" }, past ? "No meals logged this day." : "No meals yet today. Ask Log or Claude to record them."),
+  const body = meals.length
+    ? el("ul", { class: "list" },
+        ...meals.map((m) => el("li", { class: "meal" },
+          el("div", { class: "meal-main" },
+            el("span", { class: "meal-item" }, m.item || "—"),
+            el("span", { class: "meal-sub" },
+              [capitalize(m.meal_type || ""), parseTs(m.eaten_at) ? fmtTimeCT(parseTs(m.eaten_at)) : null, m.quantity || null].filter(Boolean).join(", ")),
+          ),
+          el("div", { class: "meal-nums" },
+            el("span", { class: "kcal" }, fmtNum(m.calories, 0), el("small", null, " kcal")),
+            el("span", { class: "pro" }, `${fmtNum(m.protein_g, 0)} g protein`),
+          ),
+        )),
+      )
+    : el("p", { class: "empty" }, past ? "No meals logged this day." : "No meals yet today.");
+  return card("Meals", body, past ? null : renderLogMeal());
+}
+
+/* A real link to the Log bot. If the page is still here shortly after, Grok Bot didn't open. */
+function renderLogMeal() {
+  return el("div", { class: "log-meal-wrap" },
+    el("a", { class: "log-meal", href: LOG_BOT_URL, onClick: noteIfLogBotStays }, "Log a meal"),
+    state.mealBotNote ? el("p", { class: "caption meal-bot-note", role: "status" }, state.mealBotNote) : null,
   );
+}
+
+function noteIfLogBotStays(event) {
+  const note = event.currentTarget.parentNode && event.currentTarget.parentNode.querySelector(".meal-bot-note");
+  if (note) note.remove();
+  state.mealBotNote = null;
+  // Inside the iPhone app the web view stays visible when another app opens, so don't guess.
+  // The native Meals button uses openURL's result instead. This note is for a normal browser.
+  if (window.LOG_NATIVE) return;
+  const started = Date.now();
+  let left = false;
+  const mark = () => { left = true; };
+  const onVis = () => { if (document.hidden) mark(); };
+  document.addEventListener("visibilitychange", onVis);
+  window.addEventListener("pagehide", mark);
+  window.addEventListener("blur", mark);
+  setTimeout(() => {
+    document.removeEventListener("visibilitychange", onVis);
+    window.removeEventListener("pagehide", mark);
+    window.removeEventListener("blur", mark);
+    if (left || document.hidden || Date.now() - started > 4000) return;
+    state.mealBotNote = LOG_BOT_UNAVAILABLE;
+    render();
+  }, 1500);
 }
 
 /* Mon–Sun strip for the week that holds the day showing. Dots mark days with anything logged. */

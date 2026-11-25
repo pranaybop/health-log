@@ -2,11 +2,13 @@
 // Usage: node ui.test.js [light|dark]. Data comes from fixture.js (made up); writes are recorded,
 // never sent anywhere. Screenshots land in tests/shots.
 const { chromium } = require("playwright");
+const fs = require("fs");
 const path = require("path");
 const { serve, makeFixture, BASE, SHOTS, API, CLOCK, PASSCODE: PASS, CORS: cors } = require("./lib");
 
 const OUT = SHOTS;
 const SCHEME = process.argv[2] === "dark" ? "dark" : "light";
+const LOG_BOT = "grokbot://app/v1/agent?id=81acb34c-2ba4-4bde-aa1b-98e865272965";
 const fixture = makeFixture();
 
 const writes = [];
@@ -24,6 +26,13 @@ function check(name, ok, detail) {
 
 let goalSetLive = false;
 (async () => {
+  const appjs = fs.readFileSync(path.join(__dirname, "../ios-app/www/app.js"), "utf8");
+  const botSwift = fs.readFileSync(path.join(__dirname, "../ios-app/ios/App/LogNative/Sources/LogUI/Shared/LogBot.swift"), "utf8");
+  const mealsSwift = fs.readFileSync(path.join(__dirname, "../ios-app/ios/App/LogNative/Sources/LogUI/Today/TodayHealth.swift"), "utf8");
+  check("Log bot URL is one constant on web and native",
+    appjs.split(LOG_BOT).length === 2 && botSwift.split(LOG_BOT).length === 2
+    && !appjs.includes("Ask Log or Claude") && !mealsSwift.includes("Ask Log or Claude"));
+
   const server = await serve();
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
@@ -127,6 +136,35 @@ let goalSetLive = false;
   await shot("10-today");
   check("hero shows current weight", (await page.textContent(".hero-num")).includes("238.6"), await page.textContent(".hero-num"));
   check("today keeps the switch card and drops the race", (await page.locator("h2:text-is('BMW Dallas Half')").count()) === 0 && (await page.locator(".count-label", { hasText: "Half marathon" }).count()) === 0 && (await page.locator("h2:text-is('Retatrutide switch')").count()) === 1 && (await page.locator(".counts .count").count()) === 2);
+  const mealsCard = page.locator("section.card:has(h2:text-is('Meals'))");
+  check("today meals link to the Log bot",
+    (await mealsCard.locator("a.log-meal").getAttribute("href")) === LOG_BOT
+    && (await mealsCard.locator("a.log-meal").innerText()).trim() === "Log a meal");
+  await mealsCard.screenshot({ path: path.join(OUT, `${SCHEME}-13-meals.png`) });
+  await page.evaluate(() => {
+    document.querySelector("a.log-meal").addEventListener("click", (e) => e.preventDefault(), true);
+  });
+  await page.tap("a.log-meal");
+  await page.clock.fastForward(2000);
+  await page.waitForSelector(".meal-bot-note");
+  check("missing Grok Bot shows a short note", (await page.locator(".meal-bot-note").innerText()).includes("isn’t installed"));
+  await mealsCard.screenshot({ path: path.join(OUT, `${SCHEME}-13-meals-unavailable.png`) });
+  await page.evaluate(() => {
+    state._mealsBackup = state.data.meals.slice();
+    const key = todayKey();
+    state.data.meals = state.data.meals.filter((m) => {
+      const t = parseTs(m.eaten_at);
+      return !(t && dateKeyCT(t) === key);
+    });
+    state.mealBotNote = null;
+    render();
+  });
+  check("empty today offers Log a meal",
+    (await mealsCard.locator(".empty").innerText()).trim() === "No meals yet today."
+    && (await mealsCard.locator("a.log-meal").count()) === 1
+    && (await page.locator("text=Ask Log or Claude").count()) === 0);
+  await mealsCard.screenshot({ path: path.join(OUT, `${SCHEME}-13-meals-empty.png`) });
+  await page.evaluate(() => { state.data.meals = state._mealsBackup; state.mealBotNote = null; render(); });
   check("food card without targets offers set", await page.isVisible("text=Set targets"));
   await page.tap("text=Set targets");
   await page.fill("[name=t_cal]", "500");
@@ -197,7 +235,7 @@ let goalSetLive = false;
   await swipe(100, 320);
   await page.waitForTimeout(250);
   check("swipe right shows yesterday", (await page.textContent("h1")) === "Yesterday" && (await page.textContent(".eyebrow-date")).includes("November 23"));
-  check("past day shows that day's cards", (await page.isVisible("text=No food logged this day.")) && (await page.isVisible("text=No meals logged this day.")) && (await page.locator(".counts").count()) === 0 && (await page.locator(".day-body .hero-num").count()) === 1);
+  check("past day shows that day's cards", (await page.isVisible("text=No food logged this day.")) && (await page.isVisible("text=No meals logged this day.")) && (await page.locator("a.log-meal").count()) === 0 && (await page.locator(".counts").count()) === 0 && (await page.locator(".day-body .hero-num").count()) === 1);
   await shot("15-yesterday");
   await page.tap(".day-body .callout >> text=Check in");
   await page.tap(".day-body .checkin-form >> text=Moved more");

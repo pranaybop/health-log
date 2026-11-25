@@ -156,23 +156,65 @@ struct TodayMacros: View {
     }
 }
 
-/// The day's meals, read only (web renderMeals). Meals are recorded by another tool.
+/// The day's meals (web renderMeals). Today can open the Log bot in Grok Bot to record one.
 struct TodayMeals: View {
     let meals: [Meal]
     let past: Bool
 
+    @Environment(\.openURL) private var openURL
+    @State private var unavailable = false
+
     var body: some View {
         LogCard("Meals") {
-            if meals.isEmpty {
-                EmptyNote(past ? "No meals logged this day." : "No meals yet today. Ask Log or Claude to record them.")
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(meals.enumerated()), id: \.offset) { i, meal in
-                        if i > 0 { Rectangle().fill(LogColor.hairline).frame(height: 1) }
-                        row(meal)
+            VStack(alignment: .leading, spacing: 12) {
+                if meals.isEmpty {
+                    EmptyNote(past ? "No meals logged this day." : "No meals yet today.")
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(meals.enumerated()), id: \.offset) { i, meal in
+                            if i > 0 { Rectangle().fill(LogColor.hairline).frame(height: 1) }
+                            row(meal)
+                        }
+                    }
+                }
+                if !past {
+                    logButton
+                    if unavailable {
+                        Text(LogBot.unavailableMessage)
+                            .font(.footnote)
+                            .foregroundStyle(LogColor.ink2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
+        }
+    }
+
+    /// Opens Log in Grok Bot. openURL calls UIApplication.open and says whether it was accepted,
+    /// so this doesn't use canOpenURL and doesn't need LSApplicationQueriesSchemes.
+    private var logButton: some View {
+        Button(action: openLogBot) {
+            Text("Log a meal")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
+        .tint(LogColor.accent)
+        .accessibilityHint("Opens Log in Grok Bot")
+    }
+
+    private func openLogBot() {
+        unavailable = false
+        guard let url = LogBot.url else {
+            unavailable = true
+            return
+        }
+        openURL(url) { accepted in
+            guard !accepted else { return }
+            Task { @MainActor in unavailable = true }
         }
     }
 
