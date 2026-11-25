@@ -450,7 +450,20 @@ const RANGES = [
   { id: "3m", label: "3M", days: 91 },
   { id: "1y", label: "1Y", days: 365 },
   { id: "all", label: "All", days: null },
+  { id: "glp1", label: "GLP-1", startFrom: "glp1" },
+  { id: "train", label: "Train", startFrom: "train" },
 ];
+
+function rangeStartAt(range, data, end, earliest) {
+  if (range.startFrom === "glp1") return firstGlp1At(data) || TIRZ_START;
+  if (range.startFrom === "train") return trainingBlockAt(data);
+  if (range.days) return new Date(end.getTime() - range.days * 86400000);
+  return earliest;
+}
+
+function visibleRanges(data) {
+  return RANGES.filter((r) => r.startFrom !== "train" || trainingBlockAt(data));
+}
 
 /* Calorie and protein targets: a goals row wins (kind "calories" / "protein"); otherwise this device's setting. */
 const TARGET_KEY = "log.targets";
@@ -759,6 +772,7 @@ function renderFood(data, key) {
     ),
     state.editTargets ? renderTargetsEditor(data, t) : null,
     state.targetsMsg ? el("p", { class: "target-msg " + (state.targetsMsg.ok ? "ok" : "err"), role: "status" }, state.targetsMsg.text) : null,
+    renderProteinLine(data, k),
     el("p", { class: "caption" }, t.calories == null && t.protein == null && !state.editTargets
       ? `${meals}. Set daily targets to track progress toward them.`
       : `${meals}. Macros may be estimates.`),
@@ -838,9 +852,9 @@ function renderCountdowns(data) {
     );
   };
   return el("section", { class: "counts", "aria-label": "Coming up" },
-    next ? tile("Next dose", next, "dose") : tile("Retatrutide", RETA_START, "dose"),
-    next ? tile("Retatrutide", RETA_START, "switch") : null,
-    tile("Half marathon", HALF_MARATHON, "race"),
+    next ? tile("Next dose", next, "dose") : (daysUntil(retaSwitchAt(data)) >= 0 ? tile("Retatrutide", retaSwitchAt(data), "dose") : null),
+    next && daysUntil(RETA_START) >= 0 ? tile("Retatrutide", retaSwitchAt(data), "switch") : null,
+    daysUntil(HALF_MARATHON) >= 0 ? tile("Half marathon", HALF_MARATHON, "race") : null,
   );
 }
 
@@ -1064,9 +1078,12 @@ function renderTodayTab(data) {
     renderFood(data, key),
     renderCheckinNudge(data, key),
     renderFeelNow(data, key),
+    isToday ? renderRaceCard(data) : null,
     isToday ? renderCountdowns(data) : null,
+    isToday ? renderSwitchCard(data) : null,
     isToday ? renderVerdict(data) : null,
     isToday ? renderMedSummary(data) : renderDayMeds(data, key),
+    renderSleepNight(data, key),
     renderSignals(data, key),
     renderMacros(totalsOn(data, key)),
     renderMeals(mealsOn(data, key), !isToday),
@@ -1215,6 +1232,7 @@ function renderVials(data) {
       }),
     ),
     r.soonest ? el("p", { class: "caption" }, `At the planned weekly dose, supply lasts until about ${fmtDateCT(r.soonest.until, true)}.`) : null,
+    renderCompoundRunway(data),
   );
 }
 
@@ -1255,6 +1273,7 @@ function renderMedsTab(data) {
     renderLevelCard(data),
     renderSiteMap(data),
     renderTitration(data),
+    renderSwitchCard(data),
     renderProtocol(data),
     renderVials(data),
     renderDoseHistory(data),
@@ -1271,10 +1290,14 @@ const OVERLAYS = [
   { id: "sleep", label: "Sleep", cls: "s3", title: "Sleep", fmt: (v) => `${fmtNum(v, 1)} h sleep`, field: "sleep_hours", zero: true },
   { id: "rhr", label: "RHR", cls: "s3", title: "Resting heart rate", fmt: (v) => `${fmtNum(v, 0)} bpm resting`, field: "resting_hr" },
   { id: "hrv", label: "HRV", cls: "s4", title: "HRV", fmt: (v) => `${fmtNum(v, 0)} ms HRV`, field: "hrv_ms" },
+  { id: "thoughts", label: "Thoughts", cls: "s2", title: "Food thoughts", fmt: (v) => `${fmtNum(v, 0)} food thought${v === 1 ? "" : "s"}`, from: "thoughts" },
+  { id: "noise", label: "Noise", cls: "s3", title: "Food noise", fmt: (v) => `${fmtNum(v, 1)} food noise`, from: "noise" },
 ];
 
 function overlayDaily(data, id) {
   const o = OVERLAYS.find((x) => x.id === id);
+  if (id === "thoughts") return thoughtsByDay(data);
+  if (id === "noise") return noiseByDay(data);
   const rows = id === "calories"
     ? (data.daily_totals || []).map((r) => [r.date, num(r.calories)])
     : (data.daily_health || []).map((r) => [r.day, num(r[o.field])]);
@@ -1320,10 +1343,11 @@ function renderWeightCard(data) {
   const parsed = parseWeights(data.weights || []);
   if (!parsed.length) return card("Weight", el("p", { class: "empty" }, "No weigh-ins yet. Log one on the Log tab."));
   const sm = smoothWeights(parsed);
-  const range = RANGES.find((r) => r.id === state.weightRange) || RANGES[1];
+  const ranges = visibleRanges(data);
+  const range = ranges.find((r) => r.id === state.weightRange) || ranges.find((r) => r.id === "3m") || ranges[0];
   const last = sm[sm.length - 1];
   const end = new Date(Math.max(Date.now(), last.at.getTime()));
-  const startT = range.days ? new Date(end.getTime() - range.days * 86400000) : sm[0].at;
+  const startT = rangeStartAt(range, data, end, sm[0].at) || new Date(end.getTime() - 91 * 86400000);
   const inRange = sm.filter((w) => w.at >= startT);
   const j = journeyStats(data);
   const goal = j ? j.goalLb : null;
@@ -1344,10 +1368,11 @@ function renderWeightCard(data) {
     }
   }
 
-  const seg = el("div", { class: "seg", role: "group", "aria-label": "Range" },
-    ...RANGES.map((r) => el("button", {
+  const seg = el("div", { class: "seg wrap", role: "group", "aria-label": "Range" },
+    ...ranges.map((r) => el("button", {
       type: "button",
-      "aria-pressed": state.weightRange === r.id ? "true" : "false",
+      "aria-pressed": range.id === r.id ? "true" : "false",
+      "aria-label": r.id === "glp1" ? "Since GLP-1" : r.id === "train" ? "Training block" : r.label,
       onClick: () => { state.weightRange = r.id; render(); },
     }, r.label)),
   );
@@ -1361,9 +1386,12 @@ function renderWeightCard(data) {
   const withYear = range.id === "all" || range.id === "1y";
   const ov = OVERLAYS.find((o) => o.id === state.overlay && o.id !== "none") || null;
   const ovDaily = ov ? overlayDaily(data, ov.id) : null;
-  const ovWeekly = range.id === "1y" || range.id === "all";
+  const spanDays = (end - startT) / 86400000;
+  const ovWeekly = range.id === "1y" || range.id === "all" || spanDays >= 180;
   const ovPts = ov ? overlayPoints(ovDaily, ovWeekly).filter((p) => p.t >= startT && p.t <= end) : null;
-  const ovFmtAxis = ov && ov.id === "sleep" ? (v) => `${fmtNum(v, 0)}h` : (v) => (v >= 1000 ? `${fmtNum(v / 1000, v % 1000 ? 1 : 0)}k` : fmtNum(v, 0));
+  const ovFmtAxis = ov && (ov.id === "sleep" || ov.id === "noise" || ov.id === "thoughts")
+    ? (v) => ov.id === "sleep" ? `${fmtNum(v, 0)}h` : fmtNum(v, ov.id === "noise" ? 1 : 0)
+    : (v) => (v >= 1000 ? `${fmtNum(v / 1000, v % 1000 ? 1 : 0)}k` : fmtNum(v, 0));
 
   const chart = inRange.length >= 2
     ? timeChart({
@@ -1382,7 +1410,10 @@ function renderWeightCard(data) {
         fmtRight: ov ? ovFmtAxis : undefined,
         rightMin: ov && ov.zero ? 0 : undefined,
         refs: goal != null ? [{ v: goal, label: `Goal ${fmtNum(goal, 0)}`, inDomain: range.id !== "all" ? Math.abs(goal - last.trend) < 30 : true }] : [],
-        marks: TIRZ_START >= startT ? [{ t: TIRZ_START, label: "Tirzepatide" }] : [],
+        marks: [
+          (firstGlp1At(data) || TIRZ_START) >= startT ? { t: firstGlp1At(data) || TIRZ_START, label: "Tirzepatide" } : null,
+          retaSwitchAt(data) >= startT && retaSwitchAt(data) <= t1 ? { t: retaSwitchAt(data), label: "Reta" } : null,
+        ].filter(Boolean),
         snap: "trend",
         onScrub: (r) => {
           if (!r) return ro.reset();
@@ -1735,11 +1766,13 @@ function renderWorkouts(data) {
 
 function renderExport(data) {
   return card("Prescriber export",
-    el("p", { class: "lead" }, "Files stay on this phone. The print view has the journey summary, doses and meals. Save it as a PDF from the print sheet."),
+    el("p", { class: "lead" }, "Files stay on this phone. Save a print view as a PDF from the print sheet."),
     el("div", { class: "form-actions" },
       el("button", { type: "button", class: "primary", onClick: () => prescriberCSV(data) }, "Download CSV"),
       el("button", { type: "button", onClick: () => prescriberPrint(data) }, "Print or save PDF"),
+      el("button", { type: "button", onClick: () => coachPackPrint(data) }, "4-week coach pack"),
     ),
+    el("p", { class: "caption" }, "The 4-week pack is a one-pager of recent weight, doses, mileage, protein hit rate, food thoughts and side effects, meant for a doctor or running coach."),
     el("p", { class: "caption" }, "Not possible on the web: Apple Health sync, home-screen widgets, an Apple Watch app, or body-fat estimates from photos."),
   );
 }
@@ -1758,6 +1791,8 @@ function renderTrendsTab(data) {
     renderCycles(data),
     renderFeel(data),
     renderWearOff(data),
+    renderLongRunTiming(data),
+    renderRetaVsTirz(data),
     renderSideEffects(data),
     section("Body"),
     renderHeartCard(data),
@@ -2036,11 +2071,14 @@ window.addEventListener("touchcancel", () => {
 
 document.documentElement.classList.toggle("ptr-on", ptrEnabled());
 
-window.addEventListener("hashchange", boot);
-boot();
-// Background refresh every minute, but not while you're filling in a form on the Log tab.
-setInterval(() => {
-  if (!hasCredential() || state.loading || state.formBusy) return;
-  if (state.tab === "log" || state.checkinOpen || state.editTargets) return;
-  load(true, true);
-}, 60000);
+const isSelfTest = /(?:^|\/)test-features\.html$/.test(location.pathname);
+if (!isSelfTest) {
+  window.addEventListener("hashchange", boot);
+  boot();
+  // Background refresh every minute, but not while you're filling in a form on the Log tab.
+  setInterval(() => {
+    if (!hasCredential() || state.loading || state.formBusy) return;
+    if (state.tab === "log" || state.checkinOpen || state.editTargets) return;
+    load(true, true);
+  }, 60000);
+}

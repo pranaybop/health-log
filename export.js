@@ -139,3 +139,85 @@ function prescriberPrint(data) {
   w.focus();
   w.print();
 }
+
+
+function coachPackWindow(fromKey, toKey, data) {
+  const inWin = (k) => k && k >= fromKey && k <= toKey;
+  const j = journeyStats(data);
+  const weights = parseWeights(data.weights || []).filter((w) => inWin(dateKeyCT(w.at)));
+  const firstW = weights[0] ? weights[0].lb : null;
+  const lastW = weights.length ? weights[weights.length - 1].lb : null;
+  const t = getTargets(data);
+  const foodDays = (data.daily_totals || []).filter((r) => inWin(r.date) && num(r.protein_g) != null);
+  const hits = t.protein != null ? foodDays.filter((r) => num(r.protein_g) >= t.protein).length : null;
+  const avgPro = foodDays.length ? foodDays.reduce((a, r) => a + num(r.protein_g), 0) / foodDays.length : null;
+  const monday = (() => {
+    const tk = toKey;
+    const d = keyToNoon(tk);
+    return shiftDay(tk, -((d.getUTCDay() + 6) % 7));
+  })();
+  const weeks = (data.run_weeks || []).filter((w) => w.week && w.week >= shiftDay(fromKey, -6) && w.week <= monday);
+  const miles = weeks.reduce((a, w) => a + (num(w.miles) || 0), 0);
+  const longest = weeks.reduce((a, w) => Math.max(a, num(w.longest_mi) || 0), 0);
+  const thoughts = (data.food_thoughts || []).filter((x) => {
+    const at = parseTs(x.thought_at);
+    return at && inWin(dateKeyCT(at));
+  });
+  const strong = thoughts.filter((x) => num(x.strength) >= 2).length;
+  const effects = (data.side_effects || []).filter((s) => inWin(s.recorded_on));
+  const doses = (data.doses || []).filter((d) => parseTs(d.taken_at) && inWin(dateKeyCT(parseTs(d.taken_at))));
+  const fmt = (v, d) => (v == null ? "—" : fmtNum(v, d));
+  const row = (k, val) => `<tr><th>${k}</th><td>${val}</td></tr>`;
+  const doseRows = doses.map((d) => {
+    const at = parseTs(d.taken_at);
+    return `<tr><td>${at ? fmtDateCT(at, true) : ""}</td><td>${d.compound || ""}</td><td>${d.skipped ? "skipped" : (d.dose_mg ?? d.units ?? "")}</td><td>${d.site || ""}</td></tr>`;
+  }).join("");
+  const effectRows = effects.map((s) => `<tr><td>${fmtShortDate(s.recorded_on)}</td><td>${s.effect || ""}</td><td>${s.severity ?? ""}</td><td>${s.notes || ""}</td></tr>`).join("");
+  const weekRows = weeks.map((w) => `<tr><td>${fmtShortDate(w.week)}</td><td>${fmt(num(w.miles), 1)}</td><td>${fmt(num(w.longest_mi), 1)}</td><td>${w.runs ?? ""}</td></tr>`).join("");
+  return `<!DOCTYPE html><html><head><title>Log 4-week coach pack</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #111; padding: 24px; max-width: 740px; }
+      h1 { margin: 0 0 4px; font-size: 24px; }
+      h2 { margin: 22px 0 6px; font-size: 16px; }
+      .muted { color: #555; margin: 0 0 16px; }
+      table { border-collapse: collapse; width: 100%; margin: 8px 0 0; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; vertical-align: top; font-size: 13px; }
+      table.kv th { width: 40%; color: #555; font-weight: 600; }
+      @media print { body { padding: 0; } }
+    </style></head><body>
+    <h1>4-week coach pack</h1>
+    <p class="muted">${fmtShortDate(fromKey)} to ${fmtShortDate(toKey)} · generated ${fmtDateTimeCT(new Date())} · America/Chicago</p>
+    <h2>Summary</h2>
+    <table class="kv">
+      ${row("Current weight", j ? `${fmtNum(j.current.lb, 1)} lb` : "—")}
+      ${row("Weight in this window", firstW != null && lastW != null ? `${fmtNum(firstW, 1)} → ${fmtNum(lastW, 1)} lb (${signed(lastW - firstW)} lb, ${weights.length} weigh-ins)` : "No weigh-ins in this window")}
+      ${row("Protein hit rate", hits != null ? `${hits} of ${foodDays.length} logged days at ${fmtNum(t.protein, 0)} g or more` : (foodDays.length ? `Average ${fmt(avgPro, 0)} g; no protein target set` : "No food logged"))}
+      ${row("Running miles", weeks.length ? `${fmt(miles, 1)} mi across ${weeks.length} week${weeks.length === 1 ? "" : "s"}; longest run ${fmt(longest, 1)} mi` : "No run weeks in this window")}
+      ${row("Food thoughts", thoughts.length ? `${thoughts.length} logged, ${strong} strong pull or craving` : "None logged")}
+      ${row("Side effects", effects.length ? `${effects.length} logged` : "None logged")}
+      ${row("Doses", doses.length ? `${doses.length} in this window` : "None logged")}
+    </table>
+    <h2>Doses</h2>
+    <table><tr><th>Date</th><th>Compound</th><th>Dose</th><th>Site</th></tr>${doseRows || "<tr><td colspan=4>None in this window</td></tr>"}</table>
+    <h2>Weekly running</h2>
+    <table><tr><th>Week of</th><th>Miles</th><th>Longest</th><th>Runs</th></tr>${weekRows || "<tr><td colspan=4>None in this window</td></tr>"}</table>
+    <h2>Side effects</h2>
+    <table><tr><th>Date</th><th>Effect</th><th>Severity</th><th>Notes</th></tr>${effectRows || "<tr><td colspan=4>None in this window</td></tr>"}</table>
+    <p class="muted">Meal macros may be estimates. Drug level is not included. This pack covers the last 28 days only.</p>
+    </body></html>`;
+}
+
+function coachPackPrint(data) {
+  const toKey = todayKey();
+  const fromKey = shiftDay(toKey, -27);
+  const w = window.open("", "_blank");
+  if (!w) {
+    state.formMessage = { ok: false, text: "Allow pop-ups to print the 4-week pack, or use CSV instead." };
+    render();
+    return;
+  }
+  w.document.write(coachPackWindow(fromKey, toKey, data));
+  w.document.close();
+  w.focus();
+  w.print();
+}
