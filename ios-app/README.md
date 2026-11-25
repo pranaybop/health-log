@@ -18,15 +18,7 @@ Nothing in this folder holds a passcode, token or key. Keep it that way.
 
 ## Build and install
 
-1. On the Mac, get the repo and install the shell's packages:
-
-   ```sh
-   git clone https://github.com/pranaybop/health-log.git   # or: git pull
-   cd health-log/ios-app
-   npm install
-   npx cap sync ios
-   npx cap open ios
-   ```
+1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`) and open `ios-app/ios/App/App.xcodeproj` in Xcode. No npm step is needed: Capacitor comes in through Swift Package Manager, and the generated config and web files are committed. Run `npm install && npx cap sync ios` only after changing `capacitor.config.json` or `www/`.
 
 2. In Xcode, select the **App** target, open **Signing & Capabilities**, and pick your Apple ID under **Team** (add it in Xcode Settings > Accounts if it isn't listed). If Xcode says the bundle identifier is taken, change `com.pranaybop.log` to something unique, such as `com.yourname.log`.
 3. Plug in the iPhone, choose it as the run destination at the top of the window, and press Run (⌘R).
