@@ -1445,14 +1445,17 @@ extension Analytics.Trends {
 
         let level = LevelModel(d)
         let share = level.share(at: now)
-        let next = Analytics.nextPlanned(d, now: now)
+        let next = Analytics.nextPlanned(d)
         let levelPts: [Point] = (0...13).reversed().compactMap { i in
             let at = now.addingTimeInterval(-Double(i) * 86400)
             return level.share(at: at).map { Point(at: at, value: $0) }
         }
         let lFrom = now.addingTimeInterval(-14 * 86400)
         var medSub = "Estimated level now"
-        if let next { medSub = "Next: \(planDoseText(next)), \(LogTime.weekdayDate(LogTime.noon(next.plannedOn)))" }
+        if let next {
+            let word = Analytics.planIsOverdue(next, now: now) ? "Overdue" : "Next"
+            medSub = "\(word): \(planDoseText(next)), \(LogTime.weekdayDate(LogTime.noon(next.plannedOn)))"
+        }
         let medValue = share.map { "\(num($0 * 100))% of peak" } ?? "No doses yet"
         tiles.append(SummaryTile(section: "meds", label: "Medication", value: medValue, sub: medSub,
                                  spark: levelPts.count > 1 ? levelPts : [], sparkFrom: lFrom, sparkTo: now))

@@ -47,7 +47,7 @@ public struct TrendsScreen: View {
 
     @ViewBuilder
     func section(_ d: Dashboard) -> some View {
-        let now = Date()
+        let now = TodayDebug.now ?? Date()
         let stamp = "\(store.dataTime?.timeIntervalSince1970 ?? 0)|\(LogTime.today(now))"
         let t = TrendsCalc.targets(d)
         let targets = TrTargets(calories: t.calories, protein: t.protein)

@@ -68,14 +68,31 @@ public enum Analytics {
         return remaining(at: at, doses: same, protocols: dashboard.protocols) / peak
     }
 
-    /// The next planned dose (log.dose_plan) on or after today that hasn't been logged yet.
-    public static func nextPlanned(_ d: Dashboard, now: Date = Date()) -> DosePlanRow? {
-        let today = LogTime.today(now)
-        let logged = Set(d.doses.filter(\.counts).compactMap { $0.takenDate.map(LogTime.dayKey) })
-        return d.dosePlan
-            .filter { $0.doseMg != nil }
+    /// Planned doses no logged dose has covered yet, earliest first. A dose (taken or skipped)
+    /// covers the plan row for the week it falls in: on or after that planned day and before the
+    /// next one. A missed week stays here until something is logged in it.
+    public static func openPlan(_ d: Dashboard) -> [DosePlanRow] {
+        let rows = d.dosePlan
+            .filter { !$0.plannedOn.isEmpty && $0.doseMg != nil }
             .sorted { $0.plannedOn < $1.plannedOn }
-            .first { $0.plannedOn >= today && !logged.contains($0.plannedOn) }
+        let days = d.doses.compactMap { dose -> String? in
+            guard let t = dose.takenDate else { return nil }
+            return LogTime.dayKey(t)
+        }
+        var open: [DosePlanRow] = []
+        for (i, row) in rows.enumerated() {
+            let end = i + 1 < rows.count ? rows[i + 1].plannedOn : "9999-12-31"
+            if !days.contains(where: { $0 >= row.plannedOn && $0 < end }) { open.append(row) }
+        }
+        return open
+    }
+
+    /// The earliest planned dose still open, including one whose day has already passed.
+    public static func nextPlanned(_ d: Dashboard) -> DosePlanRow? { openPlan(d).first }
+
+    /// True when that planned day is already over and the dose is still open.
+    public static func planIsOverdue(_ row: DosePlanRow, now: Date = Date()) -> Bool {
+        row.plannedOn < LogTime.today(now)
     }
 
     /// The active protocol's next site, else the one after the last used site.

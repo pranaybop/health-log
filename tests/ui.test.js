@@ -71,6 +71,18 @@ let goalSetLive = false;
       fixture.goals.push({ id: "g" + fixture.goals.length, kind: body.payload.kind, target: body.payload.target, unit: body.payload.kind === "calories" ? "kcal" : "g", due_on: null, notes: null, status: "active" });
     }
     if (body.action === "weigh_in") fixture.weights.push({ id: "new", measured_at: "2026-11-25T05:19:00+00:00", weight_lb: Number(body.payload.weight_lb), notes: body.payload.notes || null });
+    if (body.action === "dose_log" && body.payload.skipped) {
+      fixture.doses.push({
+        id: "skip" + writes.length,
+        taken_at: body.payload.taken_at,
+        compound: body.payload.compound,
+        dose_mg: body.payload.dose_mg ?? null,
+        units: body.payload.units ?? null,
+        site: null,
+        skipped: true,
+        notes: body.payload.notes || null,
+      });
+    }
     return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: true }) });
   });
 
@@ -251,10 +263,52 @@ let goalSetLive = false;
   await page.waitForTimeout(100);
   check("drug level scrub updates readout", await page.$eval(".readout", (n) => n.classList.contains("live")));
   await lvl.screenshot({ path: path.join(OUT, `${SCHEME}-21-level-scrub.png`) });
-  const dp = page.locator("section.card:has(h2:text-is('Dose plan'))");
+  const dp = page.locator("section.card:has(h2:has-text('Dose plan'))");
   const dpText = await dp.innerText();
   check("dose plan shows the next planned dose and the steps", /Next: Tirzepatide 3(\.0)? mg\./.test(dpText) && /When\s*Sun, Nov 29/.test(dpText) && /Retatrutide used\s*0(\.0)? of 36 mg planned/.test(dpText) && (await dp.locator("tbody tr").count()) === 4, dpText.replace(/\n/g, " | "));
+  check("a future planned dose is not marked overdue", (await dp.locator("text=Skip this dose").count()) === 0 && (await dp.locator(".badge").count()) === 0);
   await dp.screenshot({ path: path.join(OUT, `${SCHEME}-22-dose-plan.png`) });
+
+  // The day after a planned shot that was never logged: it stays, marked overdue, until skipped.
+  await page.clock.setFixedTime(new Date("2026-11-30T09:00:00-06:00"));
+  await page.evaluate(() => render());
+  const lateLead = await dp.locator(".lead").innerText();
+  const lateText = await dp.innerText();
+  check("a missed planned dose stays and is marked overdue", /Overdue: Tirzepatide 3(\.0)? mg\./.test(lateLead) && !/Retatrutide/.test(lateLead) && /Was due\s*Sun, Nov 29, 1 day ago/.test(lateText) && (await dp.locator(".badge.watch").innerText()) === "Overdue", lateText.replace(/\n/g, " | "));
+  await dp.screenshot({ path: path.join(OUT, `${SCHEME}-23-dose-overdue.png`) });
+  await page.tap(".tabnav >> text=Today");
+  const medLate = page.locator("section.card:has(h2:text-is('Medication'))").first();
+  const medLateText = await medLate.innerText();
+  check("Today names the missed dose overdue", /Next dose\s*Overdue: Tirzepatide 3(\.0)? mg, Sun, Nov 29 \(1 day ago\)/.test(medLateText), medLateText.replace(/\n/g, " | "));
+  await medLate.screenshot({ path: path.join(OUT, `${SCHEME}-23-today-overdue.png`) });
+  await page.tap(".tabnav >> text=Meds");
+  await dp.locator("text=Skip this dose").waitFor();
+  const skipBtn = dp.locator("button", { hasText: "Skip this dose" });
+  await skipBtn.scrollIntoViewIfNeeded();
+  const beforeSkip = writes.length;
+  const beforeDash = dashStarted;
+  await skipBtn.tap();
+  const skipBy = Date.now() + 15000;
+  while (writes.length === beforeSkip || dashFinished < beforeDash + 1 || dashStarted !== dashFinished) {
+    if (Date.now() > skipBy) throw new Error(`skip did not finish (writes ${writes.length - beforeSkip}, dash ${dashStarted}/${dashFinished})`);
+    await page.waitForTimeout(20);
+  }
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const skip = writes[writes.length - 1];
+  check("skip writes a skipped dose on the planned day", skip.action === "dose_log" && skip.payload.skipped === true && skip.payload.compound === "tirzepatide" && String(skip.payload.dose_mg) === "3" && String(skip.payload.taken_at).startsWith("2026-11-29"), JSON.stringify(skip));
+  const afterSkip = await dp.locator(".lead").innerText();
+  check("skipping the missed dose reveals the next week", /Next: Retatrutide 2(\.0)? mg/.test(afterSkip) && /Sun, Dec 6/.test(await dp.innerText()) && (await dp.locator(".badge.watch").count()) === 0, afterSkip);
+  fixture.doses = fixture.doses.filter((d) => !(d.id && String(d.id).startsWith("skip")));
+  await page.clock.setFixedTime(CLOCK);
+  const beforeReload = dashStarted;
+  await page.evaluate(() => load(true));
+  const reloadBy = Date.now() + 15000;
+  while (dashFinished < beforeReload + 1 || dashStarted !== dashFinished) {
+    if (Date.now() > reloadBy) throw new Error("dashboard reload did not finish after restoring the clock");
+    await page.waitForTimeout(20);
+  }
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  check("dose plan is back to the upcoming Sunday", /Next: Tirzepatide 3(\.0)? mg\./.test(await dp.locator(".lead").innerText()));
 
   // Trends
   await page.tap(".tabnav >> text=Trends");

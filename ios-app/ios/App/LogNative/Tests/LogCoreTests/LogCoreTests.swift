@@ -49,13 +49,69 @@ final class LogCoreTests: XCTestCase {
 
     func testPlanTotalsTargets() {
         let d = Self.dashboard
-        let next = Analytics.nextPlanned(d, now: clock)
+        let next = Analytics.nextPlanned(d)
         XCTAssertEqual(next?.plannedOn, "2026-11-29")
         XCTAssertEqual(next?.doseMg, 3)
+        XCTAssertFalse(Analytics.planIsOverdue(next!, now: clock))
         let t = Analytics.totals(on: "2026-11-24", d)
         XCTAssertEqual(t?.calories, 1615)
         XCTAssertEqual(t?.proteinG, 62)
         XCTAssertNil(Analytics.targets(d).calories)
+    }
+
+    /// A missed Sunday stays the next dose until a taken or skipped dose lands in that week.
+    func testMissedPlanStaysUntilLoggedOrSkipped() {
+        let d = Self.dashboard
+        let monday = LogTime.parse("2026-11-30T09:00:00-06:00")!
+        let missed = Analytics.nextPlanned(d)
+        XCTAssertEqual(missed?.plannedOn, "2026-11-29")
+        XCTAssertEqual(Analytics.openPlan(d).first?.plannedOn, "2026-11-29")
+        XCTAssertTrue(Analytics.planIsOverdue(missed!, now: monday))
+
+        var loggedLate = d
+        var late = loggedLate.doses[0]
+        late.takenAt = "2026-11-30T18:00:00Z"
+        late.skipped = false
+        loggedLate.doses.append(late)
+        XCTAssertEqual(Analytics.nextPlanned(loggedLate)?.plannedOn, "2026-12-06")
+        XCTAssertFalse(Analytics.planIsOverdue(Analytics.nextPlanned(loggedLate)!, now: monday))
+
+        var skippedWeek = d
+        var skip = skippedWeek.doses[0]
+        skip.takenAt = "2026-11-30T16:00:00Z"
+        skip.skipped = true
+        skippedWeek.doses.append(skip)
+        XCTAssertEqual(Analytics.nextPlanned(skippedWeek)?.plannedOn, "2026-12-06")
+
+        var onPlannedDay = d
+        var exact = onPlannedDay.doses[0]
+        exact.takenAt = "2026-11-29T18:00:00Z"
+        exact.skipped = true
+        exact.doseMg = nil
+        onPlannedDay.doses.append(exact)
+        XCTAssertEqual(Analytics.nextPlanned(onPlannedDay)?.plannedOn, "2026-12-06")
+
+        // Logging the following Sunday does not erase the week that was missed.
+        var onlyNext = d
+        var nextWeek = onlyNext.doses[0]
+        nextWeek.takenAt = "2026-12-06T18:00:00Z"
+        nextWeek.skipped = false
+        onlyNext.doses.append(nextWeek)
+        XCTAssertEqual(Analytics.nextPlanned(onlyNext)?.plannedOn, "2026-11-29")
+        let afterNext = LogTime.parse("2026-12-07T12:00:00-06:00")!
+        XCTAssertTrue(Analytics.planIsOverdue(Analytics.nextPlanned(onlyNext)!, now: afterNext))
+
+        let bothOpen = d
+        let dec8 = LogTime.parse("2026-12-08T09:00:00-06:00")!
+        XCTAssertEqual(Analytics.nextPlanned(bothOpen)?.plannedOn, "2026-11-29")
+        XCTAssertTrue(Analytics.planIsOverdue(Analytics.nextPlanned(bothOpen)!, now: dec8))
+        var cleared = bothOpen
+        var firstSkip = cleared.doses[0]
+        firstSkip.takenAt = "2026-11-29T18:00:00Z"
+        firstSkip.skipped = true
+        cleared.doses.append(firstSkip)
+        XCTAssertEqual(Analytics.nextPlanned(cleared)?.plannedOn, "2026-12-06")
+        XCTAssertTrue(Analytics.planIsOverdue(Analytics.nextPlanned(cleared)!, now: dec8))
     }
 
     func testRollingMean() {
