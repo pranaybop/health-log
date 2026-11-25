@@ -1,0 +1,100 @@
+import SwiftUI
+import LogCore
+
+/// Dose plan (web: renderDosePlan in signals.js): the next planned dose with when, the vial to draw
+/// from, the next step-up and retatrutide used so far, then the plan's steps. Nothing without rows.
+struct MLDosePlanCard: View {
+    let data: Dashboard
+
+    static func shows(_ d: Dashboard) -> Bool { !Analytics.planRows(d).isEmpty }
+
+    static func doseText(_ r: DosePlanRow) -> String {
+        let units = r.units.map { " (\(Fmt.num($0, 0)) units)" } ?? ""
+        return "\(MLFmt.cap(r.compound)) \(Fmt.num(r.doseMg, 1)) mg\(units)"
+    }
+
+    var body: some View {
+        let rows = Analytics.planRows(data)
+        let next = Analytics.nextPlanned(data)
+        let steps = Analytics.planSteps(rows)
+        let reta = rows.filter { $0.compound == "retatrutide" }
+        let total = reta.reduce(0.0) { $0 + ($1.doseMg ?? 0) }
+        let today = LogTime.today()
+        let cutoff = next?.plannedOn ?? "9999"
+        let used = reta.filter { $0.plannedOn < cutoff }.reduce(0.0) { $0 + ($1.doseMg ?? 0) }
+        let stepUp: DosePlanRow? = next.flatMap { n in
+            rows.first { $0.plannedOn > n.plannedOn && $0.compound == n.compound && ($0.doseMg ?? 0) > (n.doseMg ?? 0) }
+        }
+        let current: Int? = next.flatMap { n in steps.firstIndex { n.plannedOn >= $0.from && n.plannedOn <= $0.to } }
+        LogCard("Dose plan") {
+            if let next {
+                let week = next.week.map { ", week \(Fmt.num($0, 0)) of \(reta.count)" } ?? ""
+                Text("Next: \(Self.doseText(next))\(week).")
+                    .font(.headline).foregroundStyle(LogColor.ink).fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 0) {
+                    PropRow("When", when(next.plannedOn))
+                    if let draw = next.vialDraw, !draw.isEmpty { MLHairline(); PropRow("Draw from", draw) }
+                    if let note = next.notes, !note.isEmpty { MLHairline(); PropRow("Note", note) }
+                    if let s = stepUp {
+                        MLHairline()
+                        PropRow("Next step-up", "\(Fmt.num(s.doseMg, 1)) mg\(s.units.map { " (\(Fmt.num($0, 0)) units)" } ?? "") on \(MLFmt.day(LogTime.noon(s.plannedOn)))")
+                    }
+                    if !reta.isEmpty { MLHairline(); PropRow("Retatrutide used", "\(Fmt.num(used, 1)) of \(Fmt.num(total, 0)) mg planned") }
+                }
+            } else {
+                Text("Every planned dose is done.").font(.headline).foregroundStyle(LogColor.ink)
+            }
+            stepsTable(steps, current: current, today: today)
+            Caption("From your titration sheet. The plan is a guide; what you actually take is what you log. 1 mg = 10 units at 10 mg/mL.")
+        }
+    }
+
+    private func when(_ key: String) -> String {
+        let d = LogTime.noon(key)
+        return "\(MLFmt.day(d)), \(MLFmt.daysWord(MLFmt.days(until: d)))"
+    }
+
+    private func stepsTable(_ steps: [PlanStep], current: Int?, today: String) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Text("Dose").frame(maxWidth: .infinity, alignment: .leading)
+                Text("Sundays").frame(maxWidth: .infinity, alignment: .leading)
+                Text("Weeks").frame(minWidth: 48, alignment: .trailing)
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(LogColor.ink2)
+            .padding(.bottom, 6)
+            ForEach(Array(steps.enumerated()), id: \.offset) { i, s in
+                stepRow(s, on: i == current, done: i != current && s.to < today)
+            }
+        }
+    }
+
+    private func stepRow(_ s: PlanStep, on: Bool, done: Bool) -> some View {
+        VStack(spacing: 0) {
+            MLHairline()
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    if on { RoundedRectangle(cornerRadius: 1.5).fill(LogColor.accent).frame(width: 3, height: 16) }
+                    Text(stepDose(s))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(s.from == s.to ? MLFmt.shortKey(s.from) : "\(MLFmt.shortKey(s.from)) – \(MLFmt.shortKey(s.to))")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(s.weeks)").font(.logNumber(15, weight: on ? .bold : .regular))
+                    .frame(minWidth: 48, alignment: .trailing)
+            }
+            .font(.subheadline.weight(on ? .semibold : .regular))
+            .foregroundStyle(done ? LogColor.ink2 : LogColor.ink)
+            .padding(.vertical, 8)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    private func stepDose(_ s: PlanStep) -> String {
+        let prefix = s.compound == "tirzepatide" ? "Tirz " : ""
+        let units = s.units.map { ", \(Fmt.num($0, 0)) u" } ?? ""
+        return "\(prefix)\(Fmt.num(s.doseMg, 1)) mg\(units)"
+    }
+}

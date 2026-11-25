@@ -1,0 +1,20 @@
+# Meds and Log tabs (native/meds-log). name tab light|dark [launch arguments]
+meds-level-light meds light
+meds-sites meds light -scrollTo sites
+meds-sites-dark meds dark -scrollTo sites
+meds-plan meds light -scrollTo plan
+meds-plan-dark meds dark -scrollTo plan
+meds-titration meds light -scrollTo titration
+meds-switch meds light -scrollTo switch
+meds-switch-dark meds dark -scrollTo switch
+meds-protocol meds light -scrollTo protocol
+meds-vials meds light -scrollTo vials
+meds-history meds light -scrollTo history
+log-dark log dark
+log-weigh log light -scrollTo weigh
+log-dose log light -scrollTo dose
+log-dose-dark log dark -scrollTo dose
+log-side log light -scrollTo side
+log-measure log light -scrollTo measure
+log-vial log light -scrollTo vial
+log-recon log light -scrollTo recon
