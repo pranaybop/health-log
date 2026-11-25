@@ -1,14 +1,13 @@
 import SwiftUI
 import LogCore
 
-// Training section: running (renderRunning), steps (renderStepsCard), workouts (renderWorkouts).
+// Training section: steps (renderStepsCard) and workouts (renderWorkouts).
 
 struct TrTrainingSectionView: View {
     var m: TrTrainingModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
-            TrRunningCard(r: m.running).id("running")
             if let s = m.steps {
                 LogCard("Steps") {
                     TrColumnChart(columns: s.days, color: LogColor.s4, height: 150,
@@ -21,23 +20,6 @@ struct TrTrainingSectionView: View {
                 .id("steps")
             }
             if !m.workouts.isEmpty { TrWorkoutsCard(workouts: m.workouts, total: m.workoutCount).id("workouts") }
-        }
-    }
-}
-
-struct TrRunningCard: View {
-    var r: TrendsCalc.Running
-
-    var body: some View {
-        LogCard("Running") {
-            if r.raceDays > 0 { TrLead("Half marathon in \(r.raceDays) day\(TrendsCalc.s(r.raceDays)) (13.1 mi).") }
-            TrColumnChart(columns: r.weeks, color: LogColor.s1, height: 140,
-                          main: "\(TrendsCalc.num(r.thisWeek, 1)) mi this week",
-                          sub: "Longest run in the last 4 weeks: \(TrendsCalc.num(r.longest4, 1)) mi",
-                          scrub: { c in ("\(TrendsCalc.num(c.value, 1)) mi", r.details[c.key] ?? "Week of \(TrendsCalc.short(c.key))") },
-                          aria: "Running miles a week, last 12 weeks")
-            TrTable(headers: ["Week of", "Miles", "Longest", "Sleep", "Energy", "kcal"], rows: r.rows, compact: true)
-            Caption("Runs from Apple Health. Sleep is the nightly average, energy comes from check-ins, kcal is the average on days with food logged.")
         }
     }
 }

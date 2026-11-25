@@ -66,15 +66,6 @@ public struct SignalCheck: Hashable, Sendable {
     public var off: Bool
 }
 
-/// Running numbers for the half marathon card (web renderRaceCard).
-public struct RaceStats: Hashable, Sendable {
-    public var days: Int
-    public var thisWeek: RunWeek?
-    public var recentAverage: Double?
-    public var completeWeeks: Int
-    public var longest: Double
-}
-
 public struct ProteinStreak: Hashable, Sendable {
     public var target: Double
     public var streak: Int
@@ -259,24 +250,9 @@ extension Analytics {
         return out
     }
 
-    // MARK: Race and protein
+    // MARK: Protein
 
-    /// Days to the half marathon and recent weekly mileage (complete Monday weeks before this one).
-    /// nil once the race is past.
-    public static func raceStats(_ d: Dashboard, now: Date = Date()) -> RaceStats? {
-        let days = LogTime.daysUntil(LogTime.halfMarathon, now: now)
-        guard days >= 0 else { return nil }
-        let monday = LogTime.monday(LogTime.today(now))
-        let weeks = d.runWeeks.sorted { $0.week < $1.week }
-        let complete = weeks.filter { $0.week < monday && ($0.miles ?? 0) > 0 }
-        let last3 = Array(complete.suffix(3))
-        let from = LogTime.shift(monday, -21)
-        let longest = weeks.filter { $0.week >= from && $0.week <= monday }.reduce(0.0) { max($0, $1.longestMi ?? 0) }
-        return RaceStats(days: days, thisWeek: weeks.first { $0.week == monday }, recentAverage: mean(last3.compactMap(\.miles)),
-                         completeWeeks: last3.count, longest: longest)
-    }
-
-    /// Protein left today and the run of days in a row at the target (today counts once it's hit).
+    /// Protein left today and the days in a row at the target (today counts once it's hit).
     public static func proteinStreak(_ d: Dashboard, target: Double, now: Date = Date()) -> ProteinStreak {
         let today = LogTime.today(now)
         let todayPro = totals(on: today, d)?.proteinG

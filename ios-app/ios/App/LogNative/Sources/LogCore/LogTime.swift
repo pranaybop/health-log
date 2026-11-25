@@ -164,6 +164,4 @@ public enum LogTime {
     public static let tirzStart = parse("2026-11-02T12:00:00-06:00")!
     /// Planned switch to retatrutide.
     public static let retaStart = parse("2026-12-06T12:00:00-06:00")!
-    /// BMW Dallas Half Marathon start.
-    public static let halfMarathon = parse("2026-12-13T08:00:00-06:00")!
 }

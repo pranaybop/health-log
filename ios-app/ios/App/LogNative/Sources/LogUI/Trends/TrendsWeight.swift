@@ -11,8 +11,9 @@ struct TrSummarySectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], alignment: .leading, spacing: 10) {
-                ForEach(m.tiles) { t in
+                ForEach(Array(m.tiles.enumerated()), id: \.element.id) { i, t in
                     TrSummaryTileView(tile: t) { open(t.section) }
+                        .gridCellColumns(m.tiles.count.isMultiple(of: 2) || i < m.tiles.count - 1 ? 1 : 2)
                 }
             }
             .id("summary-tiles")
@@ -67,7 +68,7 @@ struct TrWeightCard: View {
     @State var rangeID: String = "3m"
     @AppStorage("log.overlay") var overlayID: String = "none"
 
-    var ranges: [TrRange] { TrRange.all.filter { $0.id != "train" || m.train != nil } }
+    var ranges: [TrRange] { TrRange.all }
     var range: TrRange { ranges.first { $0.id == rangeID } ?? ranges.first { $0.id == "3m" } ?? ranges[0] }
     var overlay: TrOverlay? { TrOverlay.all.first { $0.id == overlayID && $0.id != "none" } }
 
@@ -82,7 +83,6 @@ struct TrWeightCard: View {
     func start(_ r: TrRange, end: Date, earliest: Date) -> Date {
         switch r.id {
         case "glp1": return m.glp1
-        case "train": return m.train ?? end.addingTimeInterval(-91 * 86400)
         case "all": return earliest
         default: return end.addingTimeInterval(-(r.days ?? 91) * 86400)
         }

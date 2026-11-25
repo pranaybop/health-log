@@ -2,7 +2,7 @@ import SwiftUI
 import LogCore
 
 // Meds section: the week after a shot, appetite by drug level, retatrutide vs tirzepatide, cycle
-// recaps, feel report, wear-off, long-run timing and side effects.
+// recaps, feel report, wear-off and side effects.
 
 struct TrMedsSectionView: View {
     var m: TrMedsModel
@@ -19,7 +19,6 @@ struct TrMedsSectionView: View {
                 if m.wearOff.ready && !m.wearOff.details.isEmpty { TrReceipts(items: m.wearOff.details) }
             }
             .id("wear-off")
-            TrLongRunCard(r: m.longRun).id("long-run")
             TrSideEffectsCard(effects: m.effects).id("side-effects")
         }
     }
@@ -251,35 +250,6 @@ struct TrFeelCard: View {
 
     func tile(_ label: String, _ v: TrendsCalc.MeanN?) -> TrendsCalc.Tile {
         TrendsCalc.Tile(label, v.map { TrendsCalc.num($0.mean, 1) } ?? "—", v.map { "\($0.n) days" })
-    }
-}
-
-struct TrLongRunCard: View {
-    var r: TrendsCalc.LongRun
-
-    var body: some View {
-        LogCard("Long-run timing") {
-            if !r.hasDoses {
-                EmptyNote("Needs a logged shot before runs, energy and HRV can be lined up with days since the dose.")
-            } else if !r.hasData {
-                EmptyNote("No energy, HRV or runs have been logged against a shot week yet.")
-            } else {
-                Caption("Averages by day since the shot (0 is shot day). Energy is from check-ins, HRV from Apple Health, miles from runs.")
-                TrDayGrid(header: (0...6).map { "D\($0)" }, rows: [
-                    TrDayRow(label: "Energy", cells: cells(r.energy, 1)),
-                    TrDayRow(label: "HRV, ms", cells: cells(r.hrv, 0)),
-                    TrDayRow(label: "Run, mi", cells: cells(r.miles, 1)),
-                ])
-                TrLead(r.takeaway)
-            }
-        }
-    }
-
-    func cells(_ values: [Double?], _ digits: Int) -> [TrDayCell] {
-        values.map { v in
-            guard let v else { return TrDayCell(text: "—", alpha: nil) }
-            return TrDayCell(text: TrendsCalc.num(v, digits), alpha: 0.35)
-        }
     }
 }
 
