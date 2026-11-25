@@ -1257,14 +1257,14 @@ function renderDoseHistory(data) {
   const doses = data.doses || [];
   return card("Dosing history",
     doses.length
-      ? el("table", { class: "data" },
+      ? el("div", { class: "table-scroll" }, el("table", { class: "data" },
           el("thead", null, el("tr", null, el("th", null, "When"), el("th", null, "Dose"), el("th", null, "Site"))),
           el("tbody", null, ...[...doses].reverse().map((d) => el("tr", null,
             el("td", null, parseTs(d.taken_at) ? fmtDateCT(parseTs(d.taken_at), true) : "—"),
             el("td", null, d.skipped ? "Skipped" : `${fmtNum(d.dose_mg, 1)} mg`, el("span", { class: "sub" }, capitalize(d.compound || ""))),
             el("td", null, siteLabel(d)),
           ))),
-        )
+        ))
       : el("p", { class: "empty" }, "No doses logged yet."),
   );
 }
@@ -1736,7 +1736,7 @@ function renderWeekly(data) {
   const weeks = data.weekly_summary || [];
   if (!weeks.length) return null;
   return card("Weekly summary",
-    el("table", { class: "data" },
+    el("div", { class: "table-scroll" }, el("table", { class: "data" },
       el("thead", null, el("tr", null, el("th", null, "Week of"), el("th", { class: "num" }, "kcal/day"), el("th", { class: "num" }, "Protein"), el("th", { class: "num" }, "Avg lb"))),
       el("tbody", null, ...[...weeks].reverse().slice(0, 8).map((w) => el("tr", null,
         el("td", null, fmtShortDate(w.week)),
@@ -1744,7 +1744,7 @@ function renderWeekly(data) {
         el("td", { class: "num" }, w.avg_protein_g != null ? `${fmtNum(w.avg_protein_g, 0)} g` : "—"),
         el("td", { class: "num" }, w.avg_weight_lb != null ? fmtNum(w.avg_weight_lb, 1) : "—"),
       ))),
-    ),
+    )),
   );
 }
 
@@ -1753,7 +1753,7 @@ function renderWorkouts(data) {
   if (!workouts.length) return null;
   return card("Workouts",
     el("p", { class: "lead" }, `${fmtNum(data.workout_count || workouts.length, 0)} workouts imported from Apple Health. The latest ${Math.min(8, workouts.length)}:`),
-    el("table", { class: "data" },
+    el("div", { class: "table-scroll" }, el("table", { class: "data" },
       el("thead", null, el("tr", null, el("th", null, "When"), el("th", null, "Activity"), el("th", { class: "num" }, "Min"), el("th", { class: "num" }, "Avg HR"))),
       el("tbody", null, ...workouts.slice(0, 8).map((w) => el("tr", null,
         el("td", null, parseTs(w.started_at) ? fmtDateCT(parseTs(w.started_at), true) : "—"),
@@ -1761,7 +1761,7 @@ function renderWorkouts(data) {
         el("td", { class: "num" }, fmtNum(w.duration_min, 0)),
         el("td", { class: "num" }, w.avg_hr != null ? fmtNum(w.avg_hr, 0) : "—"),
       ))),
-    ),
+    )),
   );
 }
 

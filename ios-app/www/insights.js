@@ -357,10 +357,10 @@ function renderRunning(data) {
         ro.set(`${fmtNum(d.v, 1)} mi`, `Week of ${fmtShortDate(d.key)}${w ? `, ${w.runs} run${w.runs === 1 ? "" : "s"}, longest ${fmtNum(num(w.longest_mi), 1)} mi` : ", no runs"}`);
       },
     }),
-    el("table", { class: "data compact" },
+    el("div", { class: "table-scroll" }, el("table", { class: "data compact" },
       el("thead", null, el("tr", null, ...["Week of", "Miles", "Longest", "Sleep", "Energy", "kcal"].map((h) => el("th", null, h)))),
       el("tbody", null, ...rows.map((r) => el("tr", null, ...r.map((c) => el("td", null, c))))),
-    ),
+    )),
     el("p", { class: "caption" }, "Runs from Apple Health. Sleep is the nightly average, energy comes from check-ins, kcal is the average on days with food logged."),
   );
 }

@@ -384,7 +384,7 @@ function renderRetaVsTirz(data) {
     : `Your tirzepatide baseline for the last 4 full weeks (${fmtShortDate(tirz0)}–${fmtShortDate(tirz1)}). The retatrutide column starts with your first dose (planned ${fmtDateCT(retaSwitchAt(data), true)}).`;
   return card("Retatrutide vs tirzepatide",
     el("p", { class: "lead" }, lead),
-    el("table", { class: "data compact" },
+    el("div", { class: "table-scroll" }, el("table", { class: "data compact" },
       el("thead", null, el("tr", null, el("th", null, ""), el("th", null, "Tirzepatide"), el("th", null, b ? "Retatrutide" : ""))),
       el("tbody", null,
         cell("Weight change", a.delta, b && b.delta, (v) => `${signed(v)} lb`),
@@ -396,7 +396,7 @@ function renderRetaVsTirz(data) {
         cell("Burned a day", a.burn, b && b.burn, (v) => `${fmtNum(v, 0)} kcal`),
         cell("Sleep", a.sleep, b && b.sleep, (v) => `${fmtNum(v, 1)} h`),
       ),
-    ),
+    )),
     el("p", { class: "caption" }, "Averages over each window; calories burned is the Apple Watch's middle full day. Dashes mean that measure wasn’t logged in the window. The retatrutide column fills in over the first two weeks. This is a comparison, not advice."),
   );
 }
