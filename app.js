@@ -31,7 +31,10 @@ const state = {
   formBusy: false,
   explorerX: "weight",
   explorerY: "steps",
+  overlay: (() => { try { return localStorage.getItem("log.overlay") || "none"; } catch (_) { return "none"; } })(),
   editTargets: false,
+  targetsBusy: false,
+  targetsMsg: null,
   gateLetters: false,
   openForms: { threetap: true },
 };
@@ -365,6 +368,7 @@ const RANGES = [
 
 /* Calorie and protein targets: a goals row wins (kind "calories" / "protein"); otherwise this device's setting. */
 const TARGET_KEY = "log.targets";
+const OVERLAY_KEY = "log.overlay";
 
 function readLocalTargets() {
   try {
@@ -526,27 +530,71 @@ function gauge(kind, label, value, target, unit) {
   );
 }
 
+/* Saves targets to log.goals through goal_set. Until that action is live on the
+   server, falls back to this phone so the gauges still work. */
+async function saveTargets(c, p) {
+  // No redraw before the request, so the numbers you typed stay put if it fails.
+  state.targetsBusy = true;
+  state.targetsMsg = null;
+  const jobs = [];
+  if (c != null) jobs.push(["calories", c]);
+  if (p != null) jobs.push(["protein", p]);
+  let notLive = false;
+  let failed = null;
+  for (const [kind, target] of jobs) {
+    try {
+      await writeLog("goal_set", { kind, target });
+    } catch (err) {
+      if (/^invalid_action/.test(err.message)) notLive = true;
+      else failed = err.message;
+      break;
+    }
+  }
+  if (notLive) {
+    const local = readLocalTargets();
+    if (c != null) local.calories = c;
+    if (p != null) local.protein = p;
+    saveLocalTargets(local);
+    state.editTargets = false;
+    state.targetsMsg = { ok: true, text: "Saved on this phone for now. Saving targets to your log isn't switched on yet." };
+  } else if (failed) {
+    state.targetsMsg = { ok: false, text: failed === "unauthorized" ? "Passcode was rejected. Lock and unlock again." : `Could not save: ${failed}` };
+  } else {
+    state.editTargets = false;
+    state.targetsMsg = { ok: true, text: "Targets saved to your log." };
+    state.targetsBusy = false;
+    await load(true);
+    return;
+  }
+  state.targetsBusy = false;
+  render();
+}
+
 function renderTargetsEditor(data, t) {
-  const cal = input({ type: "number", name: "t_cal", min: "0", max: "10000", step: "10", inputmode: "numeric", value: t.calories ?? "", placeholder: "e.g. 2000" });
-  const pro = input({ type: "number", name: "t_pro", min: "0", max: "500", step: "1", inputmode: "numeric", value: t.protein ?? "", placeholder: "e.g. 140" });
+  const cal = input({ type: "number", name: "t_cal", min: "800", max: "6000", step: "10", inputmode: "numeric", value: t.calories ?? "", placeholder: "e.g. 2200" });
+  const pro = input({ type: "number", name: "t_pro", min: "20", max: "400", step: "5", inputmode: "numeric", value: t.protein ?? "", placeholder: "e.g. 150" });
+  const err = el("p", { class: "target-msg err", role: "status" });
   return el("div", { class: "targets-editor" },
     el("div", { class: "grid two tight" }, field("Calories (kcal)", cal), field("Protein (g)", pro)),
-    el("p", { class: "caption" }, "Saved on this phone only. Leave a box empty to clear it."),
+    el("p", { class: "caption" }, "Daily targets. Leave a box empty to keep it as it is."),
+    err,
     el("div", { class: "form-actions" },
       el("button", {
         type: "button",
         class: "primary",
-        onClick: () => {
-          const next = {};
-          const c = num(cal.value);
-          const p = num(pro.value);
-          if (c != null && c > 0) next.calories = c;
-          if (p != null && p > 0) next.protein = p;
-          saveLocalTargets(next);
-          state.editTargets = false;
-          render();
+        disabled: state.targetsBusy,
+        onClick: (ev) => {
+          const c = cal.value.trim() === "" ? null : num(cal.value);
+          const p = pro.value.trim() === "" ? null : num(pro.value);
+          if (c == null && p == null) { err.textContent = "Enter a calorie or protein target."; return; }
+          if (c != null && (!Number.isInteger(c) || c < 800 || c > 6000)) { err.textContent = "Calories should be a whole number from 800 to 6,000."; return; }
+          if (p != null && (!Number.isInteger(p) || p < 20 || p > 400)) { err.textContent = "Protein should be a whole number from 20 to 400 g."; return; }
+          err.textContent = "";
+          ev.currentTarget.disabled = true;
+          ev.currentTarget.textContent = "Saving…";
+          saveTargets(c, p);
         },
-      }, "Save targets"),
+      }, state.targetsBusy ? "Saving…" : "Save targets"),
       el("button", { type: "button", onClick: () => { state.editTargets = false; render(); } }, "Cancel"),
     ),
   );
@@ -557,10 +605,8 @@ function renderFood(data) {
   const t = getTargets(data);
   const cal = today ? num(today.calories) : null;
   const pro = today ? num(today.protein_g) : null;
-  const action = t.fromGoals
-    ? null
-    : el("button", { type: "button", class: "link", onClick: () => { state.editTargets = !state.editTargets; render(); } },
-      state.editTargets ? "Close" : (t.calories == null && t.protein == null ? "Set targets" : "Edit targets"));
+  const action = el("button", { type: "button", class: "link", onClick: () => { state.editTargets = !state.editTargets; state.targetsMsg = null; render(); } },
+    state.editTargets ? "Close" : (t.calories == null && t.protein == null ? "Set targets" : "Edit targets"));
   const meals = today ? `${today.meal_count} meal${today.meal_count === 1 ? "" : "s"} logged` : "Nothing logged yet today";
   return cardWithAction("Food today", action,
     el("div", { class: "gauges" },
@@ -568,6 +614,7 @@ function renderFood(data) {
       gauge("protein", "Protein", pro, t.protein, "g"),
     ),
     state.editTargets ? renderTargetsEditor(data, t) : null,
+    state.targetsMsg ? el("p", { class: "target-msg " + (state.targetsMsg.ok ? "ok" : "err"), role: "status" }, state.targetsMsg.text) : null,
     el("p", { class: "caption" }, t.calories == null && t.protein == null && !state.editTargets
       ? `${meals}. Set daily targets to track progress toward them.`
       : `${meals}. Macros may be estimates.`),
@@ -806,21 +853,55 @@ function renderTitration(data) {
   );
 }
 
+/* Identical unopened vials collapse into one line ("Aavant 12 mg, 10 vials"). */
+function groupVials(items) {
+  const groups = new Map();
+  for (const v of items) {
+    const unopened = !v.opened_at && !v.started_on;
+    const name = String(v.label || "").replace(/\s*#\d+$/, "");
+    const key = unopened ? `${v.compound}|${name}|${v.total_mg}|${v.total_units}` : `open|${v.id}`;
+    if (!groups.has(key)) groups.set(key, { compound: v.compound, name, unopened, vials: [] });
+    groups.get(key).vials.push(v);
+  }
+  return [...groups.values()];
+}
+
 function renderVials(data) {
   const r = vialRunway(data);
   if (!r.ready) return card("Vials", el("p", { class: "empty" }, `${r.summary} Use Start a vial on the Log tab.`));
+  const byCompound = {};
+  for (const v of r.items) {
+    const c = byCompound[v.compound] || (byCompound[v.compound] = { mg: 0, count: 0, unopened: 0 });
+    const mg = num(v.remaining_mg != null ? v.remaining_mg : v.total_mg);
+    if (mg != null) c.mg += mg;
+    c.count += 1;
+    if (!v.opened_at && !v.started_on) c.unopened += 1;
+  }
+  const totals = Object.entries(byCompound).map(([compound, c]) => metric(
+    capitalize(compound),
+    `${fmtNum(c.mg, c.mg % 1 ? 1 : 0)} mg`,
+    `${c.count} vial${c.count === 1 ? "" : "s"}${c.unopened === c.count ? ", all unopened" : c.unopened ? `, ${c.unopened} unopened` : ""}`,
+  ));
+  const groups = groupVials(r.items);
   return card("Vials",
-    r.soonest ? el("p", { class: "lead" }, `Supply lasts until about ${fmtDateCT(r.soonest.until, true)} at the current weekly dose.`) : null,
+    el("div", { class: "tiles" }, ...totals),
     el("div", { class: "props" },
-      ...r.items.map((v) => prop(
-        `${capitalize(v.compound)}${v.label ? `, ${v.label}` : ""}`,
-        [
-          v.remaining_mg != null ? `${fmtNum(v.remaining_mg, 1)} of ${fmtNum(v.total_mg, 1)} mg` : "",
-          v.remaining_units != null ? `${fmtNum(v.remaining_units, 0)} units left` : "",
-          v.expired_on ? `expires ${fmtShortDate(v.expired_on)}` : "",
-        ].filter(Boolean).join(", ") || "—",
-      )),
+      ...groups.map((g) => {
+        const n = g.vials.length;
+        const v = g.vials[0];
+        const label = `${g.name || capitalize(g.compound)}${n > 1 ? `, ${n} vials` : ""}`;
+        const sumMg = g.vials.reduce((a, x) => a + (num(x.remaining_mg != null ? x.remaining_mg : x.total_mg) || 0), 0);
+        const detail = g.unopened
+          ? `Unopened, ${fmtNum(sumMg, sumMg % 1 ? 1 : 0)} mg`
+          : [
+              v.remaining_mg != null ? `${fmtNum(v.remaining_mg, 1)} of ${fmtNum(v.total_mg, 1)} mg left` : "",
+              v.remaining_units != null ? `${fmtNum(v.remaining_units, 0)} units left` : "",
+              v.expired_on ? `discard ${fmtShortDate(v.expired_on)}` : "",
+            ].filter(Boolean).join(", ") || "Open";
+        return prop(label, detail);
+      }),
     ),
+    r.soonest ? el("p", { class: "caption" }, `At the planned weekly dose, supply lasts until about ${fmtDateCT(r.soonest.until, true)}.`) : null,
   );
 }
 
@@ -869,6 +950,45 @@ function renderMedsTab(data) {
 
 /* ---------- Trends ---------- */
 
+/* Daily series that can sit under the weight chart. Same days, separate scale. */
+const OVERLAYS = [
+  { id: "none", label: "None" },
+  { id: "calories", label: "Calories", cls: "s1", title: "Calories eaten", fmt: (v) => `${fmtNum(v, 0)} kcal` },
+  { id: "steps", label: "Steps", cls: "s4", title: "Steps", fmt: (v) => `${fmtNum(v, 0)} steps` },
+  { id: "sleep", label: "Sleep", cls: "s3", title: "Sleep", fmt: (v) => `${fmtNum(v, 1)} h sleep` },
+];
+
+function overlayDaily(data, id) {
+  const rows = id === "calories"
+    ? (data.daily_totals || []).map((r) => [r.date, num(r.calories)])
+    : (data.daily_health || []).map((r) => [r.day, num(id === "steps" ? r.steps : r.sleep_hours)]);
+  const out = new Map();
+  for (const [key, v] of rows) if (key && v != null && v > 0) out.set(key, v);
+  return out;
+}
+
+function keyToNoon(key) {
+  const [y, m, d] = key.split("-").map(Number);
+  return ctNoon(y, m, d);
+}
+
+/* Daily bars on short ranges; weekly averages (Monday weeks) on 1Y and All so bars stay readable. */
+function overlayPoints(daily, weekly) {
+  const keys = [...daily.keys()].sort();
+  if (!weekly) return keys.map((k) => ({ t: keyToNoon(k), v: daily.get(k), key: k, n: 1 }));
+  const weeks = new Map();
+  for (const k of keys) {
+    const t = keyToNoon(k);
+    const dow = (t.getUTCDay() + 6) % 7;
+    const monday = dateKeyCT(new Date(t.getTime() - dow * 86400000));
+    const w = weeks.get(monday) || { sum: 0, n: 0 };
+    w.sum += daily.get(k);
+    w.n += 1;
+    weeks.set(monday, w);
+  }
+  return [...weeks.entries()].map(([k, w]) => ({ t: new Date(keyToNoon(k).getTime() + 3 * 86400000), v: w.sum / w.n, key: k, n: w.n, week: true }));
+}
+
 function renderWeightCard(data) {
   const parsed = parseWeights(data.weights || []);
   if (!parsed.length) return card("Weight", el("p", { class: "empty" }, "No weigh-ins yet. Log one on the Log tab."));
@@ -911,6 +1031,10 @@ function renderWeightCard(data) {
   const lows = inRange.length ? Math.min(...inRange.map((w) => w.lb)) : null;
   const highs = inRange.length ? Math.max(...inRange.map((w) => w.lb)) : null;
   const ro = readout(`${fmtNum(last.trend, 1)} lb`, `Trend now. Last weigh-in ${fmtNum(last.lb, 1)} lb, ${fmtDateCT(last.at, true)}`);
+  const withYear = range.id === "all" || range.id === "1y";
+  const ov = OVERLAYS.find((o) => o.id === state.overlay && o.id !== "none") || null;
+  const ovDaily = ov ? overlayDaily(data, ov.id) : null;
+  const ovWeekly = range.id === "1y" || range.id === "all";
 
   const chart = inRange.length >= 2
     ? timeChart({
@@ -931,22 +1055,70 @@ function renderWeightCard(data) {
         onScrub: (r) => {
           if (!r) return ro.reset();
           const w = r.point.w;
-          ro.set(`${fmtNum(w.lb, 1)} lb`, `${fmtDateCT(w.at, true)}${range.id === "all" || range.id === "1y" ? `, ${w.at.getFullYear()}` : ""}, trend ${fmtNum(w.trend, 1)}`);
+          const extra = ovDaily && ovDaily.has(dateKeyCT(w.at)) ? `, ${ov.fmt(ovDaily.get(dateKeyCT(w.at)))}` : "";
+          ro.set(`${fmtNum(w.lb, 1)} lb`, `${fmtDateCT(w.at, true)}${withYear ? `, ${w.at.getFullYear()}` : ""}, trend ${fmtNum(w.trend, 1)}${extra}`);
         },
       })
     : el("p", { class: "empty" }, "Only one weigh-in in this range. Try a longer range.");
+
+  // Optional bar strip under the chart: same days, its own scale.
+  let strip = null;
+  if (ov && inRange.length >= 2) {
+    const pts = overlayPoints(ovDaily, ovWeekly);
+    const shown = pts.filter((p) => p.t >= startT && p.t <= t1);
+    const tg = ov.id === "calories" ? getTargets(data).calories : null;
+    const bars = shown.length ? barStrip({
+      t0: startT,
+      t1,
+      points: pts,
+      cls: ov.cls,
+      stepMs: ovWeekly ? 7 * 86400000 : 86400000,
+      target: tg,
+      fmtY: ov.id === "sleep" ? (v) => fmtNum(v, 0) : (v) => (v >= 1000 ? `${fmtNum(v / 1000, v % 1000 ? 1 : 0)}k` : fmtNum(v, 0)),
+      aria: `${ov.title} ${ovWeekly ? "weekly averages" : "by day"}, lined up with the weight chart`,
+      onScrub: (p) => {
+        if (!p) return ro.reset();
+        const tr = trendAt(sm, p.t);
+        ro.set(`${ov.fmt(p.v)}${p.week ? " a day" : ""}`,
+          `${p.week ? "Week of " : ""}${fmtDateCT(p.week ? keyToNoon(p.key) : p.t, true)}${withYear ? `, ${p.t.getFullYear()}` : ""}${tr != null ? `, weight trend ${fmtNum(tr, 1)}` : ""}`);
+      },
+    }) : null;
+    const firstKey = [...ovDaily.keys()].sort()[0];
+    const note = !shown.length
+      ? (ov.id === "calories" ? "No food logged in this range." : `No ${ov.label.toLowerCase()} data in this range.`)
+      : ov.id === "calories"
+        ? `${shown.reduce((a, p) => a + p.n, 0)} day${shown.reduce((a, p) => a + p.n, 0) === 1 ? "" : "s"} of food logged in this range.${tg != null ? " The dashed line is your target." : ""}`
+        : (firstKey && keyToNoon(firstKey) > startT ? `Apple Health data here starts ${fmtShortDate(firstKey)}.` : null);
+    strip = el("div", { class: "overlay" },
+      el("p", { class: "strip-label" }, `${ov.title}, ${ovWeekly ? "weekly average a day" : "by day"}`),
+      bars,
+      note ? el("p", { class: "strip-note" }, note) : null,
+    );
+  }
+  const compare = el("div", { class: "compare" },
+    el("span", null, "Compare"),
+    el("div", { class: "seg", role: "group", "aria-label": "Compare weight with" },
+      ...OVERLAYS.map((o) => el("button", {
+        type: "button",
+        "aria-pressed": (state.overlay || "none") === o.id ? "true" : "false",
+        onClick: () => { state.overlay = o.id; try { localStorage.setItem(OVERLAY_KEY, o.id); } catch (_) { /* ignore */ } render(); },
+      }, o.label)),
+    ),
+  );
 
   const recent = [...parsed].reverse().slice(0, 30);
   return card("Weight",
     seg,
     ro.node,
     chart,
+    strip,
     el("div", { class: "legend" },
       el("span", null, el("i", { class: "key dot s1 faint" }), "Weigh-ins"),
       el("span", null, el("i", { class: "key line s1" }), "Smoothed trend"),
       showProj ? el("span", null, el("i", { class: "key line s1 dashed" }), "Straight-line projection") : null,
       goal != null ? el("span", null, el("i", { class: "key line ref" }), "Goal") : null,
     ),
+    compare,
     el("div", { class: "stats" },
       metric(`Change, ${range.label}`, `${signed(change)} lb`, "trend to trend"),
       metric("Pace", rp ? `${signed(rp.weekly)} lb/wk` : "—", "last 4 weeks"),

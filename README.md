@@ -12,7 +12,9 @@ Times display in America/Chicago. Meal macros may be estimates. Drug level is a 
 
 No build step and no dependencies. Scripts load in this order: `analytics.js` (pure calculations: weight smoothing, pace, drug level, cycles), `export.js` (prescriber CSV/PDF), `forms.js` (Log tab), `charts.js` (SVG charts with touch scrubbing, site map), `app.js` (state, tabs, rendering). `styles.css` follows the system light/dark setting. Bump the `?v=` query in `index.html` when shipping changes so iPhone Safari picks them up.
 
-Calorie and protein targets on Today come from active `log.goals` rows (`kind` `calories` / `protein`) when present; otherwise from targets set on the device (`localStorage` `log.targets`), which stay on that phone only.
+Calorie and protein targets on Today come from active `log.goals` rows (`kind` `calories` / `protein`) when present; otherwise from targets set on the device (`localStorage` `log.targets`). Edit targets tries a `goal_set` write first and falls back to the device while that action isn't deployed.
+
+The weight chart's Compare control draws calories (`daily_totals`), steps or sleep (`daily_health`, last 365 days) as a bar strip under the chart on the same days, with its own scale. 1Y and All use weekly averages. The choice is kept on the device (`log.overlay`).
 
 To test locally, serve the folder on port 4173 (for example `npx serve -l 4173`) so CORS allows it.
 

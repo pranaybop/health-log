@@ -464,10 +464,12 @@ function siteRotation(data) {
 function vialRunway(data) {
   const vials = data.vials || [];
   if (!vials.length) return { ready: false, summary: "Add a vial to see inventory and supply runway." };
-  const active = (data.protocol || []).find((p) => p.status === "active") || {};
-  const weeklyMg = num(active.typical_dose_mg);
-  const weeklyUnits = num(active.units);
+  // Each vial runs down at its own compound's weekly dose, not whatever is active now.
+  const protocolFor = (compound) => (data.protocol || []).find((p) => p.compound === compound) || {};
   const items = vials.map((v) => {
+    const proto = protocolFor(v.compound);
+    const weeklyMg = num(proto.typical_dose_mg);
+    const weeklyUnits = num(proto.units);
     let weeks = null;
     const remMg = num(v.remaining_mg);
     const remU = num(v.remaining_units);

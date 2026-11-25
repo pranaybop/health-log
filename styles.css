@@ -312,6 +312,10 @@ button.link {
   background: var(--surface);
 }
 .targets-editor { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+.target-msg { margin: 12px 0 0; font-size: 14px; line-height: 1.4; font-weight: 500; }
+.target-msg:empty { display: none; }
+.target-msg.ok { color: var(--good-ink); }
+.target-msg.err { color: var(--crit-ink); }
 
 /* ---------- callout / counts / medication ---------- */
 
@@ -460,6 +464,12 @@ button.link {
 .chart .col.s1 { fill: var(--s1); }
 .chart .col.s2 { fill: var(--s2); }
 .chart .col.s4 { fill: var(--s4); }
+.chart .col.s3 { fill: var(--s3); }
+.strip-label { margin: 10px 0 2px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.strip-note { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); }
+.compare { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.compare > span { font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.compare .seg { flex: 1; margin: 0; }
 
 .legend {
   display: flex;
@@ -840,3 +850,4 @@ table.data td .sub { display: block; color: var(--ink-2); font-size: 13px; }
   body { background: #fff; color: #111; }
 }
 .sitemap .ribs { fill: none; stroke: var(--hairline); stroke-width: 1.5; stroke-linecap: round; }
+.tiles + .props { margin-top: 12px; }
