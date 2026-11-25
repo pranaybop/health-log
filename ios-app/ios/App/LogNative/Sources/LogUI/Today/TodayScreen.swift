@@ -5,7 +5,7 @@ import LogCore
 /// showing the web version of this tab.
 public struct TodayScreen: View {
     /// Flip to true when this screen covers everything the web version does.
-    public static let isReady = false
+    public static let isReady = true
 
     @Environment(LogStore.self) private var store
 
