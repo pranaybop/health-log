@@ -68,9 +68,14 @@ public enum Analytics {
         return remaining(at: at, doses: same, protocols: dashboard.protocols) / peak
     }
 
+    /// How many days before its planned day a dose still counts for that week (a Saturday shot for
+    /// a Sunday plan). Each plan week runs from this many days before its day to the same point
+    /// before the next one, so every logged dose covers at most one week.
+    public static let planEarlyDays = 3
+
     /// Planned doses no logged dose has covered yet, earliest first. A dose (taken or skipped)
-    /// covers the plan row for the week it falls in: on or after that planned day and before the
-    /// next one. A missed week stays here until something is logged in it.
+    /// covers the plan row for the week it falls in: from planEarlyDays before that planned day
+    /// to the same point before the next one. A missed week stays here until something is logged in it.
     public static func openPlan(_ d: Dashboard) -> [DosePlanRow] {
         let rows = d.dosePlan
             .filter { !$0.plannedOn.isEmpty && $0.doseMg != nil }
@@ -81,8 +86,9 @@ public enum Analytics {
         }
         var open: [DosePlanRow] = []
         for (i, row) in rows.enumerated() {
-            let end = i + 1 < rows.count ? rows[i + 1].plannedOn : "9999-12-31"
-            if !days.contains(where: { $0 >= row.plannedOn && $0 < end }) { open.append(row) }
+            let start = LogTime.shift(row.plannedOn, -planEarlyDays)
+            let end = i + 1 < rows.count ? LogTime.shift(rows[i + 1].plannedOn, -planEarlyDays) : "9999-12-31"
+            if !days.contains(where: { $0 >= start && $0 < end }) { open.append(row) }
         }
         return open
     }

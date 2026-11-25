@@ -277,6 +277,19 @@ struct TrTimeChart: View {
         }
     }
 
+    /// Which side of its rule a marker's label goes on. Labels sit to the right unless the rule is
+    /// near the right edge; when two rules are close (say the GLP-1 start and the retatrutide
+    /// switch), the earlier label goes left and the later one right so they don't overlap.
+    static func markSide(_ m: TrMark, among marks: [TrMark], t0: Date, span: TimeInterval) -> AnnotationPosition {
+        let x = m.at.timeIntervalSince(t0) / span
+        let near = 0.18
+        let hasCloseLater = marks.contains { $0.id != m.id && $0.at > m.at && $0.at.timeIntervalSince(m.at) / span < near }
+        let hasCloseEarlier = marks.contains { $0.id != m.id && $0.at < m.at && m.at.timeIntervalSince($0.at) / span < near }
+        if hasCloseLater && x > 0.12 { return .leading }
+        if hasCloseEarlier { return .trailing }
+        return x > 0.75 ? .leading : .trailing
+    }
+
     func chart(_ sc: TrNiceScale, focus f: (point: TrendsCalc.Point, readings: [String: TrendsCalc.Point])?) -> some View {
         let ticks = TrTimeTicks(t0, end)
         let shownRefs = refs.filter { $0.value >= sc.lo && $0.value <= sc.hi }
@@ -301,7 +314,7 @@ struct TrTimeChart: View {
                 RuleMark(x: .value("Marker", m.at))
                     .foregroundStyle(LogColor.axis)
                     .lineStyle(StrokeStyle(lineWidth: 1))
-                    .annotation(position: m.at.timeIntervalSince(t0) / span > 0.75 ? .leading : .trailing, alignment: .top, spacing: 4) {
+                    .annotation(position: Self.markSide(m, among: shownMarks, t0: t0, span: span), alignment: .top, spacing: 4) {
                         Text(m.label).font(.caption2.weight(.semibold)).foregroundStyle(LogColor.ink2)
                     }
             }

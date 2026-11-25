@@ -337,8 +337,10 @@ function planRows(data) {
 }
 
 /* The earliest planned dose that nothing logged covers yet, including one whose day has passed.
-   A dose covers the plan row for the week it falls in: taken or skipped, on or after that
-   planned day and before the next one. It stays put until then. */
+   A dose covers the plan row for the week it falls in: taken or skipped, from PLAN_EARLY_DAYS
+   before that planned day (a Saturday shot for a Sunday plan) to the same point before the next
+   one. It stays put until then. Same rule as Analytics.openPlan in the native app. */
+const PLAN_EARLY_DAYS = 3;
 function nextPlanned(data) {
   const rows = planRows(data);
   const days = [];
@@ -347,8 +349,9 @@ function nextPlanned(data) {
     if (t) days.push(dateKeyCT(t));
   }
   for (let i = 0; i < rows.length; i++) {
-    const end = i + 1 < rows.length ? rows[i + 1].planned_on : "9999-12-31";
-    if (!days.some((day) => day >= rows[i].planned_on && day < end)) return rows[i];
+    const start = shiftDay(rows[i].planned_on, -PLAN_EARLY_DAYS);
+    const end = i + 1 < rows.length ? shiftDay(rows[i + 1].planned_on, -PLAN_EARLY_DAYS) : "9999-12-31";
+    if (!days.some((day) => day >= start && day < end)) return rows[i];
   }
   return null;
 }

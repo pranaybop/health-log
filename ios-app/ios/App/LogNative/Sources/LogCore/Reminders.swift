@@ -121,19 +121,38 @@ public enum ReminderPlanner {
     /// Days after a missed dose to keep reminding, stopping before the next planned dose.
     public static let maxCatchUpDays = 6
 
+    /// Check-in and weigh-in reminders are scheduled one day at a time this far ahead (refreshed
+    /// whenever the app opens), so a day that's already done gets no reminder.
+    public static let habitDays = 14
+
     public static func requests(_ d: Dashboard, settings: ReminderSettings, now: Date) -> [ReminderRequest] {
         var out: [ReminderRequest] = []
         if settings.checkin {
-            out.append(ReminderRequest(
-                id: "log.checkin", title: "Check in", body: "How you ate, moved, felt and slept.",
-                route: "checkin", day: nil, hour: settings.checkinHour, minute: settings.checkinMinute))
+            let done = Set(d.checkins.map(\.day))
+            out.append(contentsOf: daily(
+                "log.checkin", title: "Check in", body: "How you ate, moved, felt and slept.", route: "checkin",
+                hour: settings.checkinHour, minute: settings.checkinMinute, done: done, now: now))
         }
         if settings.weighIn {
-            out.append(ReminderRequest(
-                id: "log.weigh", title: "Weigh in", body: "Log this morning's weight.",
-                route: "weigh", day: nil, hour: settings.weighHour, minute: settings.weighMinute))
+            let done = Set(d.weights.compactMap { $0.measuredDate.map(LogTime.dayKey) })
+            out.append(contentsOf: daily(
+                "log.weigh", title: "Weigh in", body: "Log this morning's weight.", route: "weigh",
+                hour: settings.weighHour, minute: settings.weighMinute, done: done, now: now))
         }
         if settings.shot { out.append(contentsOf: shots(d, settings: settings, now: now)) }
+        return out
+    }
+
+    private static func daily(_ id: String, title: String, body: String, route: String,
+                              hour: Int, minute: Int, done: Set<String>, now: Date) -> [ReminderRequest] {
+        let today = LogTime.today(now)
+        var out: [ReminderRequest] = []
+        for i in 0..<habitDays {
+            let day = LogTime.shift(today, i)
+            guard !done.contains(day), let at = fireDate(day, hour, minute), at > now else { continue }
+            out.append(ReminderRequest(id: "\(id).\(day)", title: title, body: body, route: route,
+                                       day: day, hour: hour, minute: minute))
+        }
         return out
     }
 

@@ -35,6 +35,8 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
     private let lock = NSLock()
     private var token = 0
     private var observing = false
+    /// What was last handed to iOS, so the minute-by-minute refresh doesn't redo identical work.
+    private var applied: String?
 
     private override init() { super.init() }
 
@@ -53,12 +55,14 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
 
     @MainActor
     public func reschedule(_ dashboard: Dashboard?) {
-        let generation = bump()
         let settings = ReminderSettings.load()
         let now = TodayDebug.now ?? Date()
         let planned = dashboard.map { ReminderPlanner.requests($0, settings: settings, now: now) } ?? []
+        let signature = planned.map { "\($0.id)|\($0.hour):\($0.minute)|\($0.body)" }.joined(separator: "\n")
+        if signature == appliedSignature() { return }
+        let generation = bump()
         Task {
-            await apply(planned, generation: generation)
+            await apply(planned, signature: signature, generation: generation)
         }
     }
 
@@ -100,6 +104,18 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         return generation
     }
 
+    private func appliedSignature() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return applied
+    }
+
+    private func setApplied(_ signature: String?, generation: Int) {
+        lock.lock()
+        if token == generation { applied = signature }
+        lock.unlock()
+    }
+
     private func isCurrent(_ generation: Int) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -119,15 +135,19 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         }
     }
 
-    private func apply(_ planned: [ReminderRequest], generation: Int) async {
+    private func apply(_ planned: [ReminderRequest], signature: String, generation: Int) async {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
         guard isCurrent(generation) else { return }
-        let ours = pending.map(\.identifier).filter { $0 == "log.checkin" || $0 == "log.weigh" || $0.hasPrefix("log.shot.") }
+        // Includes the older repeating "log.checkin" / "log.weigh" ids from before one-per-day reminders.
+        let ours = pending.map(\.identifier).filter { $0.hasPrefix("log.checkin") || $0.hasPrefix("log.weigh") || $0.hasPrefix("log.shot.") }
         center.removePendingNotificationRequests(withIdentifiers: ours)
         let status = await center.notificationSettings().authorizationStatus
         guard isCurrent(generation) else { return }
-        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+        guard status == .authorized || status == .provisional || status == .ephemeral else {
+            setApplied(nil, generation: generation)
+            return
+        }
         let now = Date()
         for req in planned {
             if let day = req.day, let at = ReminderPlanner.fireDate(day, req.hour, req.minute), at <= now { continue }
@@ -150,6 +170,7 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: req.day == nil)
             try? await center.add(UNNotificationRequest(identifier: req.id, content: content, trigger: trigger))
         }
+        setApplied(signature, generation: generation)
     }
 }
 
