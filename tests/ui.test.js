@@ -2,6 +2,7 @@
 // Usage: node ui.test.js [light|dark]. Data comes from fixture.js (made up); writes are recorded,
 // never sent anywhere. Screenshots land in tests/shots.
 const { chromium } = require("playwright");
+const fs = require("fs");
 const path = require("path");
 const { serve, makeFixture, BASE, SHOTS, API, CLOCK, PASSCODE: PASS, CORS: cors } = require("./lib");
 
@@ -436,7 +437,6 @@ let goalSetLive = false;
   check("weigh-in writes", writes[writes.length - 1].action === "weigh_in" && writes[writes.length - 1].payload.weight_lb === "256.4");
   check("weigh-in offers an optional photo", await page.isVisible(".photo-offer >> text=Add a progress photo") && await page.isVisible(".photo-offer >> text=Not now"));
   await page.locator(".photo-offer").screenshot({ path: path.join(OUT, `${SCHEME}-55-photo-offer.png`) });
-  const fs = require("fs");
   const tiny = path.join(OUT, "tiny.png");
   fs.writeFileSync(tiny, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
   const beforePhoto = dashStarted;
