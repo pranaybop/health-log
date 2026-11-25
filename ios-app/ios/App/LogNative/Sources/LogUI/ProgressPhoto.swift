@@ -102,6 +102,7 @@ struct WeighPhotoOffer: View {
                 Button("Not now", action: onDismiss)
                     .font(.subheadline)
                     .foregroundStyle(LogColor.ink2)
+                    .buttonStyle(.plain)
                 Spacer()
                 if busy { ProgressView() }
             }
@@ -216,6 +217,7 @@ struct ProgressPhotosCard: View {
                 Button("Delete") { pendingDelete = photo }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(LogColor.critInk)
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Delete photo from \(cap.date)")
             }
         }
