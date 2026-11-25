@@ -9,3 +9,7 @@ capacitor-cordova-ios-plugins
 
 # Generated config and web assets (public/, capacitor.config.json, config.xml) are committed
 # so the project builds in Xcode without running npm or cap sync first.
+
+# Swift package build output (LogNative)
+.build
+.swiftpm

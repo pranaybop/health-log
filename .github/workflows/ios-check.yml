@@ -1,0 +1,144 @@
+# Checks the iPhone app on GitHub's Mac runners, on made-up data only (tests/fixture.js):
+#   1. the LogNative package's own tests (ios-app/ios/App/LogNative, in an iOS simulator)
+#   2. a debug build of the whole app for the simulator
+#   3. screenshots: the app opens on each tab with -demo <tab>, from every list in
+#      ios-app/ios/screenshots/*.txt (one line each: name tab light|dark [more launch arguments]).
+#      They're printed into the log as base64 JPEG lines (IMGDATA <name> ...), so they can be read
+#      without downloading artifacts.
+#
+# Called by ios-ipa.yml (main) and native.yml (native/** work branches). With soft: true every
+# check still runs and the summary line says NATIVE-CHECK: PASS or FAIL, but the run itself never
+# fails, so work in progress sends no failure emails.
+name: iPhone app checks
+
+on:
+  workflow_call:
+    inputs:
+      soft:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+          xcodebuild -version
+
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          best = None
+          for rt, devs in json.load(sys.stdin)["devices"].items():
+              m = re.search(r"iOS-(\d+)-(\d+)", rt)
+              if not m:
+                  continue
+              ver = (int(m.group(1)), int(m.group(2)))
+              for d in devs:
+                  n = d["name"]
+                  if not n.startswith("iPhone") or "Max" in n or "Plus" in n or "SE" in n:
+                      continue
+                  score = (ver, "Pro" in n)
+                  if best is None or score > best[0]:
+                      best = (score, d["udid"], n, rt)
+          print(best[1])
+          print("Simulator:", best[2], best[3], file=sys.stderr)
+          ')
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      - name: Package tests (LogNative)
+        id: package
+        continue-on-error: true
+        working-directory: ios-app/ios/App/LogNative
+        run: |
+          SCHEME=$(xcodebuild -list -json | python3 -c '
+          import json, sys
+          s = json.load(sys.stdin)["workspace"]["schemes"]
+          print(next((x for x in s if x.endswith("-Package")), s[0]))
+          ')
+          echo "Scheme: $SCHEME"
+          rc=0
+          xcodebuild test -scheme "$SCHEME" -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$RUNNER_TEMP/pkg" CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/pkg.log" 2>&1 || rc=$?
+          grep -E "error:|Test Case .* (passed|failed)|XCTAssert|Executed|\*\* TEST" "$RUNNER_TEMP/pkg.log" | sort -u | tail -300 || true
+          exit $rc
+
+      - name: Bundle the app files and the demo data
+        run: |
+          sh ios-app/sync-web.sh
+          node -e 'process.stdout.write(JSON.stringify(require("./tests/fixture").makeFixture()))' > ios-app/ios/App/App/public/demo.json
+          ls -la ios-app/ios/App/App/public/demo.json
+
+      - name: Build for the simulator (Debug)
+        id: build
+        continue-on-error: true
+        working-directory: ios-app/ios/App
+        run: |
+          rc=0
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/sim" \
+            CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/build.log" 2>&1 || rc=$?
+          grep -E "error:|\*\* BUILD" "$RUNNER_TEMP/build.log" | sort -u | tail -200 || true
+          exit $rc
+
+      - name: Run it and take screenshots
+        id: shots
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -e
+          APP="$RUNNER_TEMP/sim/Build/Products/Debug-iphonesimulator/App.app"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 || true
+          xcrun simctl install "$UDID" "$APP"
+          fail=0
+          shoot() {
+            name=$1; tab=$2; look=$3; shift 3
+            xcrun simctl ui "$UDID" appearance "$look"
+            xcrun simctl terminate "$UDID" com.pranaybop.log 2>/dev/null || true
+            xcrun simctl launch --console-pty "$UDID" com.pranaybop.log -demo "$tab" "$@" > "$RUNNER_TEMP/$name.log" 2>&1 < /dev/null &
+            sleep 14
+            if ! xcrun simctl spawn "$UDID" launchctl list | grep -q "com.pranaybop.log"; then
+              echo "::error::$name: the app isn't running (crashed?)"; fail=1
+            fi
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/$name.png" >/dev/null
+            sips -s format jpeg -s formatOptions 60 --resampleWidth 560 "$RUNNER_TEMP/$name.png" --out "$RUNNER_TEMP/$name.jpg" >/dev/null
+            echo "::group::console $name"; grep -v "^$" "$RUNNER_TEMP/$name.log" | tail -40 || true; echo "::endgroup::"
+            if grep -E "\[error\].*(ReferenceError|TypeError|SyntaxError)|Unhandled Promise|Fatal error|SwiftUI.*(crash|fault)" "$RUNNER_TEMP/$name.log"; then
+              echo "::error::$name: error in the app's console"; fail=1
+            fi
+            base64 -i "$RUNNER_TEMP/$name.jpg" | tr -d '\n' | fold -w 4000 | sed "s/^/IMGDATA $name /"
+            echo
+          }
+          # Warm up once: the first launch on a fresh simulator is slow.
+          xcrun simctl launch "$UDID" com.pranaybop.log -demo today >/dev/null < /dev/null; sleep 25; xcrun simctl terminate "$UDID" com.pranaybop.log || true
+          for f in ios-app/ios/screenshots/*.txt; do
+            while read -r name tab look rest <&3; do
+              case "$name" in ""|\#*) continue ;; esac
+              # shellcheck disable=SC2086
+              shoot "$name" "$tab" "$look" $rest
+            done 3< "$f"
+          done
+          exit $fail
+
+      - name: Result
+        env:
+          SOFT: ${{ inputs.soft }}
+        run: |
+          P="${{ steps.package.outcome }}"; B="${{ steps.build.outcome }}"; S="${{ steps.shots.outcome }}"
+          echo "package tests: $P, build: $B, screenshots: $S"
+          if [ "$P" = success ] && [ "$B" = success ] && [ "$S" = success ]; then R=PASS; else R=FAIL; fi
+          echo "NATIVE-CHECK: $R"
+          echo "### NATIVE-CHECK: $R (package tests $P, build $B, screenshots $S)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$R" = FAIL ] && [ "$SOFT" != "true" ]; then exit 1; fi

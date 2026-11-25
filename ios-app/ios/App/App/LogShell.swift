@@ -1,15 +1,20 @@
 import UIKit
 import WebKit
-import Security
 import Capacitor
+import LogCore
+import LogUI
+import LogHealth
 
-// The native shell around Log's screens (stage 1 of going native, Nov 2026).
+// The native shell around Log's screens (going native in stages, from 1.2).
 //
-// - A native UITabBarController with the four tabs. Built with the iOS 26 SDK it gets Liquid Glass
-//   on iOS 26, and older systems get the standard translucent bar.
-// - One Capacitor web view shows the screens. Picking a tab moves it into that tab and tells the
-//   page to switch, so nothing reloads and every screen keeps its state.
-// - The passcode lives in the Keychain, not in the web view's storage.
+// - A native UITabBarController with the four tabs (Liquid Glass with the iOS 26 SDK).
+// - Each tab shows its native SwiftUI screen once that screen is ready (the LogNative package,
+//   NativeScreens.isReady). Until then it shows the web version, from one Capacitor web view that
+//   moves between those tabs, so nothing reloads.
+// - The passcode lives in the Keychain (LogCore.PasscodeStore). With any native screen on, the lock
+//   screen is native too, and locking or unlocking on either side keeps the other in step.
+// - Apple Health sync runs natively once NativeHealthSync.isReady; the web sync then turns itself off
+//   (window.LOG_NATIVE.healthSync).
 // - The page talks to the shell through `window.webkit.messageHandlers.logShell` (with replies), and
 //   learns it's inside the shell from `window.LOG_NATIVE`, set before any of its scripts run.
 
@@ -25,46 +30,6 @@ enum LogTab: Int, CaseIterable {
         case .trends: return "chart.xyaxis.line"
         case .log: return "plus.circle"
         }
-    }
-}
-
-// MARK: - Keychain
-
-enum PasscodeStore {
-    private static let service = "com.pranaybop.log"
-    private static let account = "passcode"
-
-    private static var query: [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: service,
-         kSecAttrAccount as String: account]
-    }
-
-    static func read() -> String? {
-        var q = query
-        q[kSecReturnData as String] = true
-        q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess,
-              let data = out as? Data,
-              let text = String(data: data, encoding: .utf8),
-              !text.isEmpty else { return nil }
-        return text
-    }
-
-    static func write(_ passcode: String) {
-        let data = Data(passcode.utf8)
-        let attrs: [String: Any] = [kSecValueData as String: data,
-                                    kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
-        if SecItemUpdate(query as CFDictionary, attrs as CFDictionary) == errSecItemNotFound {
-            var add = query
-            add.merge(attrs) { $1 }
-            SecItemAdd(add as CFDictionary, nil)
-        }
-    }
-
-    static func clear() {
-        SecItemDelete(query as CFDictionary)
     }
 }
 
@@ -86,23 +51,35 @@ final class ShellMessages: NSObject, WKScriptMessageHandlerWithReply {
             shell?.select(tabId: body["tab"] as? String ?? "")
             replyHandler(true, nil)
         case "locked":
-            shell?.setLocked(body["locked"] as? Bool ?? false)
+            shell?.webLockChanged(body["locked"] as? Bool ?? false)
             replyHandler(true, nil)
         case "getPasscode":
             replyHandler(PasscodeStore.read() ?? "", nil)
         case "setPasscode":
             if let code = body["passcode"] as? String, !code.isEmpty { PasscodeStore.write(code) }
+            shell?.keychainChanged()
             replyHandler(true, nil)
         case "clearPasscode":
             PasscodeStore.clear()
+            shell?.keychainChanged()
             replyHandler(true, nil)
+        case "syncHealth":
+            // Pull to refresh on a web tab, with the native Apple Health sync on: last 2 days.
+            guard let sync = LogStore.shared.healthSync, !LogStore.shared.isDemo else {
+                replyHandler(false, nil)
+                return
+            }
+            Task { @MainActor in
+                await sync(2)
+                replyHandler(true, nil)
+            }
         default:
             replyHandler(nil, "unknown message \(type)")
         }
     }
 }
 
-// MARK: - The web view
+// MARK: - The web view (for tabs that aren't native yet)
 
 final class LogBridgeViewController: CAPBridgeViewController {
     let messages = ShellMessages()
@@ -120,7 +97,7 @@ final class LogBridgeViewController: CAPBridgeViewController {
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? ""
         let build = info["CFBundleVersion"] as? String ?? ""
-        let source = "window.LOG_NATIVE = Object.freeze({ tabs: true, keychain: true, version: \(jsString(version)), build: \(jsString(build)) });"
+        let source = "window.LOG_NATIVE = Object.freeze({ tabs: true, keychain: true, healthSync: \(NativeHealthSync.isReady), version: \(jsString(version)), build: \(jsString(build)) });"
         controller.addUserScript(WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         controller.addScriptMessageHandler(messages, contentWorld: .page, name: "logShell")
         #if DEBUG
@@ -144,20 +121,26 @@ final class LogBridgeViewController: CAPBridgeViewController {
     }
 }
 
+/// A tab whose screen is still the web version: the shared web view moves in when it's picked.
+final class WebHost: UIViewController {}
+
 // MARK: - Tabs
 
 final class ShellTabBarController: UITabBarController, UITabBarControllerDelegate {
-    let bridgeController = LogBridgeViewController()
+    private var store: LogStore { LogStore.shared }
     private var hosts: [UIViewController] = []
+    private var bridge: LogBridgeViewController?
+    private weak var lockScreen: UIViewController?
+    /// With any native screen, the lock screen is native as well.
+    private var nativeLock: Bool { NativeScreens.anyReady }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         delegate = self
-        bridgeController.messages.shell = self
         view.backgroundColor = .systemGroupedBackground
 
         hosts = LogTab.allCases.map { tab in
-            let host = UIViewController()
+            let host = NativeScreens.make(tab.id, store: store) ?? WebHost()
             host.view.backgroundColor = .systemGroupedBackground
             let image = UIImage(systemName: tab.symbol) ?? UIImage(systemName: "circle")
             host.tabBarItem = UITabBarItem(title: tab.title, image: image, tag: tab.rawValue)
@@ -174,47 +157,126 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
             tabBarMinimizeBehavior = .onScrollDown
         }
         #endif
-        embedBridge(in: hosts[0])
+
+        if NativeHealthSync.isReady {
+            store.healthSync = { days in _ = await NativeHealthSync.shared.sync(days: days) }
+        }
+        store.onLockChange = { [weak self] locked in self?.nativeLockChanged(locked) }
+
+        var start = 0
+        #if DEBUG
+        if let demo = store.demoTab, let tab = LogTab.allCases.first(where: { $0.id == demo }) { start = tab.rawValue }
+        #endif
+        selectedIndex = start
+
+        // The web view loads up front while any tab still uses it.
+        if let firstWeb = hosts.first(where: { $0 is WebHost }) {
+            embedBridge(in: hosts[start] is WebHost ? hosts[start] : firstWeb)
+        } else if !NativeHealthSync.isReady {
+            // Every screen is native but Apple Health still syncs through the web app: keep it, hidden.
+            let b = webBridge()
+            addChild(b)
+            b.view.isHidden = true
+            view.insertSubview(b.view, at: 0)
+            b.didMove(toParent: self)
+        }
+        if nativeLock {
+            Task { await store.start() }
+        }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if nativeLock && store.isLocked { presentLock() }
+    }
+
+    private func webBridge() -> LogBridgeViewController {
+        if let b = bridge { return b }
+        let b = LogBridgeViewController()
+        b.messages.shell = self
+        bridge = b
+        return b
     }
 
     private func embedBridge(in host: UIViewController) {
-        guard bridgeController.parent !== host else { return }
-        if bridgeController.parent != nil {
-            bridgeController.willMove(toParent: nil)
-            bridgeController.view.removeFromSuperview()
-            bridgeController.removeFromParent()
+        let b = webBridge()
+        guard b.parent !== host else { return }
+        if b.parent != nil {
+            b.willMove(toParent: nil)
+            b.view.removeFromSuperview()
+            b.removeFromParent()
         }
-        host.addChild(bridgeController)
-        bridgeController.view.frame = host.view.bounds
-        bridgeController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        host.view.addSubview(bridgeController.view)
-        bridgeController.didMove(toParent: host)
-        if let scroll = bridgeController.webView?.scrollView {
+        host.addChild(b)
+        b.view.frame = host.view.bounds
+        b.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        host.view.addSubview(b.view)
+        b.didMove(toParent: host)
+        if let scroll = b.webView?.scrollView {
             host.setContentScrollView(scroll, for: .bottom)
         }
     }
 
-    // Picking a tab (or the current one again, which scrolls to the top) tells the page.
+    // Picking a web tab (or the current one again, which scrolls to the top) tells the page.
     func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
         guard let index = hosts.firstIndex(of: viewController), let tab = LogTab(rawValue: index) else { return true }
-        embedBridge(in: viewController)
-        bridgeController.run("window.logShellSelectTab && window.logShellSelectTab('\(tab.id)')")
+        if viewController is WebHost {
+            embedBridge(in: viewController)
+            bridge?.run("window.logShellSelectTab && window.logShellSelectTab('\(tab.id)')")
+        }
         return true
     }
 
     // The page switched tabs on its own (a "Details" link, say): follow it.
     func select(tabId: String) {
         guard let tab = LogTab.allCases.first(where: { $0.id == tabId }), selectedIndex != tab.rawValue else { return }
-        embedBridge(in: hosts[tab.rawValue])
+        if hosts[tab.rawValue] is WebHost { embedBridge(in: hosts[tab.rawValue]) }
         selectedIndex = tab.rawValue
     }
 
-    // No tabs on the lock screen.
-    func setLocked(_ locked: Bool) {
+    // MARK: Lock
+
+    /// The page showed or left its lock screen. With a native lock screen, that one covers everything.
+    func webLockChanged(_ locked: Bool) {
+        if nativeLock {
+            keychainChanged()
+            return
+        }
         if #available(iOS 18.0, *) {
             setTabBarHidden(locked, animated: true)
         } else {
             tabBar.isHidden = locked
         }
+    }
+
+    /// The page saved or cleared the passcode (or locked after a rejected one).
+    func keychainChanged() {
+        store.syncLockFromKeychain()
+        guard nativeLock else { return }
+        if store.isLocked { presentLock() } else { dismissLock() }
+    }
+
+    /// The native side locked or unlocked: show or hide the lock screen and tell the page.
+    private func nativeLockChanged(_ locked: Bool) {
+        if locked {
+            presentLock()
+            bridge?.run("typeof lock === 'function' && lock()")
+        } else {
+            dismissLock()
+            bridge?.run("typeof boot === 'function' && boot()")
+            Task { await store.start() }
+        }
+    }
+
+    private func presentLock() {
+        guard nativeLock, lockScreen == nil, view.window != nil else { return }
+        let lock = NativeScreens.makeLockScreen(store: store)
+        lockScreen = lock
+        present(lock, animated: false)
+    }
+
+    private func dismissLock() {
+        guard let lock = lockScreen else { return }
+        lock.dismiss(animated: true)
+        lockScreen = nil
     }
 }

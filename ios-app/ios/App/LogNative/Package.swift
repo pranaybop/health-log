@@ -1,0 +1,23 @@
+// swift-tools-version: 5.10
+import PackageDescription
+
+// The native side of Log (going native in stages, Nov 2026). The Xcode project links the
+// "LogNative" product; every .swift file under Sources/ is compiled automatically, so adding a
+// file never touches the project file.
+//
+//   LogCore    data models, Supabase calls, Central-time dates, core calculations, the shared store
+//   LogUI      SwiftUI screens (Shared/, Today/, Meds/, Log/, Trends/)
+//   LogHealth  Apple Health sync in Swift, with background refresh
+let package = Package(
+    name: "LogNative",
+    platforms: [.iOS(.v17)],
+    products: [
+        .library(name: "LogNative", targets: ["LogCore", "LogUI", "LogHealth"])
+    ],
+    targets: [
+        .target(name: "LogCore"),
+        .target(name: "LogUI", dependencies: ["LogCore"]),
+        .target(name: "LogHealth", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("HealthKit")]),
+        .testTarget(name: "LogCoreTests", dependencies: ["LogCore"], resources: [.copy("Fixtures")]),
+    ]
+)

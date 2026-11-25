@@ -4,6 +4,11 @@ name: Tests
 
 on:
   workflow_call:
+    inputs:
+      # Work branches: report a failure in the log and summary without failing the run.
+      soft:
+        type: boolean
+        default: false
   workflow_dispatch:
   push:
     branches: [main]
@@ -35,11 +40,20 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Bundled copy matches ios-app/www
+        continue-on-error: ${{ inputs.soft == true }}
         run: diff -r --exclude=cordova.js --exclude=cordova_plugins.js ios-app/www ios-app/ios/App/App/public
 
       - name: Run tests
+        id: run
+        continue-on-error: ${{ inputs.soft == true }}
         working-directory: tests
         run: npm test
+
+      - name: Result
+        if: always()
+        run: |
+          echo "WEB-TESTS: ${{ steps.run.outcome }}"
+          echo "### WEB-TESTS: ${{ steps.run.outcome }}" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()

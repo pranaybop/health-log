@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import LogHealth
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -13,6 +14,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.makeKeyAndVisible()
 
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+    }
+
+    // Leaving the app: ask iOS for the next background Apple Health catch-up.
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        NativeHealthSync.scheduleBackgroundRefresh()
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {

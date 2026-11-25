@@ -51,6 +51,15 @@
 	<array>
 		<string>armv7</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.pranaybop.log.healthsync</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Log reads your steps, sleep, resting heart rate, HRV, weigh-ins, body fat and workouts from Apple Health to show them on your dashboard.</string>
 	<key>NSHealthUpdateUsageDescription</key>
