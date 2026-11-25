@@ -96,6 +96,77 @@ function ema(values, span) {
   return out;
 }
 
+/* Time-aware exponential smoothing for irregular weigh-ins: each reading pulls the
+   trend toward it by 1 - e^(-dt / tau). Long gaps let a new reading count almost fully;
+   same-day repeats barely move it. */
+function smoothWeights(parsed, tauDays) {
+  const tau = tauDays || 7;
+  let trend = null;
+  let prev = null;
+  return parsed.map((w) => {
+    if (trend == null) trend = w.lb;
+    else {
+      const dt = Math.max(0, (w.at - prev) / 86400000);
+      trend += (1 - Math.exp(-dt / tau)) * (w.lb - trend);
+    }
+    prev = w.at;
+    return { ...w, trend };
+  });
+}
+
+function trendAt(smoothed, at) {
+  let hit = null;
+  for (const w of smoothed) {
+    if (w.at <= at) hit = w;
+    else break;
+  }
+  return hit ? hit.trend : null;
+}
+
+/* Trend change per week over the last `days` days (negative = losing). */
+function trendRate(smoothed, days) {
+  if (smoothed.length < 2) return null;
+  const last = smoothed[smoothed.length - 1];
+  const from = trendAt(smoothed, new Date(last.at.getTime() - days * 86400000));
+  if (from == null) return null;
+  return ((last.trend - from) / days) * 7;
+}
+
+/* Straight-line pace through the last `days` days of weigh-ins (one per day). */
+function recentPace(parsed, days) {
+  if (!parsed.length) return null;
+  const last = parsed[parsed.length - 1];
+  const daily = dailyWeight(parsed.filter((w) => w.at >= new Date(last.at.getTime() - days * 86400000)));
+  if (daily.length < 4) return null;
+  const t0 = daily[0].at.getTime();
+  const span = (daily[daily.length - 1].at.getTime() - t0) / 86400000;
+  if (span < 7) return null;
+  const fit = linearFit(daily.map((w) => ({ x: (w.at.getTime() - t0) / 86400000, y: w.lb })));
+  if (!fit) return null;
+  return { weekly: fit.slope * 7, fittedNow: fit.intercept + fit.slope * span, n: daily.length };
+}
+
+/* Drug level on a real time axis, every `stepHours`, from the first dose to two weeks after the switch. */
+function levelPoints(doses, protocol, stepHours) {
+  const real = (doses || []).filter((d) => !d.skipped && parseTs(d.taken_at) && num(d.dose_mg) != null);
+  if (!real.length) return null;
+  const planned = plannedDoses(doses, protocol).withNext;
+  const start = parseTs(real[0].taken_at);
+  const end = new Date(RETA_START.getTime() + 14 * 86400000);
+  const step = (stepHours || 6) * 3600000;
+  const times = new Set();
+  for (let t = start.getTime(); t <= end.getTime(); t += step) times.add(t);
+  // Add each shot's instant (and the moment before) so peaks are sharp, not smeared over a step.
+  for (const d of planned) {
+    const t = parseTs(d.taken_at).getTime();
+    if (t > start.getTime() && t <= end.getTime()) { times.add(t - 60000); times.add(t); }
+  }
+  const sorted = [...times].sort((a, b) => a - b);
+  const logged = sorted.map((t) => ({ t: new Date(t), v: remainingAt(new Date(t), real, protocol) }));
+  const withNext = sorted.map((t) => ({ t: new Date(t), v: remainingAt(new Date(t), planned, protocol) }));
+  return { logged, withNext, start, end };
+}
+
 function linearFit(points) {
   // points: {x days, y}
   const n = points.length;

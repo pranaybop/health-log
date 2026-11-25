@@ -16,6 +16,7 @@ const SITE_LABELS = {
 };
 
 const PASS_KEY = "log.passcode";
+let lastWidth = 0;
 
 const state = {
   token: "",
@@ -24,12 +25,15 @@ const state = {
   error: null,
   loading: true,
   updating: false,
-  weightRange: "90d",
+  weightRange: "3m",
   tab: "today",
   formMessage: null,
   formBusy: false,
   explorerX: "weight",
   explorerY: "steps",
+  editTargets: false,
+  gateLetters: false,
+  openForms: { threetap: true },
 };
 
 function readToken() {
@@ -181,7 +185,7 @@ async function fetchData() {
   return res.json();
 }
 
-async function load(isRefresh) {
+async function load(isRefresh, background) {
   if (!hasCredential()) {
     state.loading = false;
     state.data = null;
@@ -193,7 +197,7 @@ async function load(isRefresh) {
     state.loading = true;
     state.error = null;
   }
-  render();
+  if (!background) render();
   try {
     const data = await fetchData();
     state.data = data;
@@ -216,7 +220,13 @@ async function load(isRefresh) {
   } finally {
     state.loading = false;
     state.updating = false;
-    render();
+    // A background refresh never redraws the Log tab, so half-filled forms survive.
+    if (background && state.tab === "log" && state.data) {
+      const btn = document.querySelector('.icon-btn[aria-label="Refresh"]');
+      if (btn) btn.disabled = state.formBusy;
+    } else {
+      render();
+    }
   }
 }
 
@@ -247,12 +257,21 @@ function lock() {
   render();
 }
 
-function metric(label, value, detail, feature) {
-  return el("div", { class: feature ? "metric feature" : "metric" },
-    el("span", { class: "label" }, label),
-    el("span", { class: "value" }, value),
-    detail ? el("span", { class: "detail" }, detail) : null,
-  );
+/* ---------- small building blocks ---------- */
+
+const ICONS = {
+  today: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+  meds: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v4.6L6.4 17.4A2.6 2.6 0 0 0 8.8 21h6.4a2.6 2.6 0 0 0 2.4-3.6L14 7.6V3"/><path d="M7.6 14h8.8"/></svg>',
+  trends: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 19.5h17"/><path d="M5 15.5l4.5-5 3.5 3.5L19.5 7"/></svg>',
+  log: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4.5"/><path d="M12 8.5v7M8.5 12h7"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 11.5a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v5h-5"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.8"/><path d="M8.5 10.5V7.8a3.5 3.5 0 0 1 7 0v2.7"/></svg>',
+};
+
+function icon(name) {
+  const s = el("span", { class: "icon" });
+  s.innerHTML = ICONS[name];
+  return s;
 }
 
 function prop(k, v) {
@@ -263,66 +282,54 @@ function prop(k, v) {
 }
 
 function card(title, ...kids) {
-  return el("section", { class: "card" }, el("h2", null, title), ...kids);
+  return el("section", { class: "card" }, title ? el("h2", null, title) : null, ...kids);
 }
 
-function lineChart(seriesList, opts) {
-  const width = 640;
-  const height = 220;
-  const pad = { l: 44, r: 12, t: 16, b: 28 };
-  const all = seriesList.flatMap((s) => s.values.filter((v) => Number.isFinite(v)));
-  if (!all.length) return el("p", { class: "caption" }, "Not enough points to chart.");
-  const lo = opts.floor != null ? opts.floor : Math.min(...all);
-  const hi = opts.ceiling != null ? opts.ceiling : Math.max(...all);
-  const span = hi - lo || 1;
-  const n = seriesList[0].values.length;
-  const xs = (i) => pad.l + (n === 1 ? 0 : (i / (n - 1)) * (width - pad.l - pad.r));
-  const ys = (v) => pad.t + (1 - (v - lo) / span) * (height - pad.t - pad.b);
-  const ticks = [lo, lo + span / 2, hi];
-  const labelIdx = (opts.labels || []).map((lab, i) => (lab ? i : -1)).filter((i) => i >= 0);
-
-  let svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${opts.aria || "Chart"}">`;
-  for (const t of ticks) {
-    svg += `<line class="gridline" x1="${pad.l}" x2="${width - pad.r}" y1="${ys(t)}" y2="${ys(t)}" />`;
-    svg += `<text class="axis" x="${pad.l - 8}" y="${ys(t) + 3}" text-anchor="end">${opts.format ? opts.format(t) : fmtNum(t, 1)}</text>`;
-  }
-  seriesList.forEach((s, si) => {
-    const pts = s.values
-      .map((v, i) => (Number.isFinite(v) ? `${xs(i).toFixed(1)},${ys(v).toFixed(1)}` : null))
-      .filter(Boolean);
-    if (!pts.length) return;
-    const cls = (si === 0 ? "line" : "line alt") + (s.dashed ? " dash" : "");
-    if (si === 0 && opts.area) {
-      const first = s.values.findIndex((v) => Number.isFinite(v));
-      const last = s.values.length - 1 - [...s.values].reverse().findIndex((v) => Number.isFinite(v));
-      svg += `<polygon class="area" points="${xs(first)},${ys(lo)} ${pts.join(" ")} ${xs(last)},${ys(lo)}" />`;
-    }
-    svg += `<polyline class="${cls}" points="${pts.join(" ")}" />`;
-  });
-  for (const i of labelIdx) {
-    svg += `<text class="lbl" x="${xs(i)}" y="${height - 8}" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}">${opts.labels[i]}</text>`;
-  }
-  for (const mark of opts.marks || []) {
-    if (mark.i == null) continue;
-    svg += `<line class="mark" x1="${xs(mark.i)}" x2="${xs(mark.i)}" y1="${pad.t}" y2="${height - pad.b}" />`;
-    if (mark.text) {
-      svg += `<text class="marklbl" x="${xs(mark.i) + 4}" y="${pad.t + 10}">${mark.text}</text>`;
-    }
-  }
-  svg += "</svg>";
-  const wrap = el("div");
-  wrap.innerHTML = svg;
-  return wrap;
+function cardWithAction(title, action, ...kids) {
+  return el("section", { class: "card" },
+    el("div", { class: "card-head" }, el("h2", null, title), action),
+    ...kids,
+  );
 }
+
+function metric(label, value, detail, feature) {
+  return el("div", { class: feature ? "metric feature" : "metric" },
+    el("span", { class: "label" }, label),
+    el("span", { class: "value" }, value),
+    detail ? el("span", { class: "detail" }, detail) : null,
+  );
+}
+
+/* A line above a chart that shows the latest value, and the scrubbed value while dragging. */
+function readout(defaultMain, defaultSub) {
+  const main = el("span", { class: "ro-main" }, defaultMain);
+  const sub = el("span", { class: "ro-sub" }, defaultSub || "");
+  const node = el("div", { class: "readout" }, main, sub);
+  return {
+    node,
+    set(m, s) { main.textContent = m; sub.textContent = s || ""; node.classList.add("live"); },
+    reset() { main.textContent = defaultMain; sub.textContent = defaultSub || ""; node.classList.remove("live"); },
+  };
+}
+
+function signed(v, digits) {
+  const n = num(v);
+  if (n == null) return "—";
+  const s = fmtNum(Math.abs(n), digits == null ? 1 : digits);
+  return n > 0 ? `+${s}` : n < 0 ? `−${s}` : s;
+}
+
+function isStandalone() {
+  return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+}
+
+/* ---------- data helpers ---------- */
 
 function todayTotals(data) {
   const key = todayKey();
   const row = (data.daily_totals || []).find((d) => d.date === key);
   if (row) return row;
-  const meals = (data.meals || []).filter((m) => {
-    const t = parseTs(m.eaten_at);
-    return t && dateKeyCT(t) === key;
-  });
+  const meals = todayMeals(data);
   if (!meals.length) return null;
   const sum = (f) => meals.reduce((a, m) => a + (num(m[f]) || 0), 0);
   return {
@@ -345,158 +352,455 @@ function todayMeals(data) {
 }
 
 function latestHealth(data) {
-  const rows = data.daily_health || [];
+  const rows = (data.daily_health || []).filter((r) => r.steps != null || r.sleep_hours != null || r.resting_hr != null);
   return rows.length ? rows[rows.length - 1] : null;
 }
 
-function weightStats(weights) {
-  if (!weights.length) return null;
-  const parsed = weights
-    .map((w) => ({ at: parseTs(w.measured_at), lb: num(w.weight_lb), notes: w.notes }))
-    .filter((w) => w.at && w.lb != null)
-    .sort((a, b) => a.at - b.at);
-  if (!parsed.length) return null;
-  const current = parsed[parsed.length - 1];
-  const start = parsed.find((w) => w.at >= TIRZ_START) || parsed[0];
-  return { parsed, current, start, change: current.lb - start.lb };
-}
+const RANGES = [
+  { id: "1m", label: "1M", days: 30 },
+  { id: "3m", label: "3M", days: 91 },
+  { id: "1y", label: "1Y", days: 365 },
+  { id: "all", label: "All", days: null },
+];
 
-function filterWeights(parsed, range) {
-  if (range === "all") return parsed;
-  const days = range === "1y" ? 365 : 90;
-  const cut = Date.now() - days * 86400000;
-  const subset = parsed.filter((w) => w.at.getTime() >= cut);
-  return subset.length ? subset : parsed.slice(-2);
-}
+/* Calorie and protein targets: a goals row wins (kind "calories" / "protein"); otherwise this device's setting. */
+const TARGET_KEY = "log.targets";
 
-function scatterChart(pairs, opts) {
-  const width = 640;
-  const height = 220;
-  const pad = { l: 44, r: 12, t: 16, b: 28 };
-  if (!pairs.length) return el("p", { class: "empty" }, "Not enough overlapping days for those two metrics.");
-  const xs = pairs.map((p) => p.x);
-  const ys = pairs.map((p) => p.y);
-  const xlo = Math.min(...xs), xhi = Math.max(...xs);
-  const ylo = Math.min(...ys), yhi = Math.max(...ys);
-  const xspan = xhi - xlo || 1;
-  const yspan = yhi - ylo || 1;
-  const X = (v) => pad.l + ((v - xlo) / xspan) * (width - pad.l - pad.r);
-  const Y = (v) => pad.t + (1 - (v - ylo) / yspan) * (height - pad.t - pad.b);
-  let svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${opts.aria || "Scatter"}">`;
-  svg += `<line class="gridline" x1="${pad.l}" x2="${width - pad.r}" y1="${Y(ylo)}" y2="${Y(ylo)}" />`;
-  svg += `<text class="axis" x="${pad.l - 8}" y="${Y(ylo) + 3}" text-anchor="end">${fmtNum(ylo, 1)}</text>`;
-  svg += `<text class="axis" x="${pad.l - 8}" y="${Y(yhi) + 3}" text-anchor="end">${fmtNum(yhi, 1)}</text>`;
-  svg += `<text class="lbl" x="${pad.l}" y="${height - 8}" text-anchor="start">${fmtNum(xlo, 1)}</text>`;
-  svg += `<text class="lbl" x="${width - pad.r}" y="${height - 8}" text-anchor="end">${fmtNum(xhi, 1)}</text>`;
-  for (const p of pairs) {
-    svg += `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="4" fill="currentColor" opacity="0.75" />`;
+function readLocalTargets() {
+  try {
+    const t = JSON.parse(localStorage.getItem(TARGET_KEY) || "null");
+    return t && typeof t === "object" ? t : {};
+  } catch (_) {
+    return {};
   }
-  svg += "</svg>";
-  const wrap = el("div");
-  wrap.innerHTML = svg;
-  return wrap;
 }
+
+function saveLocalTargets(t) {
+  try { localStorage.setItem(TARGET_KEY, JSON.stringify(t)); } catch (_) { /* ignore */ }
+}
+
+function goalTarget(data, kinds) {
+  const g = (data.goals || []).find((x) => kinds.includes(String(x.kind || "").toLowerCase())
+    && String(x.status || "active").toLowerCase() === "active" && num(x.target) != null);
+  return g ? num(g.target) : null;
+}
+
+function getTargets(data) {
+  const local = readLocalTargets();
+  const cal = goalTarget(data, ["calories", "calorie", "kcal"]);
+  const pro = goalTarget(data, ["protein", "protein_g"]);
+  return {
+    calories: cal != null ? cal : num(local.calories),
+    protein: pro != null ? pro : num(local.protein),
+    fromGoals: cal != null || pro != null,
+  };
+}
+
+/* ---------- shell ---------- */
+
+const TABS = [
+  { id: "today", label: "Today" },
+  { id: "meds", label: "Meds" },
+  { id: "trends", label: "Trends" },
+  { id: "log", label: "Log" },
+];
 
 function tabNav() {
-  const tabs = [
-    { id: "today", label: "Today" },
-    { id: "meds", label: "Meds" },
-    { id: "trends", label: "Trends" },
-    { id: "log", label: "Log" },
-  ];
   return el("nav", { class: "tabnav", "aria-label": "Sections" },
-    ...tabs.map((t) => el("button", {
+    ...TABS.map((t) => el("button", {
       type: "button",
       "aria-current": state.tab === t.id ? "page" : null,
-      onClick: () => { state.tab = t.id; state.formMessage = null; render(); },
-    }, t.label)),
+      onClick: () => {
+        if (state.tab === t.id) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+        state.tab = t.id;
+        state.formMessage = null;
+        render();
+        window.scrollTo(0, 0);
+      },
+    }, icon(t.id), el("span", null, t.label))),
   );
 }
 
-function renderJourney(data) {
-  const j = journeyStats(data);
-  if (!j) return card("Journey", el("p", { class: "empty" }, "Needs a weigh-in to start the journey header."));
-  const pace = j.pace
-    ? (j.pace.met
-      ? "At or past the goal."
-      : j.pace.stalled
-        ? `${fmtNum(j.pace.toGo, 1)} lb to go · pace is too flat to date.`
-        : `${fmtNum(j.pace.toGo, 1)} lb to go · ${fmtNum(j.pace.rate, 1)} lb/week since the first post-dose weigh-in, would reach ${fmtNum(j.goalLb, 0)} around ${fmtDateCT(j.pace.eta, true)}.`)
-    : (j.goalLb != null ? "Set a goal to see pace." : "No goal weight set.");
-  return card("Journey",
-    el("div", { class: "journey" },
-      metric("Start", `${fmtNum(j.startLb, 1)} lb`, "WeightSnap start"),
-      metric("Current", `${fmtNum(j.current.lb, 1)} lb`, fmtDateCT(j.current.at, true)),
-      metric("Change", `${j.changeStart > 0 ? "+" : ""}${fmtNum(j.changeStart, 1)} lb`, `Since start · ${j.changeTirz > 0 ? "+" : ""}${fmtNum(j.changeTirz, 1)} lb since ${fmtDateCT(j.sinceTirz.at, false)}`),
-      metric("Goal", j.goalLb != null ? `${fmtNum(j.goalLb, 1)} lb` : "—", pace),
+function renderTopbar(data) {
+  const asOf = parseTs(data.as_of) || new Date();
+  const title = (TABS.find((t) => t.id === state.tab) || TABS[0]).label;
+  const updated = state.error === "refresh-failed"
+    ? `Couldn’t refresh. Showing data from ${fmtTimeCT(asOf)}.`
+    : state.updating ? "Refreshing…" : `Updated ${fmtTimeCT(asOf).replace(" CT", "")}`;
+  const sub = state.tab === "today" ? `${fmtLongDateCT(new Date())}` : updated;
+  return el("header", { class: "topbar" },
+    el("div", { class: "titles" },
+      el("div", { class: "eyebrow-date" + (state.error === "refresh-failed" && state.tab !== "today" ? " err" : "") }, sub),
+      el("h1", null, title),
     ),
+    el("div", { class: "top-actions" },
+      el("button", { type: "button", class: "icon-btn", "aria-label": "Refresh", disabled: state.updating || state.formBusy, onClick: () => load(true) }, icon("refresh")),
+      el("button", { type: "button", class: "icon-btn", "aria-label": "Lock", disabled: state.updating || state.formBusy, onClick: lock }, icon("lock")),
+    ),
+  );
+}
+
+function fmtLongDateCT(date) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" }).format(date);
+}
+
+function fmtDateYearCT(date) {
+  const p = partsInTZ(date);
+  const thisYear = partsInTZ(new Date()).year;
+  return p.year === thisYear ? fmtDateCT(date, true) : `${fmtDateCT(date, true)}, ${p.year}`;
+}
+
+/* ---------- Today ---------- */
+
+function renderHero(data) {
+  const parsed = parseWeights(data.weights || []);
+  if (!parsed.length) {
+    return el("section", { class: "hero" }, el("p", { class: "empty" }, "Log a weigh-in on the Log tab to start your journey."));
+  }
+  const sm = smoothWeights(parsed);
+  const cur = parsed[parsed.length - 1];
+  const trendNow = sm[sm.length - 1].trend;
+  const j = journeyStats(data);
+  const start = j.startLb;
+  const goal = j.goalLb;
+  const lost = start - cur.lb;
+  const total = goal != null ? start - goal : null;
+  const pct = total && total > 0 ? Math.max(0, Math.min(1, lost / total)) : null;
+  const rp = recentPace(parsed, 28);
+
+  let pace;
+  if (goal != null && cur.lb <= goal) pace = "You’re at or below your goal weight.";
+  else if (goal != null && rp && rp.weekly < -0.1) {
+    const weeks = (rp.fittedNow - goal) / -rp.weekly;
+    const eta = new Date(Date.now() + weeks * 7 * 86400000);
+    pace = `At your pace over the last 4 weeks of weigh-ins, ${fmtNum(goal, 0)} lb lands around ${fmtDateYearCT(eta)}.`;
+  } else if (goal != null && rp) pace = "Your last 4 weeks of weigh-ins are flat, so there’s no arrival date yet.";
+  else if (goal != null) pace = "A few more weigh-ins over the next week will show your pace.";
+
+  const deltaCls = lost > 0 ? "chip good" : lost < 0 ? "chip watch" : "chip";
+  return el("section", { class: "hero", "aria-label": "Weight journey" },
+    el("div", { class: "hero-num" }, fmtNum(cur.lb, 1), el("span", { class: "unit" }, "lb")),
+    el("div", { class: "hero-meta" }, `Weighed ${fmtDateCT(cur.at, true)}, ${fmtTimeCT(cur.at)}`),
+    el("div", { class: "hero-chips" },
+      el("span", { class: deltaCls }, `${signed(-lost)} lb since start`),
+      rp ? el("span", { class: "chip" }, `${signed(rp.weekly)} lb a week lately`) : null,
+    ),
+    pct != null ? el("div", { class: "course" },
+      el("div", { class: "course-track", role: "img", "aria-label": `${fmtNum(lost, 1)} of ${fmtNum(total, 1)} pounds to goal` },
+        el("div", { class: "course-fill", style: { width: `${(pct * 100).toFixed(1)}%` } }),
+        el("div", { class: "course-dot", style: { left: `${(pct * 100).toFixed(1)}%` } }),
+      ),
+      el("div", { class: "course-ends" },
+        el("span", null, el("b", null, fmtNum(start, 1)), " start"),
+        el("span", { class: "mid" }, `${fmtNum(Math.max(0, lost), 1)} of ${fmtNum(total, 1)} lb, ${Math.round(pct * 100)}%`),
+        el("span", null, el("b", null, fmtNum(goal, 0)), " goal"),
+      ),
+    ) : null,
+    pace ? el("p", { class: "hero-pace" }, pace) : null,
+  );
+}
+
+function gauge(kind, label, value, target, unit) {
+  const has = value != null;
+  const hasT = target != null && target > 0;
+  const pct = has && hasT ? value / target : 0;
+  let status = "";
+  if (has && hasT) {
+    const diff = target - value;
+    status = kind === "protein"
+      ? (diff > 0 ? `${fmtNum(diff, 0)} ${unit} to go` : `Hit, ${fmtNum(-diff, 0)} ${unit} over`)
+      : (diff >= 0 ? `${fmtNum(diff, 0)} left` : `${fmtNum(-diff, 0)} over`);
+  }
+  return el("div", { class: `gauge ${kind}` },
+    el("div", { class: "gauge-row" },
+      el("span", { class: "gauge-label" }, el("i", { class: "key", "aria-hidden": "true" }), label),
+      el("span", { class: "gauge-status" }, status),
+    ),
+    el("div", { class: "gauge-num" },
+      has ? fmtNum(value, 0) : "0",
+      el("span", { class: "of" }, hasT ? ` / ${fmtNum(target, 0)} ${unit}` : ` ${unit}`),
+    ),
+    el("div", { class: "gauge-track" + (pct > 1 ? " over" : "") },
+      el("div", { class: "gauge-fill", style: { width: `${Math.min(100, pct * 100).toFixed(1)}%` } }),
+    ),
+  );
+}
+
+function renderTargetsEditor(data, t) {
+  const cal = input({ type: "number", name: "t_cal", min: "0", max: "10000", step: "10", inputmode: "numeric", value: t.calories ?? "", placeholder: "e.g. 2000" });
+  const pro = input({ type: "number", name: "t_pro", min: "0", max: "500", step: "1", inputmode: "numeric", value: t.protein ?? "", placeholder: "e.g. 140" });
+  return el("div", { class: "targets-editor" },
+    el("div", { class: "grid two tight" }, field("Calories (kcal)", cal), field("Protein (g)", pro)),
+    el("p", { class: "caption" }, "Saved on this phone only. Leave a box empty to clear it."),
+    el("div", { class: "form-actions" },
+      el("button", {
+        type: "button",
+        class: "primary",
+        onClick: () => {
+          const next = {};
+          const c = num(cal.value);
+          const p = num(pro.value);
+          if (c != null && c > 0) next.calories = c;
+          if (p != null && p > 0) next.protein = p;
+          saveLocalTargets(next);
+          state.editTargets = false;
+          render();
+        },
+      }, "Save targets"),
+      el("button", { type: "button", onClick: () => { state.editTargets = false; render(); } }, "Cancel"),
+    ),
+  );
+}
+
+function renderFood(data) {
+  const today = todayTotals(data);
+  const t = getTargets(data);
+  const cal = today ? num(today.calories) : null;
+  const pro = today ? num(today.protein_g) : null;
+  const action = t.fromGoals
+    ? null
+    : el("button", { type: "button", class: "link", onClick: () => { state.editTargets = !state.editTargets; render(); } },
+      state.editTargets ? "Close" : (t.calories == null && t.protein == null ? "Set targets" : "Edit targets"));
+  const meals = today ? `${today.meal_count} meal${today.meal_count === 1 ? "" : "s"} logged` : "Nothing logged yet today";
+  return cardWithAction("Food today", action,
+    el("div", { class: "gauges" },
+      gauge("calories", "Calories", cal, t.calories, "kcal"),
+      gauge("protein", "Protein", pro, t.protein, "g"),
+    ),
+    state.editTargets ? renderTargetsEditor(data, t) : null,
+    el("p", { class: "caption" }, t.calories == null && t.protein == null && !state.editTargets
+      ? `${meals}. Set daily targets to track progress toward them.`
+      : `${meals}. Macros may be estimates.`),
   );
 }
 
 function renderVerdict(data) {
   const v = verdictCard(data);
-  const badgeClass = v.tone === "watch" ? "badge watch" : v.tone === "good" ? "badge" : "badge steady";
-  return card("Verdict",
-    el("div", { class: "verdict" },
-      el("span", { class: badgeClass }, v.label),
-      el("ul", null, ...v.receipts.map((r) => el("li", null, r))),
+  const tone = v.tone === "watch" ? "watch" : v.tone === "good" ? "good" : "steady";
+  return el("section", { class: `card verdict ${tone}` },
+    el("div", { class: "card-head" },
+      el("h2", null, "Verdict"),
+      el("span", { class: `badge ${tone}` }, v.label),
     ),
+    el("ul", { class: "receipts" }, ...v.receipts.map((r) => el("li", null, r))),
   );
 }
 
 function renderCheckinNudge(data) {
   const cur = todayCheckin(data);
   if (cur && (cur.ate_vs_usual || cur.moved_vs_usual || cur.dose_feel || cur.mood != null)) {
-    return el("div", { class: "callout" },
-      el("strong", null, "Today’s check-in is in."),
-      el("span", null, [
-        cur.ate_vs_usual ? `Ate: ${VS_LABELS[cur.ate_vs_usual] || cur.ate_vs_usual}. ` : "",
-        cur.moved_vs_usual ? `Moved: ${VS_LABELS[cur.moved_vs_usual] || cur.moved_vs_usual}. ` : "",
-        cur.dose_feel ? `Feel: ${FEEL_LABELS[cur.dose_feel] || cur.dose_feel}.` : "",
-      ].join("") || "Open the Log tab to add more."),
+    const bits = [
+      cur.ate_vs_usual ? `ate ${String(VS_LABELS[cur.ate_vs_usual] || cur.ate_vs_usual).toLowerCase()}` : null,
+      cur.moved_vs_usual ? `moved ${String(VS_LABELS[cur.moved_vs_usual] || cur.moved_vs_usual).toLowerCase()}` : null,
+      cur.dose_feel ? `dose feels ${String(FEEL_LABELS[cur.dose_feel] || cur.dose_feel).toLowerCase()}` : null,
+    ].filter(Boolean);
+    return el("div", { class: "callout done" },
+      el("strong", null, "Checked in today"),
+      el("span", null, bits.length ? capitalize(bits.join(", ")) + "." : "Open the Log tab to add more."),
     );
   }
   return el("div", { class: "callout" },
-    el("strong", null, "No 3-tap check-in yet today."),
-    el("span", null, "It takes a few taps on the Log tab: ate, moved, and how the dose feels."),
-    el("div", { class: "form-actions", style: { marginTop: "8px" } },
-      el("button", { type: "button", class: "primary", onClick: () => { state.tab = "log"; render(); } }, "Check in"),
+    el("div", null,
+      el("strong", null, "No check-in yet today"),
+      el("span", null, "Three taps: ate, moved, and how the dose feels."),
     ),
+    el("button", { type: "button", class: "primary", onClick: () => { state.tab = "log"; render(); window.scrollTo(0, 0); } }, "Check in"),
+  );
+}
+
+function renderCountdowns(data) {
+  const doses = data.doses || [];
+  const { next } = plannedDoses(doses, data.protocol);
+  const tile = (label, date, cls) => {
+    const n = daysUntil(date);
+    return el("div", { class: `count ${cls || ""}` },
+      el("span", { class: "count-label" }, label),
+      el("span", { class: "count-num" }, n <= 0 ? (n === 0 ? "Today" : "Done") : String(n), n > 0 ? el("small", null, n === 1 ? " day" : " days") : null),
+      el("span", { class: "count-date" }, fmtDateCT(date, true)),
+    );
+  };
+  return el("section", { class: "counts", "aria-label": "Coming up" },
+    next ? tile("Next dose", next, "dose") : tile("Retatrutide", RETA_START, "dose"),
+    next ? tile("Retatrutide", RETA_START, "switch") : null,
+    tile("Half marathon", HALF_MARATHON, "race"),
+  );
+}
+
+function renderMedSummary(data) {
+  const doses = data.doses || [];
+  const { next } = plannedDoses(doses, data.protocol);
+  const lastDose = [...doses].reverse().find((d) => !d.skipped) || null;
+  const levelNow = remainingAt(new Date(), doses, data.protocol);
+  const rot = siteRotation(data);
+  return cardWithAction("Medication",
+    el("button", { type: "button", class: "link", onClick: () => { state.tab = "meds"; render(); window.scrollTo(0, 0); } }, "Details"),
+    el("div", { class: "med-level" },
+      el("span", { class: "big" }, fmtNum(levelNow, 2), el("span", { class: "unit" }, "mg")),
+      el("span", { class: "detail" }, "Estimated in your system now, from a half-life model"),
+    ),
+    el("div", { class: "props" },
+      prop("Last dose", lastDose ? `${fmtNum(lastDose.dose_mg, 1)} mg ${capitalize(lastDose.compound || "")}, ${fmtDateCT(parseTs(lastDose.taken_at), true)}` : "—"),
+      prop("Next dose", next ? `${fmtDateCT(next, true)}, ${daysWord(daysUntil(next))}` : `Retatrutide starts ${fmtDateCT(RETA_START, true)}`),
+      prop("Next site", rot.next ? (SITE_LABELS[rot.next] || rot.next) : "—"),
+    ),
+  );
+}
+
+function renderSignals(data) {
+  const h = latestHealth(data);
+  if (!h) return null;
+  const isToday = h.day === todayKey();
+  return card("Body",
+    el("div", { class: "tiles" },
+      metric("Steps", h.steps != null ? fmtNum(h.steps, 0) : "—", h.distance_mi != null ? `${fmtNum(h.distance_mi, 1)} mi` : null),
+      metric("Sleep", h.sleep_hours != null ? `${fmtNum(h.sleep_hours, 1)} h` : "—", h.sleep_hours != null ? "asleep" : "not recorded"),
+      metric("Resting HR", h.resting_hr != null ? fmtNum(h.resting_hr, 0) : "—", "bpm"),
+      metric("HRV", h.hrv_ms != null ? fmtNum(h.hrv_ms, 0) : "—", "ms"),
+    ),
+    el("p", { class: "caption" }, isToday ? "From Apple Health, today so far." : `From Apple Health, ${fmtShortDate(h.day)}. Newer days appear after the next import.`),
+  );
+}
+
+function renderMacros(today) {
+  if (!today) return null;
+  const rows = [
+    ["Protein", num(today.protein_g), "protein"],
+    ["Carbs", num(today.carbs_g), "rest"],
+    ["Fat", num(today.fat_g), "rest"],
+    ["Fiber", num(today.fiber_g), "rest"],
+  ];
+  const max = Math.max(...rows.map((r) => r[1] || 0), 1);
+  return card("Macros",
+    el("div", { class: "bars" },
+      ...rows.map(([label, v, cls]) => el("div", { class: "bar-row" },
+        el("span", { class: "bar-name" }, label),
+        el("div", { class: "bar-track" }, el("div", { class: `bar-fill ${cls}`, style: { width: `${Math.min(100, ((v || 0) / max) * 100)}%` } })),
+        el("span", { class: "bar-val" }, v == null ? "—" : `${fmtNum(v, 0)} g`),
+      )),
+    ),
+  );
+}
+
+function renderMeals(meals) {
+  return card("Meals",
+    meals.length
+      ? el("ul", { class: "list" },
+          ...meals.map((m) => el("li", { class: "meal" },
+            el("div", { class: "meal-main" },
+              el("span", { class: "meal-item" }, m.item || "—"),
+              el("span", { class: "meal-sub" },
+                [capitalize(m.meal_type || ""), parseTs(m.eaten_at) ? fmtTimeCT(parseTs(m.eaten_at)) : null, m.quantity || null].filter(Boolean).join(", ")),
+            ),
+            el("div", { class: "meal-nums" },
+              el("span", { class: "kcal" }, fmtNum(m.calories, 0), el("small", null, " kcal")),
+              el("span", { class: "pro" }, `${fmtNum(m.protein_g, 0)} g protein`),
+            ),
+          )),
+        )
+      : el("p", { class: "empty" }, "No meals yet today. Ask Log or Claude to record them."),
+  );
+}
+
+function renderTodayTab(data) {
+  const today = todayTotals(data);
+  return el("div", { class: "stack" },
+    renderHero(data),
+    renderFood(data),
+    renderCheckinNudge(data),
+    renderCountdowns(data),
+    renderVerdict(data),
+    renderMedSummary(data),
+    renderSignals(data),
+    renderMacros(today),
+    renderMeals(todayMeals(data)),
+    el("p", { class: "install" + (state.error === "refresh-failed" ? " err" : "") }, state.error === "refresh-failed"
+      ? `Couldn’t refresh. Showing data from ${fmtTimeCT(parseTs(data.as_of) || new Date())}.`
+      : `Updated ${fmtTimeCT(parseTs(data.as_of) || new Date())}. Refreshes every minute.`),
+    isStandalone() ? null : el("p", { class: "install" }, "Add to Home Screen: in Safari, tap Share, then Add to Home Screen. Your passcode stays on this phone."),
+  );
+}
+
+/* ---------- Meds ---------- */
+
+function renderLevelCard(data) {
+  const doses = data.doses || [];
+  const lp = levelPoints(doses, data.protocol, 6);
+  if (!lp) return card("Drug level", el("p", { class: "empty" }, "No doses to chart yet."));
+  const now = new Date();
+  const levelNow = remainingAt(now, doses, data.protocol);
+  const lastReal = [...doses].reverse().find((d) => !d.skipped && parseTs(d.taken_at));
+  const lastT = lastReal ? parseTs(lastReal.taken_at).getTime() : 0;
+  const plannedTail = lp.withNext.filter((p) => p.t.getTime() >= lastT);
+  const hasPlanned = lp.withNext.some((p, i) => Math.abs(p.v - lp.logged[i].v) > 0.01);
+  const ro = readout(`${fmtNum(levelNow, 2)} mg`, `Estimated now, ${fmtTimeCT(now)}`);
+  const chart = timeChart({
+    t0: lp.start,
+    t1: lp.end,
+    height: 210,
+    yMin: 0,
+    yTicks: 3,
+    aria: "Estimated tirzepatide level over time",
+    fmtY: (v) => fmtNum(v, v < 10 ? 1 : 0),
+    series: [
+      { id: "logged", label: "Logged doses", cls: "s3", type: "line", fill: true, points: lp.logged },
+      hasPlanned ? { id: "planned", label: "With next planned shot", cls: "s3", type: "line", dashed: true, points: plannedTail } : null,
+    ].filter(Boolean),
+    marks: [{ t: now, label: "Now" }, { t: RETA_START, label: "Retatrutide" }],
+    snap: "logged",
+    snapToleranceMs: 4 * 3600000,
+    onScrub: (r) => {
+      if (!r) return ro.reset();
+      const p = r.point;
+      const planned = r.readings.planned;
+      const extra = planned && Math.abs(planned.v - p.v) > 0.01 ? `, ${fmtNum(planned.v, 2)} mg with next shot` : "";
+      ro.set(`${fmtNum(p.v, 2)} mg`, `${fmtDateCT(p.t, true)}, ${fmtTimeCT(p.t)}${extra}`);
+    },
+  });
+  return card("Drug level",
+    ro.node,
+    chart,
+    el("div", { class: "legend" },
+      el("span", null, el("i", { class: "key line s3" }), "Logged doses"),
+      hasPlanned ? el("span", null, el("i", { class: "key line s3 dashed" }), "With next planned shot") : null,
+    ),
+    el("p", { class: "caption" }, "Half-life model: tirzepatide 5 days, retatrutide 6 days. The dashed line adds the next planned tirzepatide shot if it falls before the Dec 6 switch. No retatrutide mg amount is assumed. An estimate, not a lab value."),
   );
 }
 
 function renderSiteMap(data) {
   const rot = siteRotation(data);
+  const rows = SITES.map((s) => {
+    const used = rot.lastUsed[s];
+    const tag = s === rot.next ? el("span", { class: "badge good" }, "Next") : s === rot.lastSite ? el("span", { class: "badge steady" }, "Last") : null;
+    return el("li", { class: "site-row" },
+      el("span", { class: "site-name" }, SITE_LABELS[s] || s, tag),
+      el("span", { class: "site-when" }, used ? fmtDateCT(used, true) : "Not used yet"),
+    );
+  });
   return card("Injection sites",
-    el("p", { class: "caption" },
-      rot.lastSite ? `Last used ${rot.lastSite} on ${fmtDateCT(parseTs(rot.last.taken_at), true)}.` : "No sites logged yet.",
-      rot.next ? ` Suggested next: ${rot.next}.` : "",
+    el("div", { class: "sitemap-wrap" }, siteMap(rot)),
+    el("div", { class: "legend center" },
+      el("span", null, el("i", { class: "key dot next" }), "Suggested next"),
+      el("span", null, el("i", { class: "key dot last" }), "Last used"),
+      el("span", null, el("i", { class: "key dot used" }), "Used before"),
     ),
-    el("div", { class: "sites" },
-      ...SITES.map((s) => {
-        const used = rot.lastUsed[s];
-        const cls = s === rot.next ? "site next" : s === rot.lastSite ? "site last" : "site";
-        return el("div", { class: cls },
-          s,
-          el("span", { class: "sub" },
-            s === rot.next ? "Suggested next" : used ? `Last ${fmtDateCT(used, false)}` : "Not used yet",
-          ),
-        );
-      }),
-    ),
+    el("ul", { class: "list sites-list" }, ...rows),
+    el("p", { class: "caption" }, "Front view: your right side is on the left of the drawing."),
   );
 }
 
 function renderTitration(data) {
   const steps = titrationHistory(data.doses || []);
-  if (!steps.length) return card("Titration", el("p", { class: "empty" }, "No doses yet."));
+  if (!steps.length) return card("Titration history", el("p", { class: "empty" }, "No doses yet."));
   return card("Titration history",
-    el("div", { class: "props" },
-      ...steps.map((d) => prop(
-        fmtDateCT(parseTs(d.taken_at), true),
-        d.skipped
-          ? `Skipped ${capitalize(d.compound || "")}`
-          : `${fmtNum(d.mg, 1)} mg ${capitalize(d.compound || "")}${d.changed && d.mg != null ? " · change" : ""}${d.site ? " · " + d.site : ""}`,
+    el("ol", { class: "timeline" },
+      ...steps.map((d) => el("li", { class: d.changed ? "changed" : "" },
+        el("span", { class: "t-date" }, fmtDateCT(parseTs(d.taken_at), true)),
+        el("span", { class: "t-what" },
+          d.skipped ? `Skipped ${capitalize(d.compound || "")}` : `${fmtNum(d.mg, 1)} mg ${capitalize(d.compound || "")}`,
+          d.changed && d.mg != null ? el("span", { class: "badge steady" }, "Change") : null,
+        ),
+        d.site ? el("span", { class: "t-site" }, SITE_LABELS[d.site] || d.site) : null,
       )),
     ),
   );
@@ -504,17 +808,17 @@ function renderTitration(data) {
 
 function renderVials(data) {
   const r = vialRunway(data);
-  if (!r.ready) return card("Vials", el("p", { class: "empty" }, r.summary));
+  if (!r.ready) return card("Vials", el("p", { class: "empty" }, `${r.summary} Use Start a vial on the Log tab.`));
   return card("Vials",
-    r.soonest ? el("p", { class: "caption" }, `Supply runway: around ${fmtDateCT(r.soonest.until, true)} if the current weekly dose continues.`) : null,
+    r.soonest ? el("p", { class: "lead" }, `Supply lasts until about ${fmtDateCT(r.soonest.until, true)} at the current weekly dose.`) : null,
     el("div", { class: "props" },
       ...r.items.map((v) => prop(
-        `${capitalize(v.compound)}${v.label ? " · " + v.label : ""}`,
+        `${capitalize(v.compound)}${v.label ? `, ${v.label}` : ""}`,
         [
-          v.remaining_mg != null ? `${fmtNum(v.remaining_mg, 1)} / ${fmtNum(v.total_mg, 1)} mg` : "",
+          v.remaining_mg != null ? `${fmtNum(v.remaining_mg, 1)} of ${fmtNum(v.total_mg, 1)} mg` : "",
           v.remaining_units != null ? `${fmtNum(v.remaining_units, 0)} units left` : "",
-          v.expired_on ? `exp ${fmtShortDate(v.expired_on)}` : "",
-        ].filter(Boolean).join(" · ") || "—",
+          v.expired_on ? `expires ${fmtShortDate(v.expired_on)}` : "",
+        ].filter(Boolean).join(", ") || "—",
       )),
     ),
   );
@@ -525,26 +829,225 @@ function renderProtocol(data) {
   if (!rows.length) return null;
   return card("Protocol",
     ...rows.map((p) => el("div", { class: "cycle" },
-      el("h3", null, p.display_name || capitalize(p.compound)),
+      el("h3", null, p.display_name || capitalize(p.compound), el("span", { class: `badge ${p.status === "active" ? "good" : "steady"}` }, capitalize(p.status || ""))),
       el("div", { class: "props" },
-        prop("Status", p.status),
         prop("Dose", p.typical_dose_mg != null ? `${fmtNum(p.typical_dose_mg, 1)} mg ${p.frequency || ""}`.trim() : (p.units != null ? `${fmtNum(p.units, 0)} units ${p.frequency || ""}`.trim() : "—")),
         prop("Half-life", p.half_life_hours != null ? `${fmtNum(p.half_life_hours / 24, 1)} days` : "—"),
-        prop("Starts", p.started_on ? fmtShortDate(p.started_on) : "—"),
-        p.notes ? prop("Notes", p.notes) : null,
+        prop(p.status === "active" ? "Started" : "Starts", p.started_on ? fmtShortDate(p.started_on) : "—"),
+        p.notes ? el("p", { class: "caption" }, p.notes) : null,
       ),
     )),
+  );
+}
+
+function renderDoseHistory(data) {
+  const doses = data.doses || [];
+  return card("Dosing history",
+    doses.length
+      ? el("table", { class: "data" },
+          el("thead", null, el("tr", null, el("th", null, "When"), el("th", null, "Dose"), el("th", null, "Site"))),
+          el("tbody", null, ...[...doses].reverse().map((d) => el("tr", null,
+            el("td", null, parseTs(d.taken_at) ? fmtDateCT(parseTs(d.taken_at), true) : "—"),
+            el("td", null, d.skipped ? "Skipped" : `${fmtNum(d.dose_mg, 1)} mg`, el("span", { class: "sub" }, capitalize(d.compound || ""))),
+            el("td", null, siteLabel(d)),
+          ))),
+        )
+      : el("p", { class: "empty" }, "No doses logged yet."),
+  );
+}
+
+function renderMedsTab(data) {
+  return el("div", { class: "stack" },
+    renderLevelCard(data),
+    renderSiteMap(data),
+    renderTitration(data),
+    renderProtocol(data),
+    renderVials(data),
+    renderDoseHistory(data),
+  );
+}
+
+/* ---------- Trends ---------- */
+
+function renderWeightCard(data) {
+  const parsed = parseWeights(data.weights || []);
+  if (!parsed.length) return card("Weight", el("p", { class: "empty" }, "No weigh-ins yet. Log one on the Log tab."));
+  const sm = smoothWeights(parsed);
+  const range = RANGES.find((r) => r.id === state.weightRange) || RANGES[1];
+  const last = sm[sm.length - 1];
+  const end = new Date(Math.max(Date.now(), last.at.getTime()));
+  const startT = range.days ? new Date(end.getTime() - range.days * 86400000) : sm[0].at;
+  const inRange = sm.filter((w) => w.at >= startT);
+  const j = journeyStats(data);
+  const goal = j ? j.goalLb : null;
+
+  // Straight-line projection from the post-dose trend, drawn only on the short ranges.
+  const proj = weightProjection(data, 42);
+  const showProj = proj.ready && (range.id === "1m" || range.id === "3m");
+  let t1 = end;
+  let projPts = [];
+  if (showProj) {
+    const projEnd = new Date(last.at.getTime() + 42 * 86400000);
+    t1 = projEnd;
+    const t0p = proj.last.at.getTime();
+    const daily = dailyWeight(parseWeights(data.weights).filter((w) => w.at >= TIRZ_START));
+    const base = daily[0].at.getTime();
+    for (let t = t0p; t <= projEnd.getTime(); t += 86400000) {
+      projPts.push({ t: new Date(t), v: proj.fit.intercept + proj.fit.slope * ((t - base) / 86400000) });
+    }
+  }
+
+  const seg = el("div", { class: "seg", role: "group", "aria-label": "Range" },
+    ...RANGES.map((r) => el("button", {
+      type: "button",
+      "aria-pressed": state.weightRange === r.id ? "true" : "false",
+      onClick: () => { state.weightRange = r.id; render(); },
+    }, r.label)),
+  );
+
+  const first = inRange[0] || sm[0];
+  const change = last.trend - first.trend;
+  const rp = recentPace(parsed, 28);
+  const lows = inRange.length ? Math.min(...inRange.map((w) => w.lb)) : null;
+  const highs = inRange.length ? Math.max(...inRange.map((w) => w.lb)) : null;
+  const ro = readout(`${fmtNum(last.trend, 1)} lb`, `Trend now. Last weigh-in ${fmtNum(last.lb, 1)} lb, ${fmtDateCT(last.at, true)}`);
+
+  const chart = inRange.length >= 2
+    ? timeChart({
+        t0: startT,
+        t1,
+        height: 220,
+        yTicks: 5,
+        aria: `Weight, ${range.label} range`,
+        fmtY: (v) => fmtNum(v, 0),
+        series: [
+          { id: "raw", label: "Weigh-ins", cls: "s1 faint", type: "dots", r: range.id === "all" ? 2 : 3, points: inRange.map((w) => ({ t: w.at, v: w.lb, w })) },
+          { id: "trend", label: "Trend", cls: "s1", type: "area", endDot: true, points: inRange.map((w) => ({ t: w.at, v: w.trend, w })) },
+          showProj ? { id: "proj", label: "Projection", cls: "s1", type: "line", dashed: true, points: projPts } : null,
+        ].filter(Boolean),
+        refs: goal != null ? [{ v: goal, label: `Goal ${fmtNum(goal, 0)}`, inDomain: range.id !== "all" ? Math.abs(goal - last.trend) < 30 : true }] : [],
+        marks: TIRZ_START >= startT ? [{ t: TIRZ_START, label: "Tirzepatide" }] : [],
+        snap: "trend",
+        onScrub: (r) => {
+          if (!r) return ro.reset();
+          const w = r.point.w;
+          ro.set(`${fmtNum(w.lb, 1)} lb`, `${fmtDateCT(w.at, true)}${range.id === "all" || range.id === "1y" ? `, ${w.at.getFullYear()}` : ""}, trend ${fmtNum(w.trend, 1)}`);
+        },
+      })
+    : el("p", { class: "empty" }, "Only one weigh-in in this range. Try a longer range.");
+
+  const recent = [...parsed].reverse().slice(0, 30);
+  return card("Weight",
+    seg,
+    ro.node,
+    chart,
+    el("div", { class: "legend" },
+      el("span", null, el("i", { class: "key dot s1 faint" }), "Weigh-ins"),
+      el("span", null, el("i", { class: "key line s1" }), "Smoothed trend"),
+      showProj ? el("span", null, el("i", { class: "key line s1 dashed" }), "Straight-line projection") : null,
+      goal != null ? el("span", null, el("i", { class: "key line ref" }), "Goal") : null,
+    ),
+    el("div", { class: "stats" },
+      metric(`Change, ${range.label}`, `${signed(change)} lb`, "trend to trend"),
+      metric("Pace", rp ? `${signed(rp.weekly)} lb/wk` : "—", "last 4 weeks"),
+      metric("Range", lows != null ? `${fmtNum(lows, 1)}–${fmtNum(highs, 1)}` : "—", "lowest to highest"),
+    ),
+    el("p", { class: "caption" }, showProj
+      ? `The trend smooths day-to-day water swings. The projection extends the straight-line fit since starting tirzepatide (${signed(proj.weekly, 2)} lb a week) six weeks out. It describes the past; it isn’t a prediction.`
+      : "The trend smooths day-to-day water swings, so one high or low weigh-in barely moves it."),
+    dataView("Recent weigh-ins", ["Date", "Weight", "Trend"], recent.map((w) => {
+      const s = sm.find((x) => x.at.getTime() === w.at.getTime());
+      return [`${fmtDateCT(w.at, true)}, ${w.at.getFullYear()}`, fmtNum(w.lb, 1), s ? fmtNum(s.trend, 1) : "—"];
+    })),
+  );
+}
+
+function lastNDays(n) {
+  const today = todayKey();
+  return Array.from({ length: n }, (_, i) => shiftDay(today, -(n - 1 - i)));
+}
+
+function renderFoodTrends(data) {
+  const t = getTargets(data);
+  const byDay = new Map((data.daily_totals || []).map((r) => [r.date, r]));
+  const keys = lastNDays(30);
+  const logged = keys.filter((k) => byDay.has(k));
+  if (!logged.length) return card("Calories and protein", el("p", { class: "empty" }, "No food logged in the last 30 days."));
+  const today = todayKey();
+  if (logged.length < 3) {
+    return card("Calories and protein",
+      el("p", { class: "lead" }, `${logged.length} day${logged.length === 1 ? "" : "s"} logged in the last 30. The daily charts appear once 3 days are in.`),
+      el("div", { class: "props" },
+        ...logged.map((k) => {
+          const r = byDay.get(k);
+          return prop(fmtShortDate(k), `${fmtNum(r.calories, 0)} kcal, ${fmtNum(r.protein_g, 0)} g protein`);
+        }),
+      ),
+    );
+  }
+  const mk = (field, cls, target, unit, title) => {
+    const days = keys.map((k) => ({ key: k, v: byDay.has(k) ? num(byDay.get(k)[field]) : null, today: k === today }));
+    const vals = days.filter((d) => d.v != null);
+    const avg = vals.reduce((a, d) => a + d.v, 0) / vals.length;
+    const hit = target != null ? vals.filter((d) => (field === "protein_g" ? d.v >= target : d.v <= target)).length : null;
+    const ro = readout(`${fmtNum(avg, 0)} ${unit} average`, hit != null ? `${hit} of ${vals.length} logged days ${field === "protein_g" ? "at or above" : "at or under"} target` : `${vals.length} logged days`);
+    return el("div", { class: "subchart" },
+      el("h3", null, el("i", { class: `key rect ${cls}`, "aria-hidden": "true" }), title),
+      ro.node,
+      columnChart({
+        days,
+        target,
+        targetLabel: target != null ? `Target ${fmtNum(target, 0)}` : null,
+        cls,
+        height: 140,
+        aria: `${title}, last 30 days`,
+        onScrub: (d) => {
+          if (!d) return ro.reset();
+          ro.set(d.v != null ? `${fmtNum(d.v, 0)} ${unit}` : "Not logged", fmtShortDate(d.key));
+        },
+      }),
+    );
+  };
+  return card("Calories and protein",
+    mk("calories", "s1", t.calories, "kcal", "Calories"),
+    mk("protein_g", "s2", t.protein, "g", "Protein"),
+    dataView("Daily totals", ["Day", "kcal", "Protein"], [...logged].reverse().map((k) => [fmtShortDate(k), fmtNum(byDay.get(k).calories, 0), `${fmtNum(byDay.get(k).protein_g, 0)} g`])),
+  );
+}
+
+function renderStepsCard(data) {
+  const byDay = new Map((data.daily_health || []).map((r) => [r.day, r]));
+  const keys = lastNDays(30);
+  const days = keys.map((k) => ({ key: k, v: byDay.has(k) ? num(byDay.get(k).steps) : null }));
+  const vals = days.filter((d) => d.v != null);
+  if (vals.length < 3) return null;
+  const avg = vals.reduce((a, d) => a + d.v, 0) / vals.length;
+  const ro = readout(`${fmtNum(avg, 0)} a day`, `Average over ${vals.length} days with data`);
+  return card("Steps",
+    ro.node,
+    columnChart({
+      days,
+      cls: "s4",
+      height: 150,
+      fmtY: (v) => (v >= 1000 ? `${fmtNum(v / 1000, 0)}K` : fmtNum(v, 0)),
+      aria: "Steps, last 30 days",
+      onScrub: (d) => {
+        if (!d) return ro.reset();
+        ro.set(d.v != null ? `${fmtNum(d.v, 0)} steps` : "No data", fmtShortDate(d.key));
+      },
+    }),
+    el("p", { class: "caption" }, "From Apple Health imports, last 30 days."),
   );
 }
 
 function renderStall(data) {
   const s = stallCheck(data);
   return card("Stall check",
-    el("p", { class: s.ready ? "" : "empty" }, s.summary),
+    el("p", { class: s.ready ? "lead" : "empty" }, s.summary),
     s.ready && s.changed && s.changed.length
-      ? el("ul", null, ...s.changed.map((c) => el("li", null, c)))
+      ? el("ul", { class: "receipts" }, ...s.changed.map((c) => el("li", null, c)))
       : null,
-    el("p", { class: "caption" }, "This is a description of what changed, not advice."),
+    el("p", { class: "caption" }, "A description of what changed, not advice."),
   );
 }
 
@@ -552,14 +1055,18 @@ function renderCycles(data) {
   const recaps = cycleRecaps(data);
   if (!recaps.length) return card("Cycle recaps", el("p", { class: "empty" }, "Needs logged doses to split cycles."));
   return card("Cycle recaps",
-    ...recaps.map((c) => el("div", { class: "cycle" },
-      el("h3", null, `Cycle ${c.index} · ${fmtDateCT(c.start.at, false)}–${c.open ? "now" : fmtShortDate(c.endDay)} · ${fmtNum(c.start.dose_mg, 1)} mg`),
+    ...[...recaps].reverse().map((c) => el("div", { class: "cycle" },
+      el("h3", null,
+        `Cycle ${c.index}, ${fmtNum(c.start.dose_mg, 1)} mg`,
+        c.open ? el("span", { class: "badge good" }, "Current") : null,
+      ),
+      el("p", { class: "cycle-dates" }, `${fmtDateCT(c.start.at, false)} to ${c.open ? "now" : fmtShortDate(c.endDay)}`),
       el("div", { class: "props" },
-        prop("Weight", c.delta != null ? `${fmtNum(c.delta, 1)} lb` : "Needs weigh-ins in this cycle"),
+        prop("Weight", c.delta != null ? `${signed(c.delta)} lb` : "Needs weigh-ins in this cycle"),
         prop("Eating", c.ate ? VS_LABELS[c.ate] : "Needs ate-vs-usual check-ins"),
         prop("Movement", c.moved ? VS_LABELS[c.moved] : (c.steps != null ? `Avg ${fmtNum(c.steps, 0)} steps` : "Needs movement check-ins")),
         prop("Feel", c.feel ? FEEL_LABELS[c.feel] : (c.foodNoise != null ? `Avg food noise ${fmtNum(c.foodNoise, 1)}` : "Needs feel tags")),
-        c.vsPrev && c.vsPrev.weight != null ? prop("vs previous", `${c.vsPrev.weight > 0 ? "+" : ""}${fmtNum(c.vsPrev.weight, 1)} lb change`) : null,
+        c.vsPrev && c.vsPrev.weight != null ? prop("vs previous", `${signed(c.vsPrev.weight)} lb`) : null,
       ),
     )),
   );
@@ -568,9 +1075,9 @@ function renderCycles(data) {
 function renderWearOff(data) {
   const w = wearOff(data);
   return card("Wear-off",
-    el("p", { class: w.ready ? "" : "empty" }, w.summary),
+    el("p", { class: w.ready ? "lead" : "empty" }, w.summary),
     w.ready && w.details && w.details.length
-      ? el("ul", null, ...w.details.map((d) => el("li", null, `Cycle ${d.cycle}: ${d.fading ? "fading tags" : ""}${d.fading && d.noiseRise ? " and " : ""}${d.noiseRise ? "late-cycle food noise rose" : ""}.`)))
+      ? el("ul", { class: "receipts" }, ...w.details.map((d) => el("li", null, `Cycle ${d.cycle}: ${d.fading ? "fading tags" : ""}${d.fading && d.noiseRise ? " and " : ""}${d.noiseRise ? "late-cycle food noise rose" : ""}.`)))
       : null,
   );
 }
@@ -580,13 +1087,13 @@ function renderFeel(data) {
   if (!f.ready) return card("Feel report", el("p", { class: "empty" }, f.summary));
   const cell = (label, row) => metric(label, row ? fmtNum(row.mean, 1) : "—", row ? `${row.n} days` : null);
   return card("Feel report",
-    el("p", { class: "caption" }, `Averages across ${f.count} scored days (1–10).`),
-    el("div", { class: "metrics four" },
+    el("div", { class: "tiles" },
       cell("Mood", f.mood),
       cell("Energy", f.energy),
       cell("Food noise", f.food_noise),
       cell("Sleep quality", f.sleep_quality),
     ),
+    el("p", { class: "caption" }, `Averages across ${f.count} scored days, on a 1–10 scale.`),
   );
 }
 
@@ -604,13 +1111,21 @@ function renderExplorer(data) {
   };
   xSel.addEventListener("change", onChange);
   ySel.addEventListener("change", onChange);
+  const ro = readout(pairs.length >= 3 ? `${pairs.length} overlapping days` : "", "Each dot is a day where both were logged");
   return card("Pattern explorer",
-    el("p", { class: "caption" }, "Pick any two metrics. Points are days where both were logged."),
-    el("div", { class: "grid two" }, field("X axis", xSel), field("Y axis", ySel)),
+    el("div", { class: "grid two tight" }, field("Across", xSel), field("Up", ySel)),
     pairs.length >= 3
-      ? scatterChart(pairs, { aria: `${xMeta.label} vs ${yMeta.label}` })
+      ? el("div", null,
+          ro.node,
+          scatterPlot(pairs, {
+            aria: `${xMeta.label} vs ${yMeta.label}`,
+            onScrub: (p) => {
+              if (!p) return ro.reset();
+              ro.set(`${fmtNum(p.x, 1)} and ${fmtNum(p.y, 1)}`, `${fmtShortDate(p.day)}: ${xMeta.label} and ${yMeta.label}`);
+            },
+          }),
+        )
       : el("p", { class: "empty" }, `Needs ${Math.max(0, 3 - pairs.length)} more overlapping day${3 - pairs.length === 1 ? "" : "s"} for ${xMeta.label} and ${yMeta.label}.`),
-    pairs.length >= 3 ? el("p", { class: "caption" }, `${pairs.length} overlapping days.`) : null,
   );
 }
 
@@ -619,23 +1134,27 @@ function renderEarnWall(data) {
   const earned = cells.filter((c) => c.earned).length;
   const hasAny = cells.some((c) => c.earned != null);
   if (!hasAny) {
-    return card("Earn It wall", el("p", { class: "empty" }, "Needs a check-in with Earn It marked to start the wall. Use the Log tab."));
+    return card("Earn It wall", el("p", { class: "empty" }, "Mark Earn It on the Log tab to start the wall."));
   }
   const dow = ["S", "M", "T", "W", "T", "F", "S"];
-  // Align first cell to Sunday
   const first = cells[0].day;
   const [y, m, d] = first.split("-").map(Number);
   const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  const pad = Array.from({ length: weekday }, () => el("div", { class: "cell", style: { visibility: "hidden" } }));
+  const pad = Array.from({ length: weekday }, () => el("div", { class: "cell blank" }));
   return card("Earn It wall",
-    el("p", { class: "caption" }, `${earned} earned day${earned === 1 ? "" : "s"} in the last 8 weeks.`),
+    el("p", { class: "lead" }, `${earned} earned day${earned === 1 ? "" : "s"} in the last 8 weeks.`),
     el("div", { class: "wall" },
       ...dow.map((d0) => el("div", { class: "dow" }, d0)),
       ...pad,
       ...cells.map((c) => el("div", {
         class: "cell" + (c.earned ? " earned" : c.has && c.earned === false ? " missed" : "") + (c.today ? " today" : ""),
-        title: c.day,
+        title: `${fmtShortDate(c.day)}: ${c.earned ? "earned" : c.has && c.earned === false ? "not earned" : "not marked"}`,
       })),
+    ),
+    el("div", { class: "legend" },
+      el("span", null, el("i", { class: "key rect earned" }), "Earned"),
+      el("span", null, el("i", { class: "key rect missed" }), "Not earned"),
+      el("span", null, el("i", { class: "key rect blank" }), "Not marked"),
     ),
   );
 }
@@ -643,14 +1162,19 @@ function renderEarnWall(data) {
 function renderSideEffects(data) {
   const rows = data.side_effects || [];
   if (!rows.length) return card("Side effects", el("p", { class: "empty" }, "No side effects logged yet."));
-  return card("Side effect timeline",
-    el("table", { class: "data" },
-      el("thead", null, el("tr", null, el("th", null, "Day"), el("th", null, "Effect"), el("th", { class: "num" }, "Sev"))),
-      el("tbody", null, ...[...rows].reverse().map((r) => el("tr", null,
-        el("td", null, fmtShortDate(r.recorded_on)),
-        el("td", null, r.effect, r.notes ? el("span", { class: "sub" }, r.notes) : null),
-        el("td", { class: "num" }, el("span", { class: "sev" }, r.severity)),
-      ))),
+  return card("Side effects",
+    el("ul", { class: "list" },
+      ...[...rows].reverse().map((r) => {
+        const sev = num(r.severity) || 0;
+        const tone = sev >= 7 ? "high" : sev >= 4 ? "mid" : "low";
+        return el("li", { class: "effect" },
+          el("div", { class: "effect-main" },
+            el("span", { class: "effect-name" }, r.effect),
+            el("span", { class: "effect-sub" }, [fmtShortDate(r.recorded_on), r.notes].filter(Boolean).join(". ")),
+          ),
+          el("span", { class: `sev ${tone}`, "aria-label": `Severity ${sev} of 10` }, String(sev), el("small", null, "/10")),
+        );
+      }),
     ),
   );
 }
@@ -659,357 +1183,195 @@ function renderMeasurements(data) {
   const rows = data.measurements || [];
   if (!rows.length) return card("Measurements", el("p", { class: "empty" }, "No body measurements yet. Log waist or other metrics on the Log tab."));
   const byMetric = {};
-  for (const r of rows) {
-    const k = r.metric;
-    (byMetric[k] ||= []).push(r);
-  }
-  const charts = Object.entries(byMetric).map(([metric, list]) => {
+  for (const r of rows) (byMetric[r.metric] ||= []).push(r);
+  const charts = Object.entries(byMetric).map(([name, list]) => {
     const sorted = list.filter((r) => parseTs(r.measured_at) && num(r.value) != null).sort((a, b) => parseTs(a.measured_at) - parseTs(b.measured_at));
-    const values = sorted.map((r) => num(r.value));
-    const labels = sorted.map((r, i) => (i === 0 || i === sorted.length - 1) ? fmtDateCT(parseTs(r.measured_at), false) : "");
-    return el("div", null,
-      el("h3", { style: { fontSize: "15px", margin: "0 0 6px" } }, `${capitalize(metric)} (${sorted[0] && sorted[0].unit || ""})`),
-      lineChart([{ values }], { labels, aria: metric, format: (v) => fmtNum(v, 1) }),
+    const pts = sorted.map((r) => ({ t: parseTs(r.measured_at), v: num(r.value) }));
+    const unit = (sorted[0] && sorted[0].unit) || "";
+    const lastP = pts[pts.length - 1];
+    const ro = readout(lastP ? `${fmtNum(lastP.v, 1)} ${unit}` : "—", lastP ? `Latest, ${fmtDateCT(lastP.t, true)}` : "");
+    return el("div", { class: "subchart" },
+      el("h3", null, capitalize(name)),
+      ro.node,
+      pts.length >= 2
+        ? timeChart({
+            t0: pts[0].t, t1: new Date(Math.max(Date.now(), lastP.t.getTime())), height: 150, aria: name,
+            fmtY: (v) => fmtNum(v, 1),
+            series: [{ id: "m", cls: "s1", type: "line", endDot: true, points: pts }, { id: "md", cls: "s1", type: "dots", points: pts }],
+            snap: "m",
+            onScrub: (r) => { if (!r) return ro.reset(); ro.set(`${fmtNum(r.point.v, 1)} ${unit}`, fmtDateCT(r.point.t, true)); },
+          })
+        : el("p", { class: "empty" }, "Log one more to see a trend."),
     );
   });
   return card("Measurements", ...charts);
 }
 
+function renderWeekly(data) {
+  const weeks = data.weekly_summary || [];
+  if (!weeks.length) return null;
+  return card("Weekly summary",
+    el("table", { class: "data" },
+      el("thead", null, el("tr", null, el("th", null, "Week of"), el("th", { class: "num" }, "kcal/day"), el("th", { class: "num" }, "Protein"), el("th", { class: "num" }, "Avg lb"))),
+      el("tbody", null, ...[...weeks].reverse().slice(0, 8).map((w) => el("tr", null,
+        el("td", null, fmtShortDate(w.week)),
+        el("td", { class: "num" }, fmtNum(w.avg_daily_calories, 0)),
+        el("td", { class: "num" }, w.avg_protein_g != null ? `${fmtNum(w.avg_protein_g, 0)} g` : "—"),
+        el("td", { class: "num" }, w.avg_weight_lb != null ? fmtNum(w.avg_weight_lb, 1) : "—"),
+      ))),
+    ),
+  );
+}
+
+function renderWorkouts(data) {
+  const workouts = data.workouts || [];
+  if (!workouts.length) return null;
+  return card("Workouts",
+    el("p", { class: "lead" }, `${fmtNum(data.workout_count || workouts.length, 0)} workouts imported from Apple Health. The latest ${Math.min(8, workouts.length)}:`),
+    el("table", { class: "data" },
+      el("thead", null, el("tr", null, el("th", null, "When"), el("th", null, "Activity"), el("th", { class: "num" }, "Min"), el("th", { class: "num" }, "Avg HR"))),
+      el("tbody", null, ...workouts.slice(0, 8).map((w) => el("tr", null,
+        el("td", null, parseTs(w.started_at) ? fmtDateCT(parseTs(w.started_at), true) : "—"),
+        el("td", null, capitalize(w.activity || "—"), w.distance_mi != null ? el("span", { class: "sub" }, `${fmtNum(w.distance_mi, 2)} mi`) : null),
+        el("td", { class: "num" }, fmtNum(w.duration_min, 0)),
+        el("td", { class: "num" }, w.avg_hr != null ? fmtNum(w.avg_hr, 0) : "—"),
+      ))),
+    ),
+  );
+}
+
 function renderExport(data) {
   return card("Prescriber export",
-    el("p", { class: "caption" }, "Downloads stay on this device. The print view includes the journey summary, doses and meals. Use your browser’s print dialog to save a PDF."),
+    el("p", { class: "lead" }, "Files stay on this phone. The print view has the journey summary, doses and meals. Save it as a PDF from the print sheet."),
     el("div", { class: "form-actions" },
       el("button", { type: "button", class: "primary", onClick: () => prescriberCSV(data) }, "Download CSV"),
-      el("button", { type: "button", onClick: () => prescriberPrint(data) }, "Print / PDF"),
+      el("button", { type: "button", onClick: () => prescriberPrint(data) }, "Print or save PDF"),
     ),
-    el("p", { class: "caption" }, "Not available on the web: Apple Health / HealthKit sync, home-screen widgets, an Apple Watch app, or AI body-fat estimates from photos."),
+    el("p", { class: "caption" }, "Not possible on the web: Apple Health sync, home-screen widgets, an Apple Watch app, or body-fat estimates from photos."),
   );
-}
-
-function renderTodayTab(data) {
-  const today = todayTotals(data);
-  const meals = todayMeals(data);
-  const health = latestHealth(data);
-  const doses = data.doses || [];
-  const { next } = plannedDoses(doses, data.protocol);
-  const lastDose = [...doses].reverse().find((d) => !d.skipped) || null;
-  const levelNow = remainingAt(new Date(), doses, data.protocol);
-  const protein = today ? num(today.protein_g) : null;
-
-  const todayCard = card("Today",
-    el("div", { class: "metrics four" },
-      metric("Calories", today ? fmtNum(today.calories, 0) : "—", today ? `${today.meal_count} meals` : "No meals yet"),
-      metric("Protein", today ? `${fmtNum(today.protein_g, 0)} g` : "—", "Featured for half training", true),
-      metric("Steps", health && health.day === todayKey() ? fmtNum(health.steps, 0) : "—", health && health.distance_mi != null ? `${fmtNum(health.distance_mi, 1)} mi` : null),
-      metric("Sleep", health && health.sleep_hours != null ? `${fmtNum(health.sleep_hours, 1)} h` : "—", health && health.resting_hr != null ? `RHR ${fmtNum(health.resting_hr, 0)}` : null),
-    ),
-  );
-
-  const medCard = card("Medication",
-    el("div", { class: "props" },
-      prop("Drug", lastDose ? capitalize(lastDose.compound || "Tirzepatide") : "—"),
-      prop("Last dose", lastDose ? `${fmtNum(lastDose.dose_mg, 0)} mg on ${fmtDateCT(parseTs(lastDose.taken_at), true)}` : "—"),
-      prop("Est. level now", `${fmtNum(levelNow, 2)} mg`),
-      prop("Next dose", next ? `${fmtDateCT(next, true)} · ${daysWord(daysUntil(next))}` : "Retatrutide starts " + fmtDateCT(RETA_START, true)),
-      prop("Site", lastDose ? siteLabel(lastDose) : "—"),
-    ),
-    el("p", { class: "caption" }, "Estimated from half-life, not a lab measurement."),
-  );
-
-  const macros = today
-    ? card("Macros",
-        el("div", { class: "bars" },
-          ...[
-            ["Protein", num(today.protein_g), "g", 1],
-            ["Carbs", num(today.carbs_g), "g", 0.45],
-            ["Fat", num(today.fat_g), "g", 0.45],
-            ["Fiber", num(today.fiber_g), "g", 0.45],
-          ].map(([label, v, unit, opacity]) => {
-            const max = Math.max(num(today.protein_g) || 0, num(today.carbs_g) || 0, num(today.fat_g) || 0, 1);
-            return el("div", { class: "bar-row" },
-              el("span", null, label),
-              el("div", { class: "bar-track" }, el("div", { class: "bar-fill" + (opacity < 1 ? " rest" : ""), style: { width: `${Math.min(100, ((v || 0) / max) * 100)}%` } })),
-              el("span", { class: "bar-val" }, v == null ? "—" : `${fmtNum(v, 0)} ${unit}`),
-            );
-          }),
-        ),
-      )
-    : card("Macros", el("p", { class: "empty" }, "No meals logged today."));
-
-  const mealsCard = card("Meals",
-    meals.length
-      ? el("table", { class: "data" },
-          el("thead", null, el("tr", null, el("th", null, "When"), el("th", null, "Item"), el("th", { class: "num" }, "Cal"), el("th", { class: "num" }, "P"))),
-          el("tbody", null, ...meals.map((m) => el("tr", null,
-            el("td", null, parseTs(m.eaten_at) ? fmtTimeCT(parseTs(m.eaten_at)) : "—", el("span", { class: "sub" }, capitalize(m.meal_type || ""))),
-            el("td", null, m.item || "—", m.notes ? el("span", { class: "sub" }, m.notes) : null),
-            el("td", { class: "num" }, fmtNum(m.calories, 0)),
-            el("td", { class: "num" }, fmtNum(m.protein_g, 0)),
-          ))),
-        )
-      : el("p", { class: "empty" }, "No meals yet today. Ask Log or Claude to record them."),
-  );
-
-  const upcoming = card("Upcoming",
-    el("div", { class: "upcoming" },
-      next ? el("div", { class: "item" }, el("span", null, "Tirzepatide dose"), el("span", { class: "when" }, `${fmtDateCT(next, true)} · ${daysWord(daysUntil(next))}`)) : null,
-      el("div", { class: "item" }, el("span", null, "Switch to retatrutide"), el("span", { class: "when" }, `${fmtDateCT(RETA_START, true)} · ${daysWord(daysUntil(RETA_START))}`)),
-      el("div", { class: "item" }, el("span", null, "Dallas Half Marathon"), el("span", { class: "when" }, `${fmtDateCT(HALF_MARATHON, true)} · ${daysWord(daysUntil(HALF_MARATHON))}`)),
-    ),
-  );
-
-  return el("div", null,
-    renderJourney(data),
-    renderVerdict(data),
-    renderCheckinNudge(data),
-    todayCard,
-    el("div", { class: "grid two" }, medCard, upcoming),
-    el("div", { class: "grid two" }, macros, mealsCard),
-    el("p", { class: "install" }, "Add to Home Screen: in Safari, open Share, then Add to Home Screen. Your passcode stays on this phone."),
-  );
-}
-
-function renderMedsTab(data) {
-  const doses = data.doses || [];
-  const series = levelSeries(doses, data.protocol, false);
-  const seriesNext = levelSeries(doses, data.protocol, true);
-  const levelCard = card("Drug level",
-    series
-      ? el("div", null,
-          el("div", { class: "legend" },
-            el("span", null, el("span", { class: "swatch" }), "Logged doses"),
-            el("span", null, el("span", { class: "swatch alt" }), "With next planned shot"),
-          ),
-          lineChart(
-            [
-              { values: series.points },
-              { values: seriesNext ? seriesNext.plannedPts : series.points, dashed: true },
-            ],
-            { labels: series.labels, area: true, floor: 0, aria: "Estimated drug level", format: (v) => fmtNum(v, 1), marks: series.marks },
-          ),
-        )
-      : el("p", { class: "empty" }, "No doses to chart."),
-    el("p", { class: "caption" }, "Tirzepatide half-life is modeled at 5 days, retatrutide at 6 days. The gold dashed line includes the next planned tirzepatide dose if it falls before the Dec 6 switch. The chart does not invent a retatrutide mg amount. Estimate only, not a lab value."),
-  );
-
-  const doseCard = card("Dosing history",
-    doses.length
-      ? el("table", { class: "data" },
-          el("thead", null, el("tr", null, el("th", null, "When"), el("th", null, "Dose"), el("th", null, "Site"))),
-          el("tbody", null, ...[...doses].reverse().map((d) => el("tr", null,
-            el("td", null, parseTs(d.taken_at) ? fmtDateCT(parseTs(d.taken_at), true) : "—"),
-            el("td", null, d.skipped ? "Skipped" : `${fmtNum(d.dose_mg, 1)} mg`, el("span", { class: "sub" }, capitalize(d.compound || ""))),
-            el("td", null, siteLabel(d)),
-          ))),
-        )
-      : el("p", { class: "empty" }, "No doses logged."),
-  );
-
-  return el("div", null, levelCard, renderSiteMap(data), renderTitration(data), renderVials(data), renderProtocol(data), doseCard);
 }
 
 function renderTrendsTab(data) {
-  const wstats = weightStats(data.weights || []);
-  const rangeBtns = el("div", { class: "seg" },
-    ...["90d", "1y", "all"].map((r) => el("button", {
-      type: "button",
-      "aria-pressed": state.weightRange === r,
-      onClick: () => { state.weightRange = r; render(); },
-    }, r === "90d" ? "90 days" : r === "1y" ? "1 year" : "All")),
-  );
-  let weightCard;
-  if (!wstats) {
-    weightCard = card("Weight", el("p", { class: "empty" }, "No weigh-ins yet."));
-  } else {
-    const subset = filterWeights(wstats.parsed, state.weightRange);
-    const values = subset.map((w) => w.lb);
-    const labels = subset.map((w, i) => (i === 0 || i === subset.length - 1 || i === Math.floor((subset.length - 1) / 2)) ? fmtDateCT(w.at, false) : "");
-    const proj = weightProjection(data, 42);
-    const projChart = proj.ready
-      ? el("div", null,
-          el("p", { class: "caption" }, `Projection from the post-dose trend: ${fmtNum(proj.weekly, 2)} lb/week (description only, not a prediction you should trust as advice).`),
-          lineChart(
-            [{ values: proj.actual }, { values: proj.projected, dashed: true }],
-            { labels: proj.labels, aria: "Weight with projection", format: (v) => fmtNum(v, 0) },
-          ),
-        )
-      : el("p", { class: "empty" }, `Needs ${proj.need} more weigh-in${proj.need === 1 ? "" : "s"} since starting tirzepatide for a trendline.`);
-    weightCard = card("Weight",
-      rangeBtns,
-      lineChart([{ values }], { labels, area: true, aria: "Weight", format: (v) => fmtNum(v, 0) }),
-      projChart,
-    );
-  }
-
-  const totals = data.daily_totals || [];
-  const last30 = totals.slice(-30);
-  const foodChart = last30.length
-    ? card("Daily calories and protein",
-        el("div", { class: "legend" },
-          el("span", null, el("span", { class: "swatch" }), "Calories"),
-          el("span", null, el("span", { class: "swatch alt" }), "Protein (g)"),
-        ),
-        lineChart(
-          [
-            { values: last30.map((r) => num(r.calories)) },
-            { values: last30.map((r) => num(r.protein_g)) },
-          ],
-          {
-            labels: last30.map((r, i) => (i === 0 || i === last30.length - 1) ? fmtShortDate(r.date) : ""),
-            aria: "Calories and protein",
-          },
-        ),
-      )
-    : null;
-
-  const health = data.daily_health || [];
-  const steps = health.slice(-30);
-  const healthCard = steps.length
-    ? card("Steps, last 30 days",
-        lineChart([{ values: steps.map((r) => num(r.steps)) }], {
-          labels: steps.map((r, i) => (i === 0 || i === steps.length - 1) ? fmtShortDate(r.day) : ""),
-          area: true,
-          aria: "Steps",
-          format: (v) => fmtNum(v, 0),
-        }),
-      )
-    : null;
-
-  const weeks = data.weekly_summary || [];
-  const weekCard = weeks.length
-    ? card("Weekly summary",
-        el("table", { class: "data" },
-          el("thead", null, el("tr", null, el("th", null, "Week"), el("th", { class: "num" }, "kcal/d"), el("th", { class: "num" }, "Protein"), el("th", { class: "num" }, "Weight"))),
-          el("tbody", null, ...[...weeks].reverse().slice(0, 8).map((w) => el("tr", null,
-            el("td", null, fmtShortDate(w.week)),
-            el("td", { class: "num" }, fmtNum(w.avg_daily_calories, 0)),
-            el("td", { class: "num" }, `${fmtNum(w.avg_protein_g, 0)} g`),
-            el("td", { class: "num" }, w.avg_weight_lb != null ? fmtNum(w.avg_weight_lb, 1) : "—"),
-          ))),
-        ),
-      )
-    : null;
-
-  const workouts = data.workouts || [];
-  const workoutCard = workouts.length
-    ? card("Workouts (historical)",
-        el("p", { class: "caption" }, `${data.workout_count || workouts.length} imported workouts. The latest ones here stop in spring 2025, so this is history, not current training.`),
-        el("table", { class: "data" },
-          el("thead", null, el("tr", null, el("th", null, "When"), el("th", null, "Activity"), el("th", { class: "num" }, "Min"))),
-          el("tbody", null, ...workouts.slice(0, 8).map((w) => el("tr", null,
-            el("td", null, parseTs(w.started_at) ? fmtDateCT(parseTs(w.started_at), true) : "—"),
-            el("td", null, w.activity || "—"),
-            el("td", { class: "num" }, fmtNum(w.duration_min, 0)),
-          ))),
-        ),
-      )
-    : null;
-
-  return el("div", null,
-    weightCard,
+  return el("div", { class: "stack" },
+    renderWeightCard(data),
     renderStall(data),
+    renderFoodTrends(data),
     renderCycles(data),
-    renderExplorer(data),
-    renderWearOff(data),
     renderFeel(data),
-    renderEarnWall(data),
+    renderWearOff(data),
     renderSideEffects(data),
+    renderExplorer(data),
+    renderEarnWall(data),
+    renderStepsCard(data),
     renderMeasurements(data),
-    foodChart,
-    healthCard,
-    weekCard,
-    workoutCard,
+    renderWeekly(data),
+    renderWorkouts(data),
     renderExport(data),
   );
 }
 
+/* ---------- app, gate, states ---------- */
+
 function renderApp(data) {
-  const asOf = parseTs(data.as_of) || new Date();
-  const updatedLabel = state.error === "refresh-failed"
-    ? `Couldn’t refresh. Still showing ${fmtDateTimeCT(asOf)}.`
-    : `Updated ${fmtDateTimeCT(asOf)}`;
-  const refreshLabel = state.updating ? "Refreshing…" : "Refresh";
   const body = state.tab === "meds" ? renderMedsTab(data)
     : state.tab === "trends" ? renderTrendsTab(data)
     : state.tab === "log" ? renderLogTab(data)
     : renderTodayTab(data);
-  return el("div", null,
-    el("header", { class: "topbar" },
-      el("div", null,
-        el("h1", null, "Log"),
-        el("div", { class: "updated" }, updatedLabel),
-      ),
-      el("div", { class: "top-actions" },
-        el("button", { type: "button", disabled: state.updating || state.formBusy, onClick: lock }, "Lock"),
-        el("button", { type: "button", class: "primary", disabled: state.updating || state.formBusy, onClick: () => load(true) }, refreshLabel),
-      ),
-    ),
+  return el("div", { class: "shell" + (state.updating ? " refreshing" : "") },
+    renderTopbar(data),
     body,
     tabNav(),
   );
 }
 
-
-
 function renderGate() {
   const err = state.error === "bad-passcode"
-    ? "That passcode was not accepted."
+    ? "That passcode didn’t work. Try again."
     : state.error === "empty-passcode"
-      ? "Enter your passcode."
+      ? "Enter your passcode first."
       : null;
+  const letters = state.gateLetters;
+  const dots = el("div", { class: "pin-dots", "aria-hidden": "true" });
   const field = el("input", {
     type: "password",
     id: "passcode",
     name: "passcode",
+    class: "pin-input",
     autocomplete: "current-password",
-    enterkeyhint: "done",
-    inputmode: "text",
+    autocapitalize: "off",
+    autocorrect: "off",
+    spellcheck: "false",
+    enterkeyhint: "go",
+    inputmode: letters ? "text" : "numeric",
+    pattern: letters ? null : "[0-9]*",
+    maxlength: "64",
     "aria-label": "Passcode",
     disabled: state.loading ? "disabled" : null,
   });
+  const drawDots = () => {
+    const n = field.value.length;
+    dots.innerHTML = "";
+    const count = Math.max(4, n);
+    for (let i = 0; i < count; i++) dots.append(el("span", { class: i < n ? "on" : "" }));
+    unlock.disabled = state.loading || n === 0;
+  };
   const onSubmit = () => {
     if (state.loading) return;
     submitPasscode(field.value);
   };
+  const unlock = el("button", { type: "button", class: "primary wide", onClick: onSubmit }, state.loading ? "Checking…" : "Unlock");
+  field.addEventListener("input", drawDots);
   field.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       onSubmit();
     }
   });
-  const box = el("div", { class: "state gate" },
+  const pad = el("label", { class: "pin-pad" + (err ? " shake" : ""), for: "passcode" }, dots, field);
+  drawDots();
+  const box = el("main", { class: "gate" },
+    el("img", { class: "gate-icon", src: "icons/icon-180.png", alt: "", width: "72", height: "72" }),
     el("h1", null, "Log"),
-    el("p", null, "Enter your passcode to open the dashboard. This device will remember it until you lock."),
-    err ? el("p", { class: "err" }, err) : null,
-    el("div", { class: "gate-row" },
-      field,
-      el("button", { type: "button", class: "primary", disabled: state.loading, onClick: onSubmit }, state.loading ? "Checking…" : "Unlock"),
-    ),
+    el("p", { class: "gate-sub" }, "Enter your passcode"),
+    pad,
+    el("p", { class: "gate-err", role: "alert" }, err || ""),
+    unlock,
+    el("button", {
+      type: "button",
+      class: "link",
+      onClick: () => { state.gateLetters = !state.gateLetters; render(); setTimeout(() => { const f = $("#passcode"); if (f) f.focus(); }, 0); },
+    }, letters ? "Use number pad" : "Use letters"),
+    el("p", { class: "gate-note" }, "This phone remembers it until you tap Lock."),
   );
-  setTimeout(() => field.focus(), 0);
+  // Desktop browsers focus right away; on iPhone the number pad opens when you tap the dots.
+  setTimeout(() => { if (!("ontouchstart" in window)) field.focus(); }, 0);
   return box;
 }
 
 function renderUnauthorized() {
-  return el("div", { class: "state" },
+  return el("main", { class: "gate" },
+    el("img", { class: "gate-icon", src: "icons/icon-180.png", alt: "", width: "72", height: "72" }),
     el("h1", null, "Log"),
-    el("p", null, "The access key in this link is not valid. Ask Log for a new link."),
+    el("p", { class: "gate-sub" }, "This access link isn’t valid anymore. Open the app without the link and use your passcode."),
+    el("button", { type: "button", class: "primary wide", onClick: lock }, "Use passcode"),
   );
 }
 
 function renderError() {
-  return el("div", { class: "state" },
+  return el("main", { class: "gate" },
+    el("img", { class: "gate-icon", src: "icons/icon-180.png", alt: "", width: "72", height: "72" }),
     el("h1", null, "Log"),
-    el("p", { class: "err" }, "The dashboard could not load the log."),
-    el("button", { class: "primary", onClick: () => load(false) }, "Try again"),
+    el("p", { class: "gate-sub" }, "Couldn’t load your log. Check your connection, then try again."),
+    el("button", { type: "button", class: "primary wide", onClick: () => load(false) }, "Try again"),
   );
 }
 
 function renderLoading() {
-  return el("div", { class: "skel" },
-    el("div", { class: "topbar" }, el("h1", null, "Log")),
-    el("div", { class: "card" }, el("div", { class: "pulse" }), el("div", { class: "pulse" }), el("div", { class: "pulse" })),
-    el("div", { class: "card" }, el("div", { class: "pulse" }), el("div", { class: "pulse" })),
+  return el("div", { class: "shell skel", "aria-busy": "true" },
+    el("header", { class: "topbar" }, el("div", { class: "titles" }, el("h1", null, "Log"))),
+    el("div", { class: "hero" }, el("div", { class: "pulse big" }), el("div", { class: "pulse" })),
+    el("div", { class: "card" }, el("div", { class: "pulse" }), el("div", { class: "pulse" }), el("div", { class: "pulse short" })),
+    el("div", { class: "card" }, el("div", { class: "pulse" }), el("div", { class: "pulse short" })),
   );
 }
 
@@ -1022,14 +1384,20 @@ function fmtShortDate(isoDate) {
 }
 
 function render() {
+  lastWidth = window.innerWidth;
   const root = $("#app");
+  const scrollY = window.scrollY;
   root.innerHTML = "";
-  if (!hasCredential() || state.error === "bad-passcode" || state.error === "empty-passcode") {
-    root.append(renderGate());
-  } else if (state.loading && !state.data) root.append(renderLoading());
+  const gate = !hasCredential() || state.error === "bad-passcode" || state.error === "empty-passcode";
+  document.body.classList.toggle("locked", gate || (state.error && !state.data));
+  if (gate) root.append(renderGate());
+  else if (state.loading && !state.data) root.append(renderLoading());
   else if (state.error === "unauthorized") root.append(renderUnauthorized());
   else if (state.error && !state.data) root.append(renderError());
-  else if (state.data) root.append(renderApp(state.data));
+  else if (state.data) {
+    root.append(renderApp(state.data));
+    window.scrollTo(0, scrollY);
+  }
 }
 
 function boot() {
@@ -1043,8 +1411,24 @@ function boot() {
   load(false);
 }
 
+/* Redraw charts when the width really differs from the one they were drawn at. */
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  // The Log tab has no charts; redrawing it would wipe what you've typed.
+  if (state.tab === "log") return;
+  if (Math.abs(window.innerWidth - lastWidth) < 24) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    lastWidth = window.innerWidth;
+    if (state.data && hasCredential()) render();
+  }, 150);
+});
+
 window.addEventListener("hashchange", boot);
 boot();
+// Background refresh every minute, but not while you're filling in a form on the Log tab.
 setInterval(() => {
-  if (hasCredential() && !state.loading) load(true);
+  if (!hasCredential() || state.loading || state.formBusy) return;
+  if (state.tab === "log") return;
+  load(true, true);
 }, 60000);

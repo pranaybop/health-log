@@ -8,6 +8,14 @@ Do not put passcodes, access tokens, or other secrets in this repo.
 
 Times display in America/Chicago. Meal macros may be estimates. Drug level is a half-life model (tirzepatide 5 days / 120 hours, retatrutide 6 days / 144 hours), not a lab measurement.
 
+## Frontend
+
+No build step and no dependencies. Scripts load in this order: `analytics.js` (pure calculations: weight smoothing, pace, drug level, cycles), `export.js` (prescriber CSV/PDF), `forms.js` (Log tab), `charts.js` (SVG charts with touch scrubbing, site map), `app.js` (state, tabs, rendering). `styles.css` follows the system light/dark setting. Bump the `?v=` query in `index.html` when shipping changes so iPhone Safari picks them up.
+
+Calorie and protein targets on Today come from active `log.goals` rows (`kind` `calories` / `protein`) when present; otherwise from targets set on the device (`localStorage` `log.targets`), which stay on that phone only.
+
+To test locally, serve the folder on port 4173 (for example `npx serve -l 4173`) so CORS allows it.
+
 ## Endpoints
 
 Both Edge Functions require `x-log-passcode` or `x-log-token`. Auth is a SHA-256 match (or the `LOG_APP_PASSCODE` / `LOG_DASHBOARD_TOKEN` function secrets if set). Failed auth waits 600ms and returns 401. CORS allows `https://pranaybop.github.io` and local `4173`.
@@ -49,7 +57,7 @@ Added for WeightSnap-parity:
 - `log.protocol` — `compound`, `display_name`, `typical_dose_mg`, `units`, `frequency`, `status` (`active`\|`paused`\|`retired`\|`as_needed`), `half_life_hours`, `started_on`, `next_site`, `notes`. Seeded: tirzepatide 3 mg weekly, active, 120 h, started 2026-11-02; retatrutide planned 2026-12-06, paused, 144 h, 20 units after mixing with 1 mL, `typical_dose_mg` null until known
 - `log.vials` — inventory for supply runway (`total_` / `remaining_` mg or units, concentration, expiry)
 - `log.measurements` — `measured_at`, `metric`, `value`, `unit`
-- `log.profile` — single row (`id = 1`): `start_weight_lb` (253.1), `goal_weight_lb` (235), `height_in`
+- `log.profile` — single row (`id = 1`): `start_weight_lb` (271.8), `goal_weight_lb` (235), `height_in`
 - `log.goals` — optional targets; a weight goal of 235 lb by 2027-01-01 is seeded
 - `log.progress_photos` — metadata only; private Storage is not wired up
 

@@ -45,12 +45,9 @@ function chips(name, options, current) {
     const btn = el("button", {
       type: "button",
       class: "chip" + (current === o.value ? " on" : ""),
-      "aria-pressed": current === o.value,
+      "aria-pressed": current === o.value ? "true" : "false",
       onClick: () => {
         wrap.dataset.value = o.value;
-        for (const b of wrap.querySelectorAll("button")) {
-          const on = b.textContent === o.label || b.dataset.value === o.value;
-        }
         for (const b of wrap.querySelectorAll(".chip")) {
           const on = b.dataset.value === o.value;
           b.classList.toggle("on", on);
@@ -76,9 +73,15 @@ function rangeField(label, name, min, max, value) {
   r.dataset.unset = value == null || value === "" ? "1" : "0";
   if (r.dataset.unset === "1") r.value = String(Math.round((min + max) / 2));
   out.textContent = r.dataset.unset === "1" ? "—" : r.value;
+  const paint = () => {
+    const pct = r.dataset.unset === "1" ? 0 : ((Number(r.value) - min) / (max - min)) * 100;
+    r.style.setProperty("--pct", pct.toFixed(1) + "%");
+  };
+  paint();
   r.addEventListener("input", () => {
     r.dataset.unset = "0";
     out.textContent = r.value;
+    paint();
   });
   return el("label", { class: "field" }, label, el("div", { class: "range" }, r, out));
 }
@@ -96,10 +99,10 @@ async function handleWrite(action, payload, success) {
     await load(true);
   } catch (err) {
     setFormMessage(false, err.message === "unauthorized" ? "Passcode was rejected. Lock and unlock again." : `Could not save: ${err.message}`);
+  } finally {
+    // Re-render after clearing the busy flag, or every Save button stays disabled.
     state.formBusy = false;
     render();
-  } finally {
-    state.formBusy = false;
   }
 }
 
@@ -110,7 +113,22 @@ function todayCheckin(data) {
 
 function renderToast() {
   if (!state.formMessage) return null;
-  return el("p", { class: "toast " + (state.formMessage.ok ? "ok" : "err") }, state.formMessage.text);
+  return el("p", { class: "toast " + (state.formMessage.ok ? "ok" : "err"), role: "status" }, state.formMessage.text);
+}
+
+/* A form that folds away. Its open state survives re-renders, so typing isn't lost to a refresh. */
+function fold(id, title, hint, ...kids) {
+  const d = el("details", { class: "card fold", open: state.openForms[id] ? true : null },
+    el("summary", null,
+      el("span", { class: "fold-text" },
+        el("span", { class: "fold-title" }, title),
+        hint ? el("span", { class: "fold-hint" }, hint) : null,
+      ),
+    ),
+    el("div", { class: "fold-body" }, ...kids),
+  );
+  d.addEventListener("toggle", () => { state.openForms[id] = d.open; });
+  return d;
 }
 
 function renderThreeTap(data) {
@@ -130,8 +148,8 @@ function renderThreeTap(data) {
     { value: "fading", label: "Fading" },
     { value: "not_feeling_it", label: "Not feeling it" },
   ], cur.dose_feel);
-  return card("3-tap check-in",
-    el("p", { class: "caption" }, "Today in America/Chicago. A later deep check-in will keep these answers."),
+  return card("Today’s check-in",
+    el("p", { class: "caption first" }, "Three taps. A deep check-in later keeps these answers."),
     el("div", { class: "log-form" },
       el("div", { class: "field" }, "Ate vs usual", ate),
       el("div", { class: "field" }, "Moved vs usual", moved),
@@ -181,7 +199,7 @@ function renderDeepCheckin(data) {
     if (v === "") return;
     return integer ? parseInt(v, 10) : Number(v);
   };
-  return card("Deep check-in",
+  return fold("deep", "Deep check-in", "Mood, food noise, energy, sleep, activity",
     form,
     el("div", { class: "form-actions" },
       el("button", {
@@ -211,7 +229,7 @@ function renderDeepCheckin(data) {
 }
 
 function renderWeighIn() {
-  const wt = field("Weight (lb)", input({ type: "number", name: "weight_lb", min: "50", max: "600", step: "0.1", inputmode: "decimal", required: true }));
+  const wt = field("Weight (lb)", input({ type: "number", name: "weight_lb", min: "50", max: "600", step: "0.1", inputmode: "decimal", required: true, class: "big-input", placeholder: "0.0" }));
   const notes = field("Notes", input({ type: "text", name: "notes", maxlength: "200" }));
   const box = el("div", { class: "log-form" }, wt, notes);
   return card("Weigh-in",
@@ -248,20 +266,17 @@ function renderDoseForm(data) {
   const mg = field("Dose (mg)", input({ type: "number", name: "dose_mg", min: "0.05", max: "50", step: "0.05", value: active.typical_dose_mg ?? 3, inputmode: "decimal" }));
   const units = field("Units (optional)", input({ type: "number", name: "units", min: "0", max: "1000", step: "1", value: active.units ?? "", inputmode: "numeric" }));
   const site = chips("site", SITES.map((s) => ({ value: s, label: s })), rot.next || rot.lastSite || "");
-  const skip = el("label", { class: "field", style: { display: "flex", alignItems: "center", gap: "8px" } },
-    input({ type: "checkbox", name: "skipped" }),
-    "Mark as skipped",
+  const skip = el("label", { class: "toggle" },
+    el("span", null, "Mark as skipped"),
+    input({ type: "checkbox", name: "skipped", role: "switch" }),
   );
-  skip.querySelector("input").style.width = "auto";
-  skip.querySelector("input").style.minHeight = "auto";
   const notes = field("Notes", input({ type: "text", name: "notes" }));
   const box = el("div", { class: "log-form" },
     field("Compound", compound), mg, units,
     el("div", { class: "field" }, "Injection site", site),
     skip, notes,
   );
-  return card("Log a dose",
-    el("p", { class: "caption" }, rot.next ? `Suggested next site: ${rot.next}.` : "Pick the site you used."),
+  return fold("dose", "Log a dose", rot.next ? `Suggested site: ${SITE_LABELS[rot.next] || rot.next}` : "Pick the site you used",
     box,
     el("div", { class: "form-actions" },
       el("button", {
@@ -300,7 +315,7 @@ function renderSideEffectForm() {
   sev.querySelector(".n").textContent = "5";
   const notes = field("Notes", input({ type: "text", name: "notes" }));
   const box = el("div", { class: "log-form" }, effect, sev, notes);
-  return card("Side effect",
+  return fold("side", "Side effect", "Name it and rate it 1 to 10",
     box,
     el("div", { class: "form-actions" },
       el("button", {
@@ -329,7 +344,7 @@ function renderEarnIt(data) {
   const cur = todayCheckin(data);
   const status = cur && cur.earned === true ? "You earned it today." : cur && cur.earned === false ? "Marked as not earned today." : "Not marked yet today.";
   return card("Earn It",
-    el("p", { class: "caption" }, status),
+    el("p", { class: "caption first" }, status),
     el("div", { class: "form-actions" },
       el("button", { type: "button", class: "primary", disabled: state.formBusy, onClick: () => handleWrite("earn_it", { earned: true }, "Earned it.") }, "Yes, earned it"),
       el("button", { type: "button", disabled: state.formBusy, onClick: () => handleWrite("earn_it", { earned: false }, "Marked as not earned.") }, "Not today"),
@@ -355,7 +370,7 @@ function renderMeasurementForm() {
     { value: "%", label: "%" },
   ], "in"));
   const box = el("div", { class: "log-form" }, metric, value, unit);
-  return card("Measurement",
+  return fold("measure", "Measurement", "Waist, chest, hip and more",
     box,
     el("div", { class: "form-actions" },
       el("button", {
@@ -392,7 +407,7 @@ function renderVialForm() {
   const exp = field("Expires on", input({ type: "date", name: "expired_on" }));
   const notes = field("Notes", input({ type: "text", name: "notes" }));
   const box = el("div", { class: "log-form" }, compound, label, totalMg, totalU, conc, exp, notes);
-  return card("Start a vial",
+  return fold("vial", "Start a vial", "Track supply runway",
     box,
     el("div", { class: "form-actions" },
       el("button", {
@@ -421,7 +436,7 @@ function renderReconCalc() {
   const vial = field("Vial amount (mg)", input({ type: "number", name: "vial_mg", min: "0", step: "0.1", value: "", inputmode: "decimal" }));
   const dil = field("Diluent (mL)", input({ type: "number", name: "diluent_ml", min: "0", step: "0.1", value: "1", inputmode: "decimal" }));
   const dose = field("Desired dose (mg)", input({ type: "number", name: "want_mg", min: "0", step: "0.05", inputmode: "decimal" }));
-  const out = el("p", { class: "caption" }, "This stays on your device and is not saved. Assumes 100 units = 1 mL.");
+  const out = el("p", { class: "calc-out" }, "This stays on your device and is not saved. Assumes 100 units = 1 mL.");
   const box = el("div", { class: "log-form" }, vial, dil, dose, out);
   const recalc = () => {
     const v = Number(box.querySelector("[name=vial_mg]").value);
@@ -433,22 +448,22 @@ function renderReconCalc() {
     }
     const units = (w / v) * m * 100;
     const conc = v / m;
-    out.textContent = `${fmtNum(units, 1)} units · ${fmtNum(conc, 2)} mg/mL after mixing. Not saved.`;
+    out.textContent = `Draw ${fmtNum(units, 1)} units. That’s ${fmtNum(conc, 2)} mg/mL after mixing. Not saved.`;
   };
   box.querySelectorAll("input").forEach((i) => i.addEventListener("input", recalc));
-  return card("Reconstitution calculator",
-    el("p", { class: "caption" }, "For the planned retatrutide start: mix the vial with 1 mL, then 20 units is the planned first dose. mg equivalent is still unknown."),
+  return fold("recon", "Reconstitution calculator", "Units to draw for a dose. Not saved",
+    el("p", { class: "caption first" }, "For the planned retatrutide start: mix the vial with 1 mL, then 20 units is the planned first dose. The mg equivalent is still unknown."),
     box,
   );
 }
 
 function renderLogTab(data) {
-  return el("div", null,
+  return el("div", { class: "stack" },
     renderToast(),
     renderThreeTap(data),
+    el("div", { class: "grid two" }, renderWeighIn(), renderEarnIt(data)),
+    el("h2", { class: "section-title" }, "More to log"),
     renderDeepCheckin(data),
-    renderEarnIt(data),
-    renderWeighIn(),
     renderDoseForm(data),
     renderSideEffectForm(),
     renderMeasurementForm(),
