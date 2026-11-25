@@ -167,9 +167,13 @@ jobs:
               echo "::error::$name: script error in the page"; fail=1
             fi
             base64 -i "$RUNNER_TEMP/$name.jpg" | tr -d '\n' | fold -w 4000 | sed "s/^/IMGDATA $name /"
+            echo
           }
+          # Warm up once: the first launch on a fresh simulator is slow.
+          xcrun simctl launch "$UDID" com.pranaybop.log -demo today >/dev/null; sleep 25; xcrun simctl terminate "$UDID" com.pranaybop.log || true
           shoot today-light today light
           shoot trends-light trends light
           shoot trends-dark trends dark
           shoot meds-dark meds dark
+          shoot log-light log light
           exit $fail

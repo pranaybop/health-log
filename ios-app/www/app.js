@@ -2017,11 +2017,9 @@ async function boot() {
       if (cached && cached.as_of) { state.data = cached; state.fromCache = true; }
     } catch (_) { /* ignore a bad cache */ }
   }
-  if (state.data) { render(); load(true).then(() => autoSyncHealth()); }
-  else load(false).then(() => {
-    if (window.LOG_DEMO && window.LOG_DEMO.tab) selectTab(window.LOG_DEMO.tab);
-    autoSyncHealth();
-  });
+  const demoTab = () => { if (window.LOG_DEMO && window.LOG_DEMO.tab) selectTab(window.LOG_DEMO.tab); };
+  if (state.data) { render(); demoTab(); load(true).then(() => autoSyncHealth()); }
+  else load(false).then(() => { demoTab(); autoSyncHealth(); });
 }
 
 // The iPhone app ships its files inside the app, so it needs no service worker (and WKWebView has none).

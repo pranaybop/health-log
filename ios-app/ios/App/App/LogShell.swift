@@ -109,6 +109,13 @@ final class LogBridgeViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         super.capacitorDidLoad()
+        // Behind the page (and under the glass tab bar), follow light and dark mode instead of black.
+        if let webView = webView {
+            webView.isOpaque = false
+            webView.backgroundColor = .systemGroupedBackground
+            webView.scrollView.backgroundColor = .systemGroupedBackground
+            webView.underPageBackgroundColor = .systemGroupedBackground
+        }
         guard let controller = webView?.configuration.userContentController else { return }
         let info = Bundle.main.infoDictionary ?? [:]
         let version = info["CFBundleShortVersionString"] as? String ?? ""
