@@ -1,6 +1,12 @@
 # Log
 
-Live health dashboard for the private `log` schema in Supabase project `qnbshmenmurdaogslmrj`. The UI is this static app on GitHub Pages: https://pranaybop.github.io/health-log/
+Live health dashboard for the private `log` schema in Supabase project `qnbshmenmurdaogslmrj`.
+
+**Since Nov 25, 2026 new work ships only in the iPhone app.** The app's files live in `ios-app/www` and are built into the .ipa (see `ios-app/README.md`). The website at https://pranaybop.github.io/health-log/ is the root of this repo, frozen at commit `ea5299a`: don't change the root files. `_config.yml` keeps `ios-app/`, `tests/` and `supabase/` off the website.
+
+Tests: `cd tests && npm ci && npx playwright install chromium && npm test`. They serve `ios-app/www` on localhost:4173 and run on made-up data from `tests/fixture.js` (this repo is public, so never real data). GitHub Actions runs them on every app change and before every .ipa build.
+
+The rest of this file describes the app and the backend. The UI was this static app on GitHub Pages:
 
 Open that URL and enter your passcode. This device stores it in `localStorage` (`log.passcode`) until you tap Lock. The older `#k=` access-token link still works. The page fetches on load, refreshes every 60 seconds, and has a manual Refresh control.
 
@@ -10,7 +16,7 @@ Times display in America/Chicago. Meal macros may be estimates. Drug level is a 
 
 ## Frontend
 
-No build step and no dependencies. Scripts load in this order: `analytics.js` (pure calculations: weight smoothing, pace, drug level, cycles), `export.js` (prescriber CSV/PDF and the 4-week coach pack), `forms.js` (Log tab and the check-in), `health.js` (Apple Health sync, only active inside the iPhone app), `charts.js` (SVG charts with touch scrubbing, site map), `insights.js` (food thoughts, the week after a shot, heart, body composition, more from Apple Health, running, protein hit rate), `focus.js` (race taper, protein streak, retatrutide switch, long-run timing, reta vs tirz, sleep stages, compound vial runway), `app.js` (state, tabs, rendering). `sw.js` is a network-first offline shell for the site's own files; the last dashboard payload is kept in `localStorage` (`log.cache`) so the app opens with data and works offline. Lock clears it. `styles.css` follows the system light/dark setting. Bump the `?v=` query in `index.html` when shipping changes so iPhone Safari picks them up.
+No build step and no dependencies (in `ios-app/www` for the app). Scripts load in this order: `version.js` (the app's version and build number, written by the .ipa workflow), `analytics.js` (pure calculations: weight smoothing, pace, drug level, cycles), `export.js` (prescriber CSV/PDF and the 4-week coach pack), `forms.js` (Log tab and the check-in), `health.js` (Apple Health sync, only active inside the iPhone app), `charts.js` (SVG charts with touch scrubbing, site map), `insights.js` (food thoughts, the week after a shot, heart, body composition, more from Apple Health, running, protein hit rate), `focus.js` (race taper, protein streak, retatrutide switch, long-run timing, reta vs tirz, sleep stages, compound vial runway), `signals.js` (maintenance calories, off-your-normal recovery flags, appetite by drug level), `app.js` (state, tabs, rendering). `sw.js` is a network-first offline shell for the site's own files; the last dashboard payload is kept in `localStorage` (`log.cache`) so the app opens with data and works offline. Lock clears it. `styles.css` follows the system light/dark setting. Bump the `?v=` query in `index.html` when shipping changes so iPhone Safari picks them up.
 
 Calorie and protein targets on Today come from active `log.goals` rows (`kind` `calories` / `protein`, set with `goal_set`); a device-only fallback (`localStorage` `log.targets`) is used only if no goals row exists. Current targets: 2,200 kcal and 150 g protein.
 

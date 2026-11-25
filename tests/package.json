@@ -1,0 +1,12 @@
+{
+  "name": "log-tests",
+  "private": true,
+  "description": "Browser tests for the Log iPhone app's web files (ios-app/www), on made-up data.",
+  "scripts": {
+    "test": "node run-all.js",
+    "fixture": "node fixture.js > fixture.json"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

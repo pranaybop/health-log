@@ -2,10 +2,6 @@
 	"appId": "com.pranaybop.log",
 	"appName": "Log",
 	"webDir": "www",
-	"server": {
-		"url": "https://pranaybop.github.io/health-log/",
-		"errorPath": "offline.html"
-	},
 	"ios": {
 		"contentInset": "never",
 		"backgroundColor": "#000000",
@@ -14,5 +10,10 @@
 	},
 	"packageClassList": [
 		"HealthPlugin"
-	]
+	],
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		}
+	}
 }

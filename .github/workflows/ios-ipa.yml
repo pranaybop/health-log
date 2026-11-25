@@ -1,4 +1,5 @@
-# Builds the Log iPhone app on GitHub's Mac runners and saves an unsigned .ipa.
+# Builds the Log iPhone app on GitHub's Mac runners and saves an unsigned .ipa, named with its
+# version and build number (Log-1.1-12.ipa). The app's files are bundled from ios-app/www.
 # Install it with Sideloadly or AltStore, which sign it with your Apple ID.
 # No secrets or certificates are used or needed here.
 name: iPhone app (.ipa)
@@ -15,7 +16,11 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    uses: ./.github/workflows/tests.yml
+
   build:
+    needs: test
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -23,6 +28,23 @@ jobs:
 
       - name: Xcode version
         run: xcodebuild -version
+
+      # Version: ios-app/VERSION (bump it for a release you want to tell apart), build: this
+      # workflow's run number, which goes up by one every build.
+      - name: Version
+        run: |
+          echo "APP_VERSION=$(tr -d '[:space:]' < ios-app/VERSION)" >> "$GITHUB_ENV"
+          echo "APP_BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      # The app runs from files inside the .ipa (ios-app/www), not from the website.
+      - name: Bundle the app files
+        run: |
+          sh ios-app/sync-web.sh
+          SHA=$(git rev-parse --short HEAD)
+          BUILT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          printf 'window.LOG_VERSION = { version: "%s", build: %s, commit: "%s", built: "%s" };\n' "$APP_VERSION" "$APP_BUILD" "$SHA" "$BUILT" > ios-app/ios/App/App/public/version.js
+          cat ios-app/ios/App/App/public/version.js
+          test -f ios-app/ios/App/App/public/app.js
 
       - name: Build (Release, device, unsigned)
         working-directory: ios-app/ios/App
@@ -37,12 +59,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="$APP_VERSION" \
+            CURRENT_PROJECT_VERSION="$APP_BUILD" \
             build
 
-      - name: Package Log.ipa
+      - name: Package the .ipa
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/App.app"
           test -d "$APP"
+          /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP/Info.plist"
+          test -f "$APP/public/app.js"
+          IPA="Log-$APP_VERSION-$APP_BUILD.ipa"
+          echo "IPA=$IPA" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
           # Carry the HealthKit entitlement in the binary so the signing tool asks for it.
@@ -51,11 +80,12 @@ jobs:
           else
             echo "ldid unavailable; entitlements not embedded"
           fi
-          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/Log.ipa" Payload)
-          ls -lh Log.ipa
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/$IPA" Payload)
+          ls -lh "$IPA"
+          echo "### Log $APP_VERSION (build $APP_BUILD)" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Log-ipa
-          path: Log.ipa
+          name: Log-${{ env.APP_VERSION }}-build-${{ env.APP_BUILD }}
+          path: ${{ env.IPA }}
           retention-days: 30
