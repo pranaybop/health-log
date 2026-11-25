@@ -28,6 +28,14 @@ public struct MedsScreen: View {
                 }
             }
             .modifier(MLScrollOnLaunch(proxy: proxy, ready: store.dashboard != nil))
+            .onAppear { openDoseReminder(proxy) }
+            .onReceive(NotificationCenter.default.publisher(for: ReminderRouter.opened)) { _ in openDoseReminder(proxy) }
         }
+    }
+
+    private func openDoseReminder(_ proxy: ScrollViewProxy) {
+        guard ReminderRouter.pending == "meds" else { return }
+        ReminderRouter.pending = nil
+        DispatchQueue.main.async { proxy.scrollTo("plan", anchor: .top) }
     }
 }

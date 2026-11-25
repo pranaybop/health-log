@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 import LogHealth
+import LogUI
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -10,6 +11,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Apple Health catch-up in the background (BGAppRefreshTask). Has to be registered before launch ends.
         NativeHealthSync.registerBackgroundTasks()
+        ReminderScheduler.shared.install()
         return true
     }
 

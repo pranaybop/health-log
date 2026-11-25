@@ -4,6 +4,8 @@ meds-sites meds light -scrollTo sites
 meds-sites-dark meds dark -scrollTo sites
 meds-plan meds light -scrollTo plan
 meds-plan-dark meds dark -scrollTo plan
+meds-plan-overdue meds light -now 2026-11-30T09:00:00-06:00 -scrollTo plan
+meds-plan-overdue-dark meds dark -now 2026-11-30T09:00:00-06:00 -scrollTo plan
 meds-titration meds light -scrollTo titration
 meds-switch meds light -scrollTo switch
 meds-switch-dark meds dark -scrollTo switch
@@ -12,6 +14,8 @@ meds-vials meds light -scrollTo vials
 meds-history meds light -scrollTo history
 log-dark log dark
 log-weigh log light -scrollTo weigh
+log-reminders log light -scrollTo reminders
+log-reminders-dark log dark -scrollTo reminders
 log-dose log light -scrollTo dose
 log-dose-dark log dark -scrollTo dose
 log-side log light -scrollTo side

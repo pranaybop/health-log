@@ -162,6 +162,7 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
             store.healthSync = { days in _ = await NativeHealthSync.shared.sync(days: days) }
         }
         store.onLockChange = { [weak self] locked in self?.nativeLockChanged(locked) }
+        ReminderScheduler.shared.bind()
 
         var start = 0
         #if DEBUG
@@ -195,6 +196,7 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
 
     @objc private func appWillEnterForeground() {
         Task { await store.refresh(syncHealth: true) }
+        ReminderScheduler.shared.reschedule(store.dashboard)
     }
 
     @objc private func appDidBecomeActive() {

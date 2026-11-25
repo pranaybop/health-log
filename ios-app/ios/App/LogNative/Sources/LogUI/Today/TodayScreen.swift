@@ -51,6 +51,15 @@ public struct TodayScreen: View {
         }
         .sensoryFeedback(.selection, trigger: dayOffset)
         .sensoryFeedback(.success, trigger: saves)
+        .onAppear { openCheckinReminder() }
+        .onReceive(NotificationCenter.default.publisher(for: ReminderRouter.opened)) { _ in openCheckinReminder() }
+    }
+
+    private func openCheckinReminder() {
+        guard ReminderRouter.pending == "checkin" else { return }
+        ReminderRouter.pending = nil
+        let key = LogTime.today(now)
+        checkinDay = CheckinDay(key: key, isToday: true)
     }
 
     // MARK: Layout

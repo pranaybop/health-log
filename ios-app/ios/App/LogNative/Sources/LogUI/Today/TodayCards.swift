@@ -458,10 +458,11 @@ struct TodayMedSummary: View {
     }
 
     private var nextText: String {
-        if let plan = Analytics.nextPlanned(m.d, now: m.now) {
+        if let plan = Analytics.nextPlanned(m.d) {
             let day = LogTime.noon(plan.plannedOn)
             let text = "\(TodayText.capitalize(plan.compound ?? "")) \(Fmt.num(plan.doseMg, 1)) mg\(plan.units.map { " (\(Fmt.num($0, 0)) units)" } ?? "")"
-            return "\(text), \(LogTime.weekdayDate(day)) (\(TodayText.daysWord(LogTime.daysUntil(day, now: m.now))))"
+            let when = "\(text), \(LogTime.weekdayDate(day)) (\(TodayText.daysWord(LogTime.daysUntil(day, now: m.now))))"
+            return Analytics.planIsOverdue(plan, now: m.now) ? "Overdue: \(when)" : when
         }
         if let next = Analytics.plannedNextDose(m.d) {
             return "\(LogTime.weekdayDate(next)), \(TodayText.daysWord(LogTime.daysUntil(next, now: m.now)))"

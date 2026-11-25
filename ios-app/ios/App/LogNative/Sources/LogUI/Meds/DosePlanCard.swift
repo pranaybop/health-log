@@ -2,9 +2,14 @@ import SwiftUI
 import LogCore
 
 /// Dose plan (web: renderDosePlan in signals.js): the next planned dose with when, the vial to draw
-/// from, the next step-up and retatrutide used so far, then the plan's steps. Nothing without rows.
+/// from, the next step-up and retatrutide used so far, then the plan's steps. A missed dose stays
+/// here, marked overdue, until it's logged or skipped. Nothing without rows.
 struct MLDosePlanCard: View {
     let data: Dashboard
+    @Environment(LogStore.self) private var store
+    @State private var reminders = ReminderModel.shared
+    @State private var busy = false
+    @State private var message: MLMessage?
 
     static func shows(_ d: Dashboard) -> Bool { !Analytics.planRows(d).isEmpty }
 
@@ -13,26 +18,31 @@ struct MLDosePlanCard: View {
         return "\(MLFmt.cap(r.compound)) \(Fmt.num(r.doseMg, 1)) mg\(units)"
     }
 
+    private var now: Date { TodayDebug.now ?? Date() }
+
     var body: some View {
         let rows = Analytics.planRows(data)
         let next = Analytics.nextPlanned(data)
         let steps = Analytics.planSteps(rows)
         let reta = rows.filter { $0.compound == "retatrutide" }
         let total = reta.reduce(0.0) { $0 + ($1.doseMg ?? 0) }
-        let today = LogTime.today()
+        let today = LogTime.today(now)
+        let overdue = next.map { Analytics.planIsOverdue($0, now: now) } ?? false
         let cutoff = next?.plannedOn ?? "9999"
         let used = reta.filter { $0.plannedOn < cutoff }.reduce(0.0) { $0 + ($1.doseMg ?? 0) }
         let stepUp: DosePlanRow? = next.flatMap { n in
             rows.first { $0.plannedOn > n.plannedOn && $0.compound == n.compound && ($0.doseMg ?? 0) > (n.doseMg ?? 0) }
         }
         let current: Int? = next.flatMap { n in steps.firstIndex { n.plannedOn >= $0.from && n.plannedOn <= $0.to } }
-        LogCard("Dose plan") {
+        LogCard("Dose plan", accessory: {
+            if overdue { MLBadge("Overdue", .watch) }
+        }) {
             if let next {
                 let week = next.week.map { ", week \(Fmt.num($0, 0)) of \(reta.count)" } ?? ""
-                Text("Next: \(Self.doseText(next))\(week).")
+                Text("\(overdue ? "Overdue" : "Next"): \(Self.doseText(next))\(week).")
                     .font(.headline).foregroundStyle(LogColor.ink).fixedSize(horizontal: false, vertical: true)
                 VStack(spacing: 0) {
-                    PropRow("When", when(next.plannedOn))
+                    PropRow(overdue ? "Was due" : "When", when(next.plannedOn))
                     if let draw = next.vialDraw, !draw.isEmpty { MLHairline(); PropRow("Draw from", draw) }
                     if let note = next.notes, !note.isEmpty { MLHairline(); PropRow("Note", note) }
                     if let s = stepUp {
@@ -41,17 +51,67 @@ struct MLDosePlanCard: View {
                     }
                     if !reta.isEmpty { MLHairline(); PropRow("Retatrutide used", "\(Fmt.num(used, 1)) of \(Fmt.num(total, 0)) mg planned") }
                 }
+                if next.plannedOn <= today {
+                    skipButton(next)
+                    if reminders.offersShotPrompt { remindOffer }
+                }
             } else {
                 Text("Every planned dose is done.").font(.headline).foregroundStyle(LogColor.ink)
             }
             stepsTable(steps, current: current, today: today)
             Caption("From your titration sheet. The plan is a guide; what you actually take is what you log. 1 mg = 10 units at 10 mg/mL.")
         }
+        .modifier(MLAutoClear(message: $message))
+    }
+
+    private var remindOffer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Remind you at \(ReminderSettings.clock(reminders.settings.shotHour, reminders.settings.shotMinute)), including while this dose is still open.")
+                .font(.footnote).foregroundStyle(LogColor.ink2).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button("Remind me") { Task { await reminders.enableShot() } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(LogColor.accent)
+                Button("Not now") { reminders.dismissShotPrompt() }
+                    .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private func skipButton(_ row: DosePlanRow) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button { skip(row) } label: {
+                Text("Skip this dose").frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(busy)
+            MLMessageView(message: message)
+        }
+    }
+
+    /// Same dose_log write as the dose form's skip switch, dated on the planned day so this week clears.
+    private func skip(_ row: DosePlanRow) {
+        guard !busy else { return }
+        var payload: [String: Any] = [
+            "compound": row.compound ?? "",
+            "skipped": true,
+            "taken_at": MLTime.iso(LogTime.noon(row.plannedOn)),
+            "notes": "Skipped planned dose",
+        ]
+        if let mg = row.doseMg { payload["dose_mg"] = mg }
+        if let units = row.units { payload["units"] = units }
+        busy = true
+        message = nil
+        Task {
+            let m = await MLWrite.send(store, "dose_log", payload, success: "Skipped the planned dose.")
+            busy = false
+            withAnimation { message = m }
+        }
     }
 
     private func when(_ key: String) -> String {
         let d = LogTime.noon(key)
-        return "\(MLFmt.day(d)), \(MLFmt.daysWord(MLFmt.days(until: d)))"
+        return "\(MLFmt.day(d)), \(MLFmt.daysWord(MLFmt.days(until: d, now: now)))"
     }
 
     private func stepsTable(_ steps: [PlanStep], current: Int?, today: String) -> some View {

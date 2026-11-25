@@ -884,7 +884,10 @@ function renderMedSummary(data) {
       prop("Last dose", lastDose ? `${fmtNum(lastDose.dose_mg, 1)} mg ${capitalize(lastDose.compound || "")}, ${fmtDateCT(parseTs(lastDose.taken_at), true)}` : "—"),
       (() => {
         const plan = nextPlanned(data);
-        if (plan) return prop("Next dose", `${planDoseText(plan)}, ${fmtDateCT(keyToNoon(plan.planned_on), true)} (${daysWord(daysUntil(keyToNoon(plan.planned_on)))})`);
+        if (plan) {
+          const when = `${planDoseText(plan)}, ${fmtDateCT(keyToNoon(plan.planned_on), true)} (${daysWord(daysUntil(keyToNoon(plan.planned_on)))})`;
+          return prop("Next dose", planIsOverdue(plan) ? `Overdue: ${when}` : when);
+        }
         return prop("Next dose", next ? `${fmtDateCT(next, true)}, ${daysWord(daysUntil(next))}` : `Retatrutide starts ${fmtDateCT(RETA_START, true)}`);
       })(),
       prop("Next site", rot.next ? (SITE_LABELS[rot.next] || rot.next) : "—"),
