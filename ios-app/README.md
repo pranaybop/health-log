@@ -10,6 +10,19 @@ Rebuild only when something in `ios-app/` changes (icon, name, native plugins).
 
 Nothing in this folder holds a passcode, token or key. Keep it that way.
 
+## Get an .ipa without Xcode
+
+Every push that changes `ios-app/` runs the **iPhone app (.ipa)** workflow on GitHub's Mac runners (or run it by hand from the Actions tab). It builds an unsigned `Log.ipa` and keeps it for 30 days under the run's **Artifacts** (sign in to GitHub to download; it arrives zipped).
+
+To put it on your iPhone, use a sideloading tool on a Mac or PC, which signs it with your Apple ID:
+
+- **Sideloadly** (Mac or Windows): plug in the iPhone, drop `Log.ipa` in, sign in with your Apple ID, Start.
+- **AltStore** (AltServer on the Mac mini): re-signs the app over Wi-Fi every few days so it doesn't lapse.
+
+Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** and trust your Apple ID under **Settings > General > VPN & Device Management**. With a free Apple ID the app has to be re-signed every 7 days (AltStore does this for you). Whether Apple Health access survives signing with a free Apple ID isn't guaranteed; if Health sync can't get permission, the rest of the app still works, and building from Xcode with your Apple ID is the fallback.
+
+## Build from Xcode instead
+
 ## What you need
 
 - A Mac with Xcode installed (from the App Store) and Node.js.

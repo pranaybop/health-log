@@ -1,0 +1,61 @@
+# Builds the Log iPhone app on GitHub's Mac runners and saves an unsigned .ipa.
+# Install it with Sideloadly or AltStore, which sign it with your Apple ID.
+# No secrets or certificates are used or needed here.
+name: iPhone app (.ipa)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "ios-app/**"
+      - ".github/workflows/ios-ipa.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Build (Release, device, unsigned)
+        working-directory: ios-app/ios/App
+        run: |
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package Log.ipa
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/App.app"
+          test -d "$APP"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+          # Carry the HealthKit entitlement in the binary so the signing tool asks for it.
+          if brew install ldid >/dev/null 2>&1; then
+            ldid -S"ios-app/ios/App/App/App.entitlements" "$RUNNER_TEMP/ipa/Payload/App.app/App" && echo "entitlements embedded"
+          else
+            echo "ldid unavailable; entitlements not embedded"
+          fi
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/Log.ipa" Payload)
+          ls -lh Log.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Log-ipa
+          path: Log.ipa
+          retention-days: 30
