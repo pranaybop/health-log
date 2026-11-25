@@ -53,6 +53,8 @@ function healthPlugin() {
 }
 
 function canSyncHealth() {
+  // The app's native sync (Swift) takes over once it's on; then this one stays off.
+  if (window.LOG_NATIVE && window.LOG_NATIVE.healthSync) return false;
   return !window.LOG_DEMO && !!healthPlugin();
 }
 

@@ -76,6 +76,22 @@ const check = checker();
   await page.keyboard.press("Enter");
   await page.waitForSelector(".hero-num");
   check("unlocking saves to the Keychain only", (await page.evaluate(() => localStorage.getItem("__keychain"))) === PASSCODE && (await page.evaluate(() => localStorage.getItem("log.passcode"))) === null);
+  // Native screens lock and unlock the page by calling these.
+  check("the page has lock() and boot() for the native lock screen", await page.evaluate(() => typeof window.lock === "function" && typeof window.boot === "function"));
+
+  // With the app's native Apple Health sync on, the web sync stays off and pull to refresh asks the app.
+  const p2 = await ctx.newPage();
+  await p2.addInitScript(() => {
+    window.__posted = [];
+    window.LOG_NATIVE = Object.freeze({ tabs: true, keychain: true, healthSync: true, version: "2.0", build: "9" });
+    window.Capacitor = { isNativePlatform: () => true, Plugins: { Health: { isHealthAvailable: async () => ({ available: true }) } } };
+    window.webkit = { messageHandlers: { logShell: { postMessage: (m) => { window.__posted.push(m); return Promise.resolve(m.type === "getPasscode" ? localStorage.getItem("__keychain") || "" : true); } } } };
+  });
+  p2.on("pageerror", (e) => errors.push(e.message));
+  await p2.goto(BASE);
+  await p2.waitForSelector(".hero-num");
+  check("native Health sync turns the web sync off", await p2.evaluate(() => canSyncHealth() === false && document.documentElement.classList.contains("ptr-on")));
+  await p2.close();
   check("no page errors", errors.length === 0, errors.join("; "));
 
   await browser.close();

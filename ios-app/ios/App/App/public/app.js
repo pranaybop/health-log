@@ -2054,7 +2054,7 @@ const PTR_TRIGGER = 64;
 const ptr = { start: null, pull: 0, busy: false, node: null };
 
 function ptrEnabled() {
-  return isStandalone() || canSyncHealth();
+  return isStandalone() || nativeTabs || canSyncHealth();
 }
 
 function ptrNode() {
@@ -2087,6 +2087,8 @@ async function pullRefresh() {
       const r = await syncAppleHealth({ days: 2 });
       state.healthBusy = false;
       state.healthMsg = r.ok ? null : { ok: false, text: r.reason };
+    } else if (NATIVE && NATIVE.healthSync && !window.LOG_DEMO) {
+      await shellPost({ type: "syncHealth" }); // the app's native Apple Health sync
     }
     await load(true, true);
   } finally {
