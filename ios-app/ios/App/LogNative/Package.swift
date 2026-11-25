@@ -6,8 +6,8 @@ import PackageDescription
 // file never touches the project file.
 //
 //   LogCore    data models, Supabase calls, Central-time dates, core calculations, the shared store
-//   LogUI      SwiftUI screens (Shared/, Today/, Meds/, Log/, Trends/)
-//   LogHealth  Apple Health sync in Swift, with background refresh
+//   LogUI      SwiftUI screens (Shared/, Today/, Meds/, Log/, Trends/); places LogHealth's HealthSyncPanel
+//   LogHealth  Apple Health sync in Swift, with background refresh, and its status panel
 let package = Package(
     name: "LogNative",
     platforms: [.iOS(.v17)],
@@ -16,7 +16,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "LogCore"),
-        .target(name: "LogUI", dependencies: ["LogCore"]),
+        .target(name: "LogUI", dependencies: ["LogCore", "LogHealth"]),
         .target(name: "LogHealth", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("HealthKit")]),
         .testTarget(name: "LogCoreTests", dependencies: ["LogCore"], resources: [.copy("Fixtures")]),
     ]
