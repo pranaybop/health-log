@@ -115,15 +115,6 @@ public struct Workout: Codable, Hashable, Sendable, Identifiable {
     public var indoor: Bool?
     public var source: String?
     public var startedDate: Date? { LogTime.parse(startedAt) }
-    public var isRun: Bool { (activity ?? "").lowercased().range(of: "run|jog", options: .regularExpression) != nil }
-}
-
-public struct RunWeek: Codable, Hashable, Sendable {
-    public var week: String
-    @Flex public var runs: Double?
-    @Flex public var miles: Double?
-    @Flex public var longestMi: Double?
-    @Flex public var minutes: Double?
 }
 
 public struct HealthSpan: Codable, Hashable, Sendable {
@@ -261,7 +252,6 @@ public struct Dashboard: Codable, Sendable {
     public var healthMetrics: [String: [MetricPoint]]
     public var workouts: [Workout]
     public var workoutCount: Int?
-    public var runWeeks: [RunWeek]
     public var healthSpan: HealthSpan?
     public var checkins: [Checkin]
     public var sideEffects: [SideEffect]
@@ -276,7 +266,7 @@ public struct Dashboard: Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case asOf, meals, weights, doses, dailyTotals, weeklySummary, dailyHealth, healthMetrics, workouts
-        case workoutCount, runWeeks, healthSpan, checkins, sideEffects, foodThoughts
+        case workoutCount, healthSpan, checkins, sideEffects, foodThoughts
         case protocols = "protocol"
         case dosePlan, vials, measurements, profile, goals, progressPhotos
     }
@@ -294,7 +284,6 @@ public struct Dashboard: Codable, Sendable {
         healthMetrics = (try? c.decodeIfPresent([String: [MetricPoint]].self, forKey: .healthMetrics)) ?? nil ?? [:]
         workouts = list(.workouts)
         workoutCount = try? c.decodeIfPresent(Int.self, forKey: .workoutCount)
-        runWeeks = list(.runWeeks)
         healthSpan = try? c.decodeIfPresent(HealthSpan.self, forKey: .healthSpan)
         checkins = list(.checkins)
         sideEffects = list(.sideEffects)

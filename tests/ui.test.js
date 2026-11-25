@@ -8,6 +8,7 @@ const { serve, makeFixture, BASE, SHOTS, API, CLOCK, PASSCODE: PASS, CORS: cors 
 
 const OUT = SHOTS;
 const SCHEME = process.argv[2] === "dark" ? "dark" : "light";
+const LOG_BOT = "grokbot://app/v1/agent?id=81acb34c-2ba4-4bde-aa1b-98e865272965";
 const fixture = makeFixture();
 
   const writes = [];
@@ -26,6 +27,13 @@ function check(name, ok, detail) {
 
 let goalSetLive = false;
 (async () => {
+  const appjs = fs.readFileSync(path.join(__dirname, "../ios-app/www/app.js"), "utf8");
+  const botSwift = fs.readFileSync(path.join(__dirname, "../ios-app/ios/App/LogNative/Sources/LogUI/Shared/LogBot.swift"), "utf8");
+  const mealsSwift = fs.readFileSync(path.join(__dirname, "../ios-app/ios/App/LogNative/Sources/LogUI/Today/TodayHealth.swift"), "utf8");
+  check("Log bot URL is one constant on web and native",
+    appjs.split(LOG_BOT).length === 2 && botSwift.split(LOG_BOT).length === 2
+    && !appjs.includes("Ask Log or Claude") && !mealsSwift.includes("Ask Log or Claude"));
+
   const server = await serve();
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
@@ -81,6 +89,18 @@ let goalSetLive = false;
       const row = { id: "11111111-1111-4111-8111-111111111111", measured_at: "2026-11-25T05:19:00+00:00", weight_lb: Number(body.payload.weight_lb), notes: body.payload.notes || null };
       fixture.weights.push(row);
       return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: true, action: "weigh_in", id: row.id, weight_lb: row.weight_lb, measured_at: row.measured_at }) });
+    }
+    if (body.action === "dose_log" && body.payload.skipped) {
+      fixture.doses.push({
+        id: "skip" + writes.length,
+        taken_at: body.payload.taken_at,
+        compound: body.payload.compound,
+        dose_mg: body.payload.dose_mg ?? null,
+        units: body.payload.units ?? null,
+        site: null,
+        skipped: true,
+        notes: body.payload.notes || null,
+      });
     }
     if (body.action === "progress_photo_sign") {
       return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: true, path: "2026/11/11111111-1111-4111-8111-111111111111.jpg", signed_url: "https://example.test/progress-upload", token: "t" }) });
@@ -148,6 +168,36 @@ let goalSetLive = false;
   // Today
   await shot("10-today");
   check("hero shows current weight", (await page.textContent(".hero-num")).includes("238.6"), await page.textContent(".hero-num"));
+  check("today keeps the switch card and drops the race", (await page.locator("h2:text-is('BMW Dallas Half')").count()) === 0 && (await page.locator(".count-label", { hasText: "Half marathon" }).count()) === 0 && (await page.locator("h2:text-is('Retatrutide switch')").count()) === 1 && (await page.locator(".counts .count").count()) === 2);
+  const mealsCard = page.locator("section.card:has(h2:text-is('Meals'))");
+  check("today meals link to the Log bot",
+    (await mealsCard.locator("a.log-meal").getAttribute("href")) === LOG_BOT
+    && (await mealsCard.locator("a.log-meal").innerText()).trim() === "Log a meal");
+  await mealsCard.screenshot({ path: path.join(OUT, `${SCHEME}-13-meals.png`) });
+  await page.evaluate(() => {
+    document.querySelector("a.log-meal").addEventListener("click", (e) => e.preventDefault(), true);
+  });
+  await page.tap("a.log-meal");
+  await page.clock.fastForward(2000);
+  await page.waitForSelector(".meal-bot-note");
+  check("missing Grok Bot shows a short note", (await page.locator(".meal-bot-note").innerText()).includes("isn’t installed"));
+  await mealsCard.screenshot({ path: path.join(OUT, `${SCHEME}-13-meals-unavailable.png`) });
+  await page.evaluate(() => {
+    state._mealsBackup = state.data.meals.slice();
+    const key = todayKey();
+    state.data.meals = state.data.meals.filter((m) => {
+      const t = parseTs(m.eaten_at);
+      return !(t && dateKeyCT(t) === key);
+    });
+    state.mealBotNote = null;
+    render();
+  });
+  check("empty today offers Log a meal",
+    (await mealsCard.locator(".empty").innerText()).trim() === "No meals yet today."
+    && (await mealsCard.locator("a.log-meal").count()) === 1
+    && (await page.locator("text=Ask Log or Claude").count()) === 0);
+  await mealsCard.screenshot({ path: path.join(OUT, `${SCHEME}-13-meals-empty.png`) });
+  await page.evaluate(() => { state.data.meals = state._mealsBackup; state.mealBotNote = null; render(); });
   check("food card without targets offers set", await page.isVisible("text=Set targets"));
   await page.tap("text=Set targets");
   await page.fill("[name=t_cal]", "500");
@@ -224,7 +274,7 @@ let goalSetLive = false;
   await swipe(100, 320);
   await page.waitForTimeout(250);
   check("swipe right shows yesterday", (await page.textContent("h1")) === "Yesterday" && (await page.textContent(".eyebrow-date")).includes("November 23"));
-  check("past day shows that day's cards", (await page.isVisible("text=No food logged this day.")) && (await page.isVisible("text=No meals logged this day.")) && (await page.locator(".counts").count()) === 0 && (await page.locator(".day-body .hero-num").count()) === 1);
+  check("past day shows that day's cards", (await page.isVisible("text=No food logged this day.")) && (await page.isVisible("text=No meals logged this day.")) && (await page.locator("a.log-meal").count()) === 0 && (await page.locator(".counts").count()) === 0 && (await page.locator(".day-body .hero-num").count()) === 1);
   await shot("15-yesterday");
   await page.tap(".day-body .callout >> text=Check in");
   await page.tap(".day-body .checkin-form >> text=Moved more");
@@ -279,10 +329,52 @@ let goalSetLive = false;
   await page.waitForTimeout(100);
   check("drug level scrub updates readout", await page.$eval(".readout", (n) => n.classList.contains("live")));
   await lvl.screenshot({ path: path.join(OUT, `${SCHEME}-21-level-scrub.png`) });
-  const dp = page.locator("section.card:has(h2:text-is('Dose plan'))");
+  const dp = page.locator("section.card:has(h2:has-text('Dose plan'))");
   const dpText = await dp.innerText();
   check("dose plan shows the next planned dose and the steps", /Next: Tirzepatide 3(\.0)? mg\./.test(dpText) && /When\s*Sun, Nov 29/.test(dpText) && /Retatrutide used\s*0(\.0)? of 36 mg planned/.test(dpText) && (await dp.locator("tbody tr").count()) === 4, dpText.replace(/\n/g, " | "));
+  check("a future planned dose is not marked overdue", (await dp.locator("text=Skip this dose").count()) === 0 && (await dp.locator(".badge").count()) === 0);
   await dp.screenshot({ path: path.join(OUT, `${SCHEME}-22-dose-plan.png`) });
+
+  // The day after a planned shot that was never logged: it stays, marked overdue, until skipped.
+  await page.clock.setFixedTime(new Date("2026-11-30T09:00:00-06:00"));
+  await page.evaluate(() => render());
+  const lateLead = await dp.locator(".lead").innerText();
+  const lateText = await dp.innerText();
+  check("a missed planned dose stays and is marked overdue", /Overdue: Tirzepatide 3(\.0)? mg\./.test(lateLead) && !/Retatrutide/.test(lateLead) && /Was due\s*Sun, Nov 29, 1 day ago/.test(lateText) && (await dp.locator(".badge.watch").innerText()) === "Overdue", lateText.replace(/\n/g, " | "));
+  await dp.screenshot({ path: path.join(OUT, `${SCHEME}-23-dose-overdue.png`) });
+  await page.tap(".tabnav >> text=Today");
+  const medLate = page.locator("section.card:has(h2:text-is('Medication'))").first();
+  const medLateText = await medLate.innerText();
+  check("Today names the missed dose overdue", /Next dose\s*Overdue: Tirzepatide 3(\.0)? mg, Sun, Nov 29 \(1 day ago\)/.test(medLateText), medLateText.replace(/\n/g, " | "));
+  await medLate.screenshot({ path: path.join(OUT, `${SCHEME}-23-today-overdue.png`) });
+  await page.tap(".tabnav >> text=Meds");
+  await dp.locator("text=Skip this dose").waitFor();
+  const skipBtn = dp.locator("button", { hasText: "Skip this dose" });
+  await skipBtn.scrollIntoViewIfNeeded();
+  const beforeSkip = writes.length;
+  const beforeDash = dashStarted;
+  await skipBtn.tap();
+  const skipBy = Date.now() + 15000;
+  while (writes.length === beforeSkip || dashFinished < beforeDash + 1 || dashStarted !== dashFinished) {
+    if (Date.now() > skipBy) throw new Error(`skip did not finish (writes ${writes.length - beforeSkip}, dash ${dashStarted}/${dashFinished})`);
+    await page.waitForTimeout(20);
+  }
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const skip = writes[writes.length - 1];
+  check("skip writes a skipped dose on the planned day", skip.action === "dose_log" && skip.payload.skipped === true && skip.payload.compound === "tirzepatide" && String(skip.payload.dose_mg) === "3" && String(skip.payload.taken_at).startsWith("2026-11-29"), JSON.stringify(skip));
+  const afterSkip = await dp.locator(".lead").innerText();
+  check("skipping the missed dose reveals the next week", /Next: Retatrutide 2(\.0)? mg/.test(afterSkip) && /Sun, Dec 6/.test(await dp.innerText()) && (await dp.locator(".badge.watch").count()) === 0, afterSkip);
+  fixture.doses = fixture.doses.filter((d) => !(d.id && String(d.id).startsWith("skip")));
+  await page.clock.setFixedTime(CLOCK);
+  const beforeReload = dashStarted;
+  await page.evaluate(() => load(true));
+  const reloadBy = Date.now() + 15000;
+  while (dashFinished < beforeReload + 1 || dashStarted !== dashFinished) {
+    if (Date.now() > reloadBy) throw new Error("dashboard reload did not finish after restoring the clock");
+    await page.waitForTimeout(20);
+  }
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  check("dose plan is back to the upcoming Sunday", /Next: Tirzepatide 3(\.0)? mg\./.test(await dp.locator(".lead").innerText()));
 
   // Trends
   await page.tap(".tabnav >> text=Trends");
@@ -329,7 +421,7 @@ let goalSetLive = false;
   const chips = await page.locator(".trend-chip").allTextContents();
   check("Trends has its section chips", chips.join("|") === "Summary|Weight|Food|Meds|Body|Training|More", chips.join("|"));
   const tiles = page.locator(".sum-tile");
-  check("summary shows six tiles", (await tiles.count()) === 6 && /Recovery\s*3 of 4 off/.test(await tiles.nth(4).innerText()) && /Weight\s*2\d\d\.\d lb/.test(await tiles.nth(0).innerText()), (await tiles.allInnerTexts()).map((t) => t.replace(/\n/g, " ")).join(" | "));
+  check("summary shows five tiles", (await tiles.count()) === 5 && /Recovery\s*3 of 4 off/.test(await tiles.nth(4).innerText()) && /Weight\s*2\d\d\.\d lb/.test(await tiles.nth(0).innerText()), (await tiles.allInnerTexts()).map((t) => t.replace(/\n/g, " ")).join(" | "));
   check("summary doesn't draw every card", (await page.locator("section.card h2:text-is('Heart')").count()) === 0 && (await page.locator("section.card").count()) <= 2);
   await page.locator(".trend-nav").screenshot({ path: path.join(OUT, `${SCHEME}-29-trend-nav.png`) });
   await tiles.nth(4).tap();
@@ -339,7 +431,7 @@ let goalSetLive = false;
     await page.locator(`.trend-chip:text-is("${label}")`).tap();
     await page.waitForTimeout(200);
   };
-  const sections = { Food: ["Calories and protein", "Maintenance calories", "Protein target", "Food thoughts"], Meds: ["The week after a shot", "Appetite by drug level", "Retatrutide vs tirzepatide"], Body: ["Off your normal", "Heart", "More from Apple Health"], Weight: ["Weight", "Body composition"], Training: ["Running"] };
+  const sections = { Food: ["Calories and protein", "Maintenance calories", "Protein target", "Food thoughts"], Meds: ["The week after a shot", "Appetite by drug level", "Retatrutide vs tirzepatide"], Body: ["Off your normal", "Heart", "More from Apple Health"], Weight: ["Weight", "Body composition"], Training: ["Steps", "Workouts"] };
   for (const [label, titles] of Object.entries(sections)) {
     await go(label);
     for (const t of titles) check(`Trends > ${label} shows ${t}`, (await page.locator(`section.card h2:text-is("${t}")`).count()) === 1);
@@ -400,6 +492,7 @@ let goalSetLive = false;
   await page.locator("section.card:has(h2:text-is('Food thoughts'))").screenshot({ path: path.join(OUT, `${SCHEME}-39-thoughts.png`) });
 
   await go("Meds");
+  check("meds keeps the switch comparison and drops long-run timing", (await page.locator("h2:text-is('Long-run timing')").count()) === 0 && (await page.locator("h2:text-is('Retatrutide vs tirzepatide')").count()) === 1 && (await page.locator("h2:text-is('The week after a shot')").count()) === 1);
   // Appetite by drug level
   const ab = page.locator("section.card:has(h2:text-is('Appetite by drug level'))");
   const abText = await ab.innerText();
@@ -415,7 +508,8 @@ let goalSetLive = false;
   await page.locator("section.card:has(h2:text-is('The week after a shot'))").screenshot({ path: path.join(OUT, `${SCHEME}-35-shotweek.png`) });
 
   await go("Training");
-  await page.locator("section.card:has(h2:text-is('Running'))").screenshot({ path: path.join(OUT, `${SCHEME}-38-running.png`) });
+  check("training shows steps and workouts, not a running card", (await page.locator("h2:text-is('Running')").count()) === 0 && (await page.locator("h2:text-is('Steps')").count()) === 1 && (await page.locator("h2:text-is('Workouts')").count()) === 1);
+  await page.locator("section.card:has(h2:text-is('Steps'))").screenshot({ path: path.join(OUT, `${SCHEME}-38-steps.png`) });
   await go("Summary");
 
   // Log

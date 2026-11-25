@@ -16,7 +16,6 @@ trends-meds-appetite trends light -section meds -scrollTo appetite
 trends-meds-reta trends light -section meds -scrollTo reta-vs-tirz
 trends-meds-cycles trends light -section meds -scrollTo cycles
 trends-meds-feel trends light -section meds -scrollTo feel
-trends-meds-longrun trends light -section meds -scrollTo long-run
 trends-body trends light -section body
 trends-body-heart trends light -section body -scrollTo heart
 trends-body-more trends light -section body -scrollTo more-health

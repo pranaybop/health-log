@@ -1,6 +1,6 @@
 /*
   Tracking cards added Nov 25, 2026: food thoughts, the week after a shot, heart
-  (resting HR and HRV), body composition, running, protein hit rate and loss rate.
+  (resting HR and HRV), body composition, protein hit rate and loss rate.
   Pure rendering on top of the dashboard payload; writes go through log-write.
 */
 
@@ -309,56 +309,6 @@ function renderBodyComp(data) {
     el("p", { class: "caption" }, bf.length || lean.length
       ? "Body fat comes from your scale through Apple Health; lean mass is that weigh-in minus its fat. Scale estimates swing day to day, so watch the direction over weeks."
       : "Body fat and lean mass sync from Apple Health in the Log iPhone app (scales like RENPHO write them there). You can also add them under Measurement on the Log tab."),
-  );
-}
-
-function renderRunning(data) {
-  const weeks = data.run_weeks || [];
-  const byWeek = new Map(weeks.map((w) => [w.week, w]));
-  const t = keyToNoon(todayKey());
-  const monday = shiftDay(todayKey(), -((t.getUTCDay() + 6) % 7));
-  const keys = Array.from({ length: 12 }, (_, i) => shiftDay(monday, -7 * (11 - i)));
-  const days = keys.map((k) => ({ key: k, v: byWeek.has(k) ? num(byWeek.get(k).miles) : 0, today: k === monday }));
-  const recent4 = keys.slice(-4).map((k) => byWeek.get(k)).filter(Boolean);
-  const longest4 = recent4.reduce((a, w) => Math.max(a, num(w.longest_mi) || 0), 0);
-  const thisWeek = byWeek.get(monday);
-  const raceDays = daysUntil(HALF_MARATHON);
-  const ro = readout(`${fmtNum(thisWeek ? num(thisWeek.miles) : 0, 1)} mi this week`, `Longest run in the last 4 weeks: ${fmtNum(longest4, 1)} mi`);
-  // How each week went: sleep and energy from Apple Health and check-ins, calories from logged days.
-  const weekStats = (k) => {
-    const end = shiftDay(k, 6);
-    const hs = (data.daily_health || []).filter((r) => r.day >= k && r.day <= end);
-    const cs = (data.checkins || []).filter((r) => r.day >= k && r.day <= end);
-    const fs = (data.daily_totals || []).filter((r) => r.date >= k && r.date <= end);
-    const avg = (list, f) => { const v = list.map((r) => num(r[f])).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
-    return { sleep: avg(hs, "sleep_hours"), energy: avg(cs, "energy"), kcal: avg(fs, "calories") };
-  };
-  const rows = keys.slice(-6).reverse().map((k) => {
-    const w = byWeek.get(k);
-    const s = weekStats(k);
-    return [fmtShortDate(k), w ? fmtNum(num(w.miles), 1) : "0", w ? fmtNum(num(w.longest_mi), 1) : "—",
-      s.sleep != null ? `${fmtNum(s.sleep, 1)} h` : "—", s.energy != null ? fmtNum(s.energy, 1) : "—", s.kcal != null ? fmtNum(s.kcal, 0) : "—"];
-  });
-  return card("Running",
-    raceDays > 0 ? el("p", { class: "lead" }, `Half marathon in ${raceDays} day${raceDays === 1 ? "" : "s"} (13.1 mi).`) : null,
-    ro.node,
-    columnChart({
-      days,
-      cls: "s1",
-      height: 140,
-      fmtY: (v) => fmtNum(v, 0),
-      aria: "Running miles a week, last 12 weeks",
-      onScrub: (d) => {
-        if (!d) return ro.reset();
-        const w = byWeek.get(d.key);
-        ro.set(`${fmtNum(d.v, 1)} mi`, `Week of ${fmtShortDate(d.key)}${w ? `, ${w.runs} run${w.runs === 1 ? "" : "s"}, longest ${fmtNum(num(w.longest_mi), 1)} mi` : ", no runs"}`);
-      },
-    }),
-    el("div", { class: "table-scroll" }, el("table", { class: "data compact" },
-      el("thead", null, el("tr", null, ...["Week of", "Miles", "Longest", "Sleep", "Energy", "kcal"].map((h) => el("th", null, h)))),
-      el("tbody", null, ...rows.map((r) => el("tr", null, ...r.map((c) => el("td", null, c))))),
-    )),
-    el("p", { class: "caption" }, "Runs from Apple Health. Sleep is the nightly average, energy comes from check-ins, kcal is the average on days with food logged."),
   );
 }
 

@@ -1,8 +1,10 @@
 const API_URL = "https://qnbshmenmurdaogslmrj.supabase.co/functions/v1/log-dashboard";
 const TZ = "America/Chicago";
+// Opens the Log bot in the Grok Bot app. Same value as LogBot.urlString in LogNative.
+const LOG_BOT_URL = "grokbot://app/v1/agent?id=81acb34c-2ba4-4bde-aa1b-98e865272965";
+const LOG_BOT_UNAVAILABLE = "Grok Bot isn’t installed.";
 const HALF_LIFE_DAYS = 5;
 const RETA_START = new Date("2026-12-06T12:00:00-06:00");
-const HALF_MARATHON = new Date("2026-12-13T08:00:00-06:00");
 const CHECKIN_PROMPT_HOUR = 18; // the "No check-in yet" prompt waits until 6 PM Central
 const GOAL_LB = 235;
 const TIRZ_START = new Date("2026-11-02T12:00:00-06:00");
@@ -46,6 +48,7 @@ const state = {
   editTargets: false,
   targetsBusy: false,
   targetsMsg: null,
+  mealBotNote: null,
   gateLetters: false,
   openForms: { threetap: true },
   photoOffer: null,
@@ -480,18 +483,12 @@ const RANGES = [
   { id: "1y", label: "1Y", days: 365 },
   { id: "all", label: "All", days: null },
   { id: "glp1", label: "GLP-1", startFrom: "glp1" },
-  { id: "train", label: "Train", startFrom: "train" },
 ];
 
 function rangeStartAt(range, data, end, earliest) {
   if (range.startFrom === "glp1") return firstGlp1At(data) || TIRZ_START;
-  if (range.startFrom === "train") return trainingBlockAt(data);
   if (range.days) return new Date(end.getTime() - range.days * 86400000);
   return earliest;
-}
-
-function visibleRanges(data) {
-  return RANGES.filter((r) => r.startFrom !== "train" || trainingBlockAt(data));
 }
 
 /* Calorie and protein targets: a goals row wins (kind "calories" / "protein"); otherwise this device's setting. */
@@ -872,7 +869,6 @@ function renderCountdowns(data) {
   return el("section", { class: "counts", "aria-label": "Coming up" },
     next ? tile("Next dose", next, "dose") : (daysUntil(retaSwitchAt(data)) >= 0 ? tile("Retatrutide", retaSwitchAt(data), "dose") : null),
     next && daysUntil(RETA_START) >= 0 ? tile("Retatrutide", retaSwitchAt(data), "switch") : null,
-    daysUntil(HALF_MARATHON) >= 0 ? tile("Half marathon", HALF_MARATHON, "race") : null,
   );
 }
 
@@ -892,7 +888,10 @@ function renderMedSummary(data) {
       prop("Last dose", lastDose ? `${fmtNum(lastDose.dose_mg, 1)} mg ${capitalize(lastDose.compound || "")}, ${fmtDateCT(parseTs(lastDose.taken_at), true)}` : "—"),
       (() => {
         const plan = nextPlanned(data);
-        if (plan) return prop("Next dose", `${planDoseText(plan)}, ${fmtDateCT(keyToNoon(plan.planned_on), true)} (${daysWord(daysUntil(keyToNoon(plan.planned_on)))})`);
+        if (plan) {
+          const when = `${planDoseText(plan)}, ${fmtDateCT(keyToNoon(plan.planned_on), true)} (${daysWord(daysUntil(keyToNoon(plan.planned_on)))})`;
+          return prop("Next dose", planIsOverdue(plan) ? `Overdue: ${when}` : when);
+        }
         return prop("Next dose", next ? `${fmtDateCT(next, true)}, ${daysWord(daysUntil(next))}` : `Retatrutide starts ${fmtDateCT(RETA_START, true)}`);
       })(),
       prop("Next site", rot.next ? (SITE_LABELS[rot.next] || rot.next) : "—"),
@@ -1004,23 +1003,54 @@ function renderMacros(today) {
 }
 
 function renderMeals(meals, past) {
-  return card("Meals",
-    meals.length
-      ? el("ul", { class: "list" },
-          ...meals.map((m) => el("li", { class: "meal" },
-            el("div", { class: "meal-main" },
-              el("span", { class: "meal-item" }, m.item || "—"),
-              el("span", { class: "meal-sub" },
-                [capitalize(m.meal_type || ""), parseTs(m.eaten_at) ? fmtTimeCT(parseTs(m.eaten_at)) : null, m.quantity || null].filter(Boolean).join(", ")),
-            ),
-            el("div", { class: "meal-nums" },
-              el("span", { class: "kcal" }, fmtNum(m.calories, 0), el("small", null, " kcal")),
-              el("span", { class: "pro" }, `${fmtNum(m.protein_g, 0)} g protein`),
-            ),
-          )),
-        )
-      : el("p", { class: "empty" }, past ? "No meals logged this day." : "No meals yet today. Ask Log or Claude to record them."),
+  const body = meals.length
+    ? el("ul", { class: "list" },
+        ...meals.map((m) => el("li", { class: "meal" },
+          el("div", { class: "meal-main" },
+            el("span", { class: "meal-item" }, m.item || "—"),
+            el("span", { class: "meal-sub" },
+              [capitalize(m.meal_type || ""), parseTs(m.eaten_at) ? fmtTimeCT(parseTs(m.eaten_at)) : null, m.quantity || null].filter(Boolean).join(", ")),
+          ),
+          el("div", { class: "meal-nums" },
+            el("span", { class: "kcal" }, fmtNum(m.calories, 0), el("small", null, " kcal")),
+            el("span", { class: "pro" }, `${fmtNum(m.protein_g, 0)} g protein`),
+          ),
+        )),
+      )
+    : el("p", { class: "empty" }, past ? "No meals logged this day." : "No meals yet today.");
+  return card("Meals", body, past ? null : renderLogMeal());
+}
+
+/* A real link to the Log bot. If the page is still here shortly after, Grok Bot didn't open. */
+function renderLogMeal() {
+  return el("div", { class: "log-meal-wrap" },
+    el("a", { class: "log-meal", href: LOG_BOT_URL, onClick: noteIfLogBotStays }, "Log a meal"),
+    state.mealBotNote ? el("p", { class: "caption meal-bot-note", role: "status" }, state.mealBotNote) : null,
   );
+}
+
+function noteIfLogBotStays(event) {
+  const note = event.currentTarget.parentNode && event.currentTarget.parentNode.querySelector(".meal-bot-note");
+  if (note) note.remove();
+  state.mealBotNote = null;
+  // Inside the iPhone app the web view stays visible when another app opens, so don't guess.
+  // The native Meals button uses openURL's result instead. This note is for a normal browser.
+  if (window.LOG_NATIVE) return;
+  const started = Date.now();
+  let left = false;
+  const mark = () => { left = true; };
+  const onVis = () => { if (document.hidden) mark(); };
+  document.addEventListener("visibilitychange", onVis);
+  window.addEventListener("pagehide", mark);
+  window.addEventListener("blur", mark);
+  setTimeout(() => {
+    document.removeEventListener("visibilitychange", onVis);
+    window.removeEventListener("pagehide", mark);
+    window.removeEventListener("blur", mark);
+    if (left || document.hidden || Date.now() - started > 4000) return;
+    state.mealBotNote = LOG_BOT_UNAVAILABLE;
+    render();
+  }, 1500);
 }
 
 /* Mon–Sun strip for the week that holds the day showing. Dots mark days with anything logged. */
@@ -1101,7 +1131,6 @@ function renderTodayTab(data) {
     renderCheckinNudge(data, key),
     renderFeelNow(data, key),
     renderOffNormal(data, key),
-    isToday ? renderRaceCard(data) : null,
     isToday ? renderCountdowns(data) : null,
     isToday ? renderSwitchCard(data) : null,
     isToday ? renderVerdict(data) : null,
@@ -1366,7 +1395,7 @@ function renderWeightCard(data) {
   const parsed = parseWeights(data.weights || []);
   if (!parsed.length) return card("Weight", el("p", { class: "empty" }, "No weigh-ins yet. Log one on the Log tab."));
   const sm = smoothWeights(parsed);
-  const ranges = visibleRanges(data);
+  const ranges = RANGES;
   const range = ranges.find((r) => r.id === state.weightRange) || ranges.find((r) => r.id === "3m") || ranges[0];
   const last = sm[sm.length - 1];
   const end = new Date(Math.max(Date.now(), last.at.getTime()));
@@ -1395,7 +1424,7 @@ function renderWeightCard(data) {
     ...ranges.map((r) => el("button", {
       type: "button",
       "aria-pressed": range.id === r.id ? "true" : "false",
-      "aria-label": r.id === "glp1" ? "Since GLP-1" : r.id === "train" ? "Training block" : r.label,
+      "aria-label": r.id === "glp1" ? "Since GLP-1" : r.label,
       onClick: () => { state.weightRange = r.id; render(); },
     }, r.label)),
   );
@@ -1795,7 +1824,7 @@ function renderExport(data) {
       el("button", { type: "button", onClick: () => prescriberPrint(data) }, "Print or save PDF"),
       el("button", { type: "button", onClick: () => coachPackPrint(data) }, "4-week coach pack"),
     ),
-    el("p", { class: "caption" }, "The 4-week pack is a one-pager of recent weight, doses, mileage, protein hit rate, food thoughts and side effects, meant for a doctor or running coach."),
+    el("p", { class: "caption" }, "The 4-week pack is a one-pager of recent weight, doses, protein hit rate, food thoughts and side effects, meant for a doctor."),
     el("p", { class: "caption" }, "Not possible on the web: Apple Health sync, home-screen widgets, an Apple Watch app, or body-fat estimates from photos."),
   );
 }
@@ -1863,9 +1892,9 @@ function renderTrendsTab(data) {
     summary: () => [renderTrendSummary(data), renderWeightCard(data)],
     weight: () => [renderWeightCard(data), renderStall(data), renderBodyComp(data), renderProgressPhotos(data)],
     food: () => [renderFoodTrends(data), renderMaintenance(data), renderProteinCard(data), renderFoodThoughtsCard(data)],
-    meds: () => [renderShotWeek(data), renderAppetiteByLevel(data), renderRetaVsTirz(data), renderCycles(data), renderFeel(data), renderWearOff(data), renderLongRunTiming(data), renderSideEffects(data)],
+    meds: () => [renderShotWeek(data), renderAppetiteByLevel(data), renderRetaVsTirz(data), renderCycles(data), renderFeel(data), renderWearOff(data), renderSideEffects(data)],
     body: () => [renderOffNormalTrends(data), renderHeartCard(data), renderMoreHealth(data), renderMeasurements(data)],
-    training: () => [renderRunning(data), renderStepsCard(data), renderWorkouts(data)],
+    training: () => [renderStepsCard(data), renderWorkouts(data)],
     more: () => [renderExplorer(data), renderEarnWall(data), renderWeekly(data), renderExport(data)],
   };
   return el("div", { class: "stack" }, renderTrendNav(active), ...sections[active]());

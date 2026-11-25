@@ -1,7 +1,7 @@
 /*
-  Training, switch and recovery cards (Nov 25, 2026): race taper, protein streak,
-  retatrutide switch, long-run timing, reta vs tirz, sleep stages, vial runway
-  by compound. Pure rendering on the dashboard payload; no invented numbers.
+  Switch and recovery cards (Nov 25, 2026): protein streak, retatrutide switch,
+  reta vs tirz, sleep stages, vial runway by compound. Pure rendering on the
+  dashboard payload; no invented numbers.
 */
 
 function protocolRow(data, compound) {
@@ -28,34 +28,6 @@ function firstRetaDose(data) {
   return (data.doses || [])
     .filter((d) => !d.skipped && parseTs(d.taken_at) && String(d.compound || "").toLowerCase() === "retatrutide")
     .sort((a, b) => parseTs(a.taken_at) - parseTs(b.taken_at))[0] || null;
-}
-
-function isRunWorkout(w) {
-  const a = String(w.activity || "").toLowerCase();
-  return /run|jog/.test(a);
-}
-
-/* Start of the current training stretch: first run week or run workout after a gap of more than two weeks. */
-function trainingBlockAt(data) {
-  const keys = [];
-  for (const w of data.run_weeks || []) if (w.week && num(w.miles) > 0) keys.push(w.week);
-  for (const w of data.workouts || []) {
-    const t = parseTs(w.started_at);
-    if (t && isRunWorkout(w)) keys.push(dateKeyCT(t));
-  }
-  const uniq = [...new Set(keys)].sort();
-  if (!uniq.length) return null;
-  let start = uniq[uniq.length - 1];
-  for (let i = uniq.length - 2; i >= 0; i--) {
-    if (dayDiff(uniq[i + 1], uniq[i]) > 14) break;
-    start = uniq[i];
-  }
-  return keyToNoon(start);
-}
-
-function weekMonday(key) {
-  const t = keyToNoon(key);
-  return shiftDay(key, -((t.getUTCDay() + 6) % 7));
 }
 
 function mean(vals) {
@@ -128,63 +100,7 @@ function sleepHoursOn(data, key) {
   return null;
 }
 
-/* ---------- 1. Race countdown + taper ---------- */
-
-function renderRaceCard(data) {
-  const days = daysUntil(HALF_MARATHON);
-  if (days < 0) return null;
-  const monday = weekMonday(todayKey());
-  const weeks = (data.run_weeks || []).slice().sort((a, b) => String(a.week).localeCompare(b.week));
-  const complete = weeks.filter((w) => w.week < monday && num(w.miles) != null && num(w.miles) > 0);
-  const last3 = complete.slice(-3);
-  const avgMi = mean(last3.map((w) => num(w.miles)));
-  const thisWeek = weeks.find((w) => w.week === monday);
-  const thisMi = thisWeek ? num(thisWeek.miles) : null;
-  const recent = weeks.filter((w) => w.week >= shiftDay(monday, -21) && w.week <= monday);
-  const longest = recent.reduce((a, w) => Math.max(a, num(w.longest_mi) || 0), 0);
-  let phase;
-  let taper;
-  if (days === 0) {
-    phase = "Race day";
-    taper = "BMW Dallas Half Marathon today. Trust the work already in the log.";
-  } else if (days <= 7) {
-    phase = "Race week";
-    taper = avgMi != null
-      ? `Typical tapers drop volume sharply this week. Your last ${last3.length} complete week${last3.length === 1 ? "" : "s"} averaged ${fmtNum(avgMi, 1)} mi.`
-      : "Typical tapers keep remaining runs short and easy. Weekly mileage will show here after runs sync from Apple Health.";
-  } else if (days <= 14) {
-    phase = "Taper week";
-    taper = avgMi != null
-      ? `Typical plans cut mileage about 20–40% from a recent average of ${fmtNum(avgMi, 1)} mi a week.`
-      : "Typical plans cut mileage in the two weeks before the race. Weekly mileage will show here after runs sync.";
-  } else {
-    phase = "Build";
-    taper = avgMi != null
-      ? `Recent training: ${fmtNum(avgMi, 1)} mi a week over the last ${last3.length} complete week${last3.length === 1 ? "" : "s"}. A typical taper starts about two weeks out.`
-      : "Weekly mileage will appear here once runs sync from Apple Health. A typical taper starts about two weeks out.";
-  }
-  const t = getTargets(data);
-  const today = totalsOn(data, todayKey());
-  const pro = today ? num(today.protein_g) : null;
-  let proteinNote = "Set a daily protein target on Food today to track it through race week.";
-  if (t.protein != null) {
-    if (pro == null) proteinNote = `Protein target is ${fmtNum(t.protein, 0)} g today. Nothing logged yet.`;
-    else if (pro >= t.protein) proteinNote = `Protein is at ${fmtNum(pro, 0)} g, at or above your ${fmtNum(t.protein, 0)} g target.`;
-    else proteinNote = `${fmtNum(t.protein - pro, 0)} g of protein to go to hit ${fmtNum(t.protein, 0)} g today.`;
-  }
-  return card("BMW Dallas Half",
-    el("div", { class: "tiles" },
-      metric("Race day", days === 0 ? "Today" : `${days} day${days === 1 ? "" : "s"}`, fmtDateCT(HALF_MARATHON, true)),
-      metric("This week", thisMi != null ? `${fmtNum(thisMi, 1)} mi` : "—", thisWeek && thisWeek.runs ? `${thisWeek.runs} run${thisWeek.runs === 1 ? "" : "s"}` : "no runs synced yet"),
-      metric("Recent average", avgMi != null ? `${fmtNum(avgMi, 1)} mi` : "—", last3.length ? `${last3.length} complete week${last3.length === 1 ? "" : "s"}` : "needs a finished week"),
-      metric("Longest, 4 weeks", longest ? `${fmtNum(longest, 1)} mi` : "—", phase),
-    ),
-    el("p", { class: "lead" }, taper),
-    el("p", { class: "caption" }, proteinNote + " Taper notes are a typical pattern, not a prescribed plan."),
-  );
-}
-
-/* ---------- 2. Protein remaining + streak (line under Food today) ---------- */
+/* ---------- Protein remaining + streak (line under Food today) ---------- */
 
 function renderProteinLine(data, key) {
   if (key !== todayKey()) return null;
@@ -265,73 +181,7 @@ function renderSwitchCard(data) {
   );
 }
 
-/* ---------- 6. Wear-off vs long-run timing ---------- */
-
-function runsOn(data, key) {
-  return (data.workouts || []).filter((w) => {
-    const t = parseTs(w.started_at);
-    return t && dateKeyCT(t) === key && isRunWorkout(w);
-  });
-}
-
-function renderLongRunTiming(data) {
-  const doses = (data.doses || []).filter((d) => !d.skipped && parseTs(d.taken_at));
-  if (!doses.length) return card("Long-run timing", el("p", { class: "empty" }, "Needs a logged shot before runs, energy and HRV can be lined up with days since the dose."));
-  const acc = () => [0, 1, 2, 3, 4, 5, 6].map(() => ({ sum: 0, n: 0 }));
-  const energy = acc();
-  const hrv = acc();
-  const miles = acc();
-  const today = todayKey();
-  const checkins = new Map((data.checkins || []).map((c) => [c.day, c]));
-  const health = new Map((data.daily_health || []).map((r) => [r.day, r]));
-  const add = (row, v) => { if (v != null) { row.sum += v; row.n += 1; } };
-  for (const d of doses) {
-    const start = dateKeyCT(parseTs(d.taken_at));
-    for (let i = 0; i <= 6; i++) {
-      const k = shiftDay(start, i);
-      if (k > today) continue;
-      const nextDose = doses.find((x) => dateKeyCT(parseTs(x.taken_at)) > start);
-      if (nextDose && k >= dateKeyCT(parseTs(nextDose.taken_at))) continue;
-      add(energy[i], checkins.get(k) ? num(checkins.get(k).energy) : null);
-      add(hrv[i], health.get(k) ? num(health.get(k).hrv_ms) : null);
-      const runMi = runsOn(data, k).reduce((a, w) => a + (num(w.distance_mi) || 0), 0);
-      if (runsOn(data, k).length) add(miles[i], runMi);
-    }
-  }
-  const has = [...energy, ...hrv, ...miles].some((r) => r.n);
-  if (!has) return card("Long-run timing", el("p", { class: "empty" }, "No energy, HRV or runs have been logged against a shot week yet."));
-  const avg = (r, d) => (r.n ? r.sum / r.n : null);
-  const cell = (r, digits, empty) => {
-    const v = avg(r, digits);
-    return el("div", { class: "sw-cell" + (v == null ? " none" : ""), style: v == null ? null : { "--a": "0.35" } }, v == null ? "—" : fmtNum(v, digits));
-  };
-  const best = miles.map((r, i) => ({ i, v: avg(r), n: r.n })).filter((x) => x.v != null && x.n >= 1).sort((a, b) => b.v - a.v)[0];
-  const energyBest = energy.map((r, i) => ({ i, v: avg(r), n: r.n })).filter((x) => x.n >= 2).sort((a, b) => b.v - a.v)[0];
-  let takeaway = "More shot weeks with runs will show which day of the cycle has carried the longest efforts.";
-  if (best) {
-    takeaway = `Runs have averaged ${fmtNum(best.v, 1)} mi on day ${best.i} after a shot${best.n > 1 ? `, from ${best.n} days` : ""}.`;
-    if (energyBest && energyBest.i !== best.i) takeaway += ` Energy has scored highest on day ${energyBest.i}.`;
-    takeaway += " Use this as a history, not a prescription, when timing a long run or the race.";
-  } else if (energyBest) {
-    takeaway = `Energy has scored highest on day ${energyBest.i} after a shot. Runs will join this once they sync.`;
-  }
-  const row = (label, cells, digits) => el("div", { class: "sw-row" },
-    el("span", { class: "sw-label" }, label),
-    ...cells.map((r) => cell(r, digits)),
-  );
-  return card("Long-run timing",
-    el("p", { class: "caption first" }, "Averages by day since the shot (0 is shot day). Energy is from check-ins, HRV from Apple Health, miles from runs."),
-    el("div", { class: "shotweek" },
-      el("div", { class: "sw-row sw-head" }, el("span", null, ""), ...[0, 1, 2, 3, 4, 5, 6].map((i) => el("span", null, `D${i}`))),
-      row("Energy", energy, 1),
-      row("HRV, ms", hrv, 0),
-      row("Run, mi", miles, 1),
-    ),
-    el("p", { class: "lead" }, takeaway),
-  );
-}
-
-/* ---------- 7. Reta vs tirz ---------- */
+/* ---------- Reta vs tirz ---------- */
 
 function windowStats(data, fromKey, toKey) {
   const inWin = (k) => k >= fromKey && k <= toKey;

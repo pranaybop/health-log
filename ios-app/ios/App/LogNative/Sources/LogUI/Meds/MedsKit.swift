@@ -45,17 +45,31 @@ enum MLFmt {
 
 /// A small status pill (the web's .badge).
 struct MLBadge: View {
-    enum Tone { case good, steady }
+    enum Tone { case good, steady, watch }
     let text: String
     let tone: Tone
     init(_ text: String, _ tone: Tone) { self.text = text; self.tone = tone }
+    private var ink: Color {
+        switch tone {
+        case .good: return LogColor.goodInk
+        case .watch: return LogColor.warnInk
+        case .steady: return LogColor.link
+        }
+    }
+    private var fill: Color {
+        switch tone {
+        case .good: return LogColor.goodSoft
+        case .watch: return LogColor.warnSoft
+        case .steady: return LogColor.accentSoft
+        }
+    }
     var body: some View {
         Text(text)
             .font(.caption.weight(.semibold))
-            .foregroundStyle(tone == .good ? LogColor.goodInk : LogColor.link)
+            .foregroundStyle(ink)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(tone == .good ? LogColor.goodSoft : LogColor.accentSoft, in: Capsule())
+            .background(fill, in: Capsule())
     }
 }
 

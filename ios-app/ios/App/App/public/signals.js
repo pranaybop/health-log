@@ -336,11 +336,39 @@ function planRows(data) {
     .sort((a, b) => (a.planned_on < b.planned_on ? -1 : 1));
 }
 
-/* The next planned dose that hasn't been logged yet (today counts until a dose is logged today). */
+/* The earliest planned dose that nothing logged covers yet, including one whose day has passed.
+   A dose covers the plan row for the week it falls in: taken or skipped, on or after that
+   planned day and before the next one. It stays put until then. */
 function nextPlanned(data) {
-  const today = todayKey();
-  const loggedDays = new Set((data.doses || []).filter((d) => !d.skipped && parseTs(d.taken_at)).map((d) => dateKeyCT(parseTs(d.taken_at))));
-  return planRows(data).find((r) => r.planned_on >= today && !loggedDays.has(r.planned_on)) || null;
+  const rows = planRows(data);
+  const days = [];
+  for (const d of data.doses || []) {
+    const t = parseTs(d.taken_at);
+    if (t) days.push(dateKeyCT(t));
+  }
+  for (let i = 0; i < rows.length; i++) {
+    const end = i + 1 < rows.length ? rows[i + 1].planned_on : "9999-12-31";
+    if (!days.some((day) => day >= rows[i].planned_on && day < end)) return rows[i];
+  }
+  return null;
+}
+
+function planIsOverdue(row) {
+  return !!(row && row.planned_on < todayKey());
+}
+
+/* Log a skipped dose on the planned day, the same dose_log write as the dose form's skip switch. */
+function skipPlanned(row) {
+  if (!row || state.formBusy) return;
+  const payload = {
+    compound: row.compound,
+    skipped: true,
+    taken_at: keyToNoon(row.planned_on).toISOString(),
+    notes: "Skipped planned dose",
+  };
+  if (row.dose_mg != null) payload.dose_mg = row.dose_mg;
+  if (row.units != null) payload.units = row.units;
+  handleWrite("dose_log", payload, "Skipped the planned dose.");
 }
 
 function planDoseText(r) {
@@ -367,6 +395,8 @@ function renderDosePlan(data) {
   const reta = rows.filter((r) => r.compound === "retatrutide");
   const total = reta.reduce((a, r) => a + r.dose_mg, 0);
   const today = todayKey();
+  const overdue = planIsOverdue(next);
+  const due = next && next.planned_on <= today;
   const usedSoFar = reta.filter((r) => r.planned_on < (next ? next.planned_on : "9999")).reduce((a, r) => a + r.dose_mg, 0);
   const stepUp = next ? rows.find((r) => r.planned_on > next.planned_on && r.compound === next.compound && r.dose_mg > next.dose_mg) : null;
   const when = (key) => {
@@ -374,15 +404,26 @@ function renderDosePlan(data) {
     return `${fmtDateCT(keyToNoon(key), true)}, ${daysWord(d)}`;
   };
   const currentStep = next ? steps.find((s) => next.planned_on >= s.from && next.planned_on <= s.to) : null;
-  return card("Dose plan",
-    next ? el("p", { class: "lead" }, `Next: ${planDoseText(next)}${next.week ? `, week ${next.week} of ${reta.length}` : ""}.`) : el("p", { class: "lead" }, "Every planned dose is done."),
+  const week = next && next.week ? `, week ${next.week} of ${reta.length}` : "";
+  return el("section", { class: "card" },
+    el("h2", null, "Dose plan", overdue ? el("span", { class: "badge watch" }, "Overdue") : null),
+    next ? el("p", { class: "lead" }, `${overdue ? "Overdue" : "Next"}: ${planDoseText(next)}${week}.`) : el("p", { class: "lead" }, "Every planned dose is done."),
     next ? el("div", { class: "props" },
-      prop("When", when(next.planned_on)),
+      prop(overdue ? "Was due" : "When", when(next.planned_on)),
       next.vial_draw ? prop("Draw from", next.vial_draw) : null,
       next.notes ? prop("Note", next.notes) : null,
       stepUp ? prop("Next step-up", `${fmtNum(stepUp.dose_mg, 1)} mg${stepUp.units != null ? ` (${fmtNum(stepUp.units, 0)} units)` : ""} on ${fmtDateCT(keyToNoon(stepUp.planned_on), true)}`) : null,
       reta.length ? prop("Retatrutide used", `${fmtNum(usedSoFar, 1)} of ${fmtNum(total, 0)} mg planned`) : null,
     ) : null,
+    due ? el("div", { class: "form-actions" },
+      el("button", {
+        type: "button",
+        class: "wide",
+        disabled: state.formBusy,
+        onClick: () => skipPlanned(next),
+      }, "Skip this dose"),
+    ) : null,
+    state.formMessage && !state.formMessage.ok ? renderToast() : null,
     el("div", { class: "table-scroll" }, el("table", { class: "data compact plan-steps" },
       el("thead", null, el("tr", null, el("th", null, "Dose"), el("th", null, "Sundays"), el("th", { class: "num" }, "Weeks"))),
       el("tbody", null, ...steps.map((s) => el("tr", { class: s === currentStep ? "on" : s.to < today ? "done" : null },
@@ -498,7 +539,7 @@ function renderTrendSummary(data) {
   }
   tiles.push(summaryTile("meds", "Medication",
     share != null ? `${fmtNum(share * 100, 0)}% of peak` : "No doses yet",
-    next ? `Next: ${planDoseText(next)}, ${fmtDateCT(keyToNoon(next.planned_on), true)}` : "Estimated level now",
+    next ? `${planIsOverdue(next) ? "Overdue" : "Next"}: ${planDoseText(next)}, ${fmtDateCT(keyToNoon(next.planned_on), true)}` : "Estimated level now",
     levelPts.length > 1 ? sparkline(levelPts, new Date(now.getTime() - 14 * 86400000), now) : null));
 
   // Recovery
@@ -509,17 +550,6 @@ function renderTrendSummary(data) {
     rec.checked.length < 2 ? "—" : rec.off.length >= 2 ? `${rec.off.length} of ${rec.checked.length} off` : "Normal",
     rec.checked.length < 2 ? "Needs Apple Health data" : rec.off.length ? rec.off.map((c) => `${c.s.lower} ${fmtSignalDiff(c)}`).join(", ") : `${rec.checked.length} signals in their usual range`,
     rhr.length > 1 ? sparkline(rhr, t30, now) : null));
-
-  // Training, this week (Monday on)
-  const mon = weekMonday(today);
-  const runs = (data.workouts || []).filter((w) => isRunWorkout(w) && parseTs(w.started_at) && dateKeyCT(parseTs(w.started_at)) >= mon);
-  const miles = runs.reduce((a, w) => a + (num(w.distance_mi) || 0), 0);
-  const longest = runs.reduce((a, w) => Math.max(a, num(w.distance_mi) || 0), 0);
-  const weeks = (data.run_weeks || []).slice(-8).map((w) => ({ t: keyToNoon(w.week), v: num(w.miles) || 0 }));
-  tiles.push(summaryTile("training", "Running, this week",
-    `${fmtNum(miles, 1)} mi`,
-    runs.length ? `${runs.length} run${runs.length === 1 ? "" : "s"}, longest ${fmtNum(longest, 1)} mi` : "No runs yet this week",
-    weeks.length > 1 ? sparkline(weeks, new Date(weeks[0].t.getTime() - 86400000), now) : null));
 
   return el("section", { class: "sum-grid", "aria-label": "Summary" }, ...tiles);
 }

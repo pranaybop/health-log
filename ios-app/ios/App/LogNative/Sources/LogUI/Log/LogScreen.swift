@@ -43,6 +43,7 @@ public struct LogScreen: View {
                 .id("checkin")
                 MLWeighInCard().id("weigh")
                 MLEarnItCard().id("earn")
+                ReminderSettingsCard().id("reminders")
                 Text("More to log")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundStyle(LogColor.ink)
@@ -73,6 +74,14 @@ public struct LogScreen: View {
                 }
             }
             .modifier(MLScrollOnLaunch(proxy: proxy, ready: store.dashboard != nil))
+            .onAppear { openWeighReminder(proxy) }
+            .onReceive(NotificationCenter.default.publisher(for: ReminderRouter.opened)) { _ in openWeighReminder(proxy) }
         }
+    }
+
+    private func openWeighReminder(_ proxy: ScrollViewProxy) {
+        guard ReminderRouter.pending == "weigh" else { return }
+        ReminderRouter.pending = nil
+        DispatchQueue.main.async { proxy.scrollTo("weigh", anchor: .top) }
     }
 }

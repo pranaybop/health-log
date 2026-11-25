@@ -304,64 +304,16 @@ private struct SignalRow: View {
     }
 }
 
-// MARK: Half marathon
-
-/// Race countdown, recent mileage and the taper note (web renderRaceCard).
-struct TodayRaceCard: View {
-    let m: TodayModel
-
-    var body: some View {
-        if let r = Analytics.raceStats(m.d, now: m.now) {
-            LogCard("BMW Dallas Half") {
-                TileGrid(tiles: [
-                    TileData(label: "Race day", value: r.days == 0 ? "Today" : TodayText.plural(r.days, "day"), detail: LogTime.weekdayDate(LogTime.halfMarathon)),
-                    TileData(label: "This week", value: r.thisWeek?.miles.map { "\(Fmt.num($0, 1)) mi" } ?? "—",
-                             detail: (r.thisWeek?.runs ?? 0) > 0 ? TodayText.plural(Int(r.thisWeek?.runs ?? 0), "run") : "no runs synced yet"),
-                    TileData(label: "Recent average", value: r.recentAverage.map { "\(Fmt.num($0, 1)) mi" } ?? "—",
-                             detail: r.completeWeeks > 0 ? TodayText.plural(r.completeWeeks, "complete week") : "needs a finished week"),
-                    TileData(label: "Longest, 4 weeks", value: r.longest > 0 ? "\(Fmt.num(r.longest, 1)) mi" : "—", detail: phase(r).0),
-                ])
-                Text(phase(r).1).font(.body).foregroundStyle(LogColor.ink).fixedSize(horizontal: false, vertical: true)
-                TodayCaption(proteinNote + " Taper notes are a typical pattern, not a prescribed plan.")
-            }
-        }
-    }
-
-    private func phase(_ r: RaceStats) -> (String, String) {
-        let weeks = TodayText.plural(r.completeWeeks, "complete week")
-        if r.days == 0 { return ("Race day", "BMW Dallas Half Marathon today. Trust the work already in the log.") }
-        if r.days <= 7 {
-            return ("Race week", r.recentAverage.map { "Typical tapers drop volume sharply this week. Your last \(weeks) averaged \(Fmt.num($0, 1)) mi." }
-                    ?? "Typical tapers keep remaining runs short and easy. Weekly mileage will show here after runs sync from Apple Health.")
-        }
-        if r.days <= 14 {
-            return ("Taper week", r.recentAverage.map { "Typical plans cut mileage about 20–40% from a recent average of \(Fmt.num($0, 1)) mi a week." }
-                    ?? "Typical plans cut mileage in the two weeks before the race. Weekly mileage will show here after runs sync.")
-        }
-        return ("Build", r.recentAverage.map { "Recent training: \(Fmt.num($0, 1)) mi a week over the last \(weeks). A typical taper starts about two weeks out." }
-                ?? "Weekly mileage will appear here once runs sync from Apple Health. A typical taper starts about two weeks out.")
-    }
-
-    private var proteinNote: String {
-        guard let target = m.targets.protein else { return "Set a daily protein target on Food today to track it through race week." }
-        let today = Analytics.totals(on: m.today, m.d)?.proteinG
-        guard let pro = today else { return "Protein target is \(Fmt.num(target, 0)) g today. Nothing logged yet." }
-        if pro >= target { return "Protein is at \(Fmt.num(pro, 0)) g, at or above your \(Fmt.num(target, 0)) g target." }
-        return "\(Fmt.num(target - pro, 0)) g of protein to go to hit \(Fmt.num(target, 0)) g today."
-    }
-}
-
 // MARK: Countdowns
 
-/// Next dose, the retatrutide switch and the half marathon, in days (web renderCountdowns).
+/// Next dose and the retatrutide switch, in days (web renderCountdowns).
 struct TodayCountdowns: View {
     let m: TodayModel
 
     private struct Count: Identifiable {
         let label: String
         let date: Date
-        let race: Bool
-        var id: String { label + (race ? "r" : "") }
+        var id: String { label }
     }
 
     private var counts: [Count] {
@@ -369,12 +321,11 @@ struct TodayCountdowns: View {
         let switchAt = Analytics.retaSwitchAt(m.d)
         var out: [Count] = []
         if let next {
-            out.append(Count(label: "Next dose", date: next, race: false))
-            if LogTime.daysUntil(LogTime.retaStart, now: m.now) >= 0 { out.append(Count(label: "Retatrutide", date: switchAt, race: false)) }
+            out.append(Count(label: "Next dose", date: next))
+            if LogTime.daysUntil(LogTime.retaStart, now: m.now) >= 0 { out.append(Count(label: "Retatrutide", date: switchAt)) }
         } else if LogTime.daysUntil(switchAt, now: m.now) >= 0 {
-            out.append(Count(label: "Retatrutide", date: switchAt, race: false))
+            out.append(Count(label: "Retatrutide", date: switchAt))
         }
-        if LogTime.daysUntil(LogTime.halfMarathon, now: m.now) >= 0 { out.append(Count(label: "Half marathon", date: LogTime.halfMarathon, race: true)) }
         return out
     }
 
@@ -395,7 +346,7 @@ struct TodayCountdowns: View {
             Text(c.label).font(.footnote.weight(.medium)).foregroundStyle(LogColor.ink2).lineLimit(1)
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(n <= 0 ? (n == 0 ? "Today" : "Done") : "\(n)").font(.logNumber(30, weight: .semibold))
-                    .foregroundStyle(c.race ? LogColor.s2 : LogColor.ink)
+                    .foregroundStyle(LogColor.ink)
                 if n > 0 { Text(n == 1 ? " day" : " days").font(.subheadline.weight(.semibold)).foregroundStyle(LogColor.ink2) }
             }
             .lineLimit(1)
@@ -507,10 +458,11 @@ struct TodayMedSummary: View {
     }
 
     private var nextText: String {
-        if let plan = Analytics.nextPlanned(m.d, now: m.now) {
+        if let plan = Analytics.nextPlanned(m.d) {
             let day = LogTime.noon(plan.plannedOn)
             let text = "\(TodayText.capitalize(plan.compound ?? "")) \(Fmt.num(plan.doseMg, 1)) mg\(plan.units.map { " (\(Fmt.num($0, 0)) units)" } ?? "")"
-            return "\(text), \(LogTime.weekdayDate(day)) (\(TodayText.daysWord(LogTime.daysUntil(day, now: m.now))))"
+            let when = "\(text), \(LogTime.weekdayDate(day)) (\(TodayText.daysWord(LogTime.daysUntil(day, now: m.now))))"
+            return Analytics.planIsOverdue(plan, now: m.now) ? "Overdue: \(when)" : when
         }
         if let next = Analytics.plannedNextDose(m.d) {
             return "\(LogTime.weekdayDate(next)), \(TodayText.daysWord(LogTime.daysUntil(next, now: m.now)))"

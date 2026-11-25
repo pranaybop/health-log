@@ -62,14 +62,7 @@ final class TodayTests: XCTestCase {
         XCTAssertEqual(c[3].median, 95.535, accuracy: 1e-9)
     }
 
-    func testRaceAndProtein() {
-        let r = Analytics.raceStats(d, now: clock)
-        XCTAssertEqual(r?.days, 19)
-        XCTAssertEqual(r?.thisWeek?.miles, 2.9)
-        XCTAssertEqual(r?.thisWeek?.runs, 1)
-        XCTAssertEqual(r?.recentAverage ?? 0, 12.5, accuracy: 0.05)
-        XCTAssertEqual(r?.completeWeeks, 3)
-        XCTAssertEqual(r?.longest, 6.1)
+    func testProtein() {
         let p = Analytics.proteinStreak(d, target: 60, now: clock)
         XCTAssertEqual(p.streak, 1)
         XCTAssertTrue(p.hitToday)

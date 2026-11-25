@@ -3,7 +3,7 @@ import LogCore
 import LogHealth
 
 /// The native Today tab (web renderTodayTab in app.js): a week strip to move between days, then the
-/// day's weight, food, check-in, food thoughts, recovery signals, the race and medication cards,
+/// day's weight, food, check-in, food thoughts, recovery signals, and medication cards,
 /// sleep, Apple Health, macros and meals. Past days show that day's data; future days are disabled.
 public struct TodayScreen: View {
     /// Flip to true when this screen covers everything the web version does.
@@ -51,6 +51,15 @@ public struct TodayScreen: View {
         }
         .sensoryFeedback(.selection, trigger: dayOffset)
         .sensoryFeedback(.success, trigger: saves)
+        .onAppear { openCheckinReminder() }
+        .onReceive(NotificationCenter.default.publisher(for: ReminderRouter.opened)) { _ in openCheckinReminder() }
+    }
+
+    private func openCheckinReminder() {
+        guard ReminderRouter.pending == "checkin" else { return }
+        ReminderRouter.pending = nil
+        let key = LogTime.today(now)
+        checkinDay = CheckinDay(key: key, isToday: true)
     }
 
     // MARK: Layout
@@ -89,9 +98,6 @@ public struct TodayScreen: View {
                 TodayOffNormal(checks: checks).id("offnormal")
             }
             if m.isToday {
-                if Analytics.raceStats(m.d, now: m.now) != nil {
-                    TodayRaceCard(m: m).id("race")
-                }
                 TodayCountdowns(m: m).id("counts")
                 SwitchCard()
                 TodayVerdict(m: m).id("verdict")

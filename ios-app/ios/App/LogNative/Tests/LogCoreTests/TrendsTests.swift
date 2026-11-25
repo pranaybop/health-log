@@ -42,7 +42,6 @@ final class TrendsTests: XCTestCase {
         XCTAssertEqual(T.weightProjection(sm)?.weekly ?? 0, -2.9673597206806246, accuracy: 1e-6)
         XCTAssertEqual(Analytics.trendRate(sm, days: 28) ?? 0, -1.4504321324328018, accuracy: 1e-6)
         XCTAssertEqual(T.firstGlp1At(d), LogTime.parse("2026-11-02T16:00:00Z"))
-        XCTAssertEqual(T.trainingBlockAt(d), LogTime.noon("2026-09-15"))
     }
 
     func testCyclesAndWearOff() {
