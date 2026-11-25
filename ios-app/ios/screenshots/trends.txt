@@ -1,0 +1,27 @@
+# Native Trends tab. One per line: name tab light|dark [more launch arguments]
+# -section picks the section; -scrollTo <card id> scrolls to a card below the fold (debug builds).
+trends-summary trends light -section summary
+trends-summary-dark trends dark -section summary
+trends-summary-weight trends light -section summary -scrollTo weight
+trends-weight trends light -section weight
+trends-weight-dark trends dark -section weight
+trends-weight-stall trends light -section weight -scrollTo stall
+trends-food trends light -section food
+trends-food-maint trends light -section food -scrollTo maintenance
+trends-food-protein trends light -section food -scrollTo protein
+trends-meds trends light -section meds
+trends-meds-dark trends dark -section meds
+trends-meds-appetite trends light -section meds -scrollTo appetite
+trends-meds-reta trends light -section meds -scrollTo reta-vs-tirz
+trends-meds-cycles trends light -section meds -scrollTo cycles
+trends-meds-feel trends light -section meds -scrollTo feel
+trends-meds-longrun trends light -section meds -scrollTo long-run
+trends-body trends light -section body
+trends-body-heart trends light -section body -scrollTo heart
+trends-body-more trends light -section body -scrollTo more-health
+trends-body-meas trends light -section body -scrollTo measurements
+trends-training trends light -section training
+trends-training-dark trends dark -section training
+trends-training-steps trends light -section training -scrollTo steps
+trends-more trends light -section more
+trends-more-export trends light -section more -scrollTo weekly
