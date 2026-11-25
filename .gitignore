@@ -1,7 +1,9 @@
-*.token
 *.pem
+*.token
+.DS_Store
 .env
 .env.*
-.DS_Store
-node_modules/
 .token-sha256
+ACCESS-LINK*
+ACCESS-LINK.txt
+node_modules/

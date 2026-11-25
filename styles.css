@@ -278,3 +278,21 @@ table.data td .sub { display: block; color: var(--muted); font-size: 12px; }
 }
 .upcoming .item:first-child { border-top: 0; padding-top: 0; }
 .upcoming .when { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.gate { max-width: 400px; margin: 64px auto 0; }
+.gate-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.gate-row input {
+  font: inherit;
+  flex: 1 1 160px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+}

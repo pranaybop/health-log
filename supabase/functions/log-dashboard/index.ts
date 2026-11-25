@@ -3,6 +3,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const TOKEN_SHA256 =
   "90914af968e4fcf68e45dae85c4a5922e4b3c2107c5b1488e9b5ef47479ad0c1";
+const PASSCODE_SHA256 =
+  "c6d060a5798679bdf5a95f238ee3305905410818ec1143bf098e3189440cd04f";
 
 const ALLOWED_ORIGINS = [
   "https://pranaybop.github.io",
@@ -10,13 +12,15 @@ const ALLOWED_ORIGINS = [
   "http://localhost:4173",
 ];
 
+const FAIL_DELAY_MS = 600;
+
 function corsHeaders(origin: string | null): Record<string, string> {
   const allow = origin && ALLOWED_ORIGINS.includes(origin)
     ? origin
     : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allow,
-    "Access-Control-Allow-Headers": "x-log-token, content-type",
+    "Access-Control-Allow-Headers": "x-log-token, x-log-passcode, content-type",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
@@ -42,20 +46,40 @@ async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
-async function isAuthorized(req: Request): Promise<boolean> {
-  const provided = (req.headers.get("x-log-token") ?? "").trim();
-  if (!provided) return false;
-  const envToken = Deno.env.get("LOG_DASHBOARD_TOKEN");
-  if (envToken && envToken.length > 0) {
-    if (provided.length !== envToken.length) {
-      // still hash-compare against itself to keep runtime more constant
+async function matchesSecret(
+  provided: string,
+  envValue: string | undefined,
+  expectedHash: string,
+): Promise<boolean> {
+  if (envValue && envValue.length > 0) {
+    if (provided.length !== envValue.length) {
       await sha256Hex(provided);
       return false;
     }
-    return timingSafeEqual(provided, envToken);
+    return timingSafeEqual(provided, envValue);
   }
   const digest = await sha256Hex(provided);
-  return timingSafeEqual(digest, TOKEN_SHA256);
+  return timingSafeEqual(digest, expectedHash);
+}
+
+async function isAuthorized(req: Request): Promise<boolean> {
+  const token = (req.headers.get("x-log-token") ?? "").trim();
+  if (token) {
+    return await matchesSecret(
+      token,
+      Deno.env.get("LOG_DASHBOARD_TOKEN"),
+      TOKEN_SHA256,
+    );
+  }
+  const passcode = (req.headers.get("x-log-passcode") ?? "").trim();
+  if (passcode) {
+    return await matchesSecret(
+      passcode,
+      Deno.env.get("LOG_APP_PASSCODE"),
+      PASSCODE_SHA256,
+    );
+  }
+  return false;
 }
 
 Deno.serve(async (req: Request) => {
@@ -74,6 +98,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!await isAuthorized(req)) {
+    await new Promise((resolve) => setTimeout(resolve, FAIL_DELAY_MS));
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { ...cors, "Content-Type": "application/json" },

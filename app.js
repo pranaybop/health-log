@@ -15,8 +15,11 @@ const SITE_LABELS = {
   "Love R": "Love handle, right",
 };
 
+const PASS_KEY = "log.passcode";
+
 const state = {
   token: "",
+  passcode: "",
   data: null,
   error: null,
   loading: true,
@@ -168,9 +171,20 @@ function plannedDoses(doses) {
   return { list, next, withNext: list.concat(planned) };
 }
 
+function authHeaders() {
+  const headers = {};
+  if (state.token) headers["x-log-token"] = state.token;
+  else if (state.passcode) headers["x-log-passcode"] = state.passcode;
+  return headers;
+}
+
+function hasCredential() {
+  return Boolean(state.token || state.passcode);
+}
+
 async function fetchData() {
   const res = await fetch(API_URL, {
-    headers: { "x-log-token": state.token },
+    headers: authHeaders(),
     cache: "no-store",
     referrerPolicy: "no-referrer",
   });
@@ -180,9 +194,9 @@ async function fetchData() {
 }
 
 async function load(isRefresh) {
-  if (!state.token) {
+  if (!hasCredential()) {
     state.loading = false;
-    state.error = "missing-token";
+    state.data = null;
     render();
     return;
   }
@@ -196,14 +210,53 @@ async function load(isRefresh) {
     const data = await fetchData();
     state.data = data;
     state.error = null;
+    if (state.passcode && !state.token) {
+      try { localStorage.setItem(PASS_KEY, state.passcode); } catch (_) { /* ignore quota */ }
+    }
   } catch (err) {
-    if (!state.data) state.error = err.message === "unauthorized" ? "unauthorized" : "load-failed";
-    else state.error = "refresh-failed";
+    const unauthorized = err.message === "unauthorized";
+    if (unauthorized && state.passcode && !state.token) {
+      state.passcode = "";
+      try { localStorage.removeItem(PASS_KEY); } catch (_) { /* ignore */ }
+      state.data = null;
+      state.error = "bad-passcode";
+    } else if (!state.data) {
+      state.error = unauthorized ? "unauthorized" : "load-failed";
+    } else {
+      state.error = "refresh-failed";
+    }
   } finally {
     state.loading = false;
     state.updating = false;
     render();
   }
+}
+
+async function submitPasscode(value) {
+  const code = (value || "").trim();
+  if (!code) {
+    state.error = "empty-passcode";
+    render();
+    return;
+  }
+  state.passcode = code;
+  state.token = "";
+  state.error = null;
+  await load(false);
+}
+
+function lock() {
+  state.passcode = "";
+  state.token = "";
+  state.data = null;
+  state.error = null;
+  state.loading = false;
+  state.updating = false;
+  try { localStorage.removeItem(PASS_KEY); } catch (_) { /* ignore */ }
+  if (location.hash) {
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+  render();
 }
 
 function metric(label, value, detail, feature) {
@@ -337,11 +390,43 @@ function levelSeries(doses, withPlanned) {
   return { points, labels };
 }
 
-function renderMissing() {
-  return el("div", { class: "state" },
+function renderGate() {
+  const err = state.error === "bad-passcode"
+    ? "That passcode was not accepted."
+    : state.error === "empty-passcode"
+      ? "Enter your passcode."
+      : null;
+  const field = el("input", {
+    type: "password",
+    id: "passcode",
+    name: "passcode",
+    autocomplete: "current-password",
+    enterkeyhint: "done",
+    inputmode: "text",
+    "aria-label": "Passcode",
+    disabled: state.loading ? "disabled" : null,
+  });
+  const onSubmit = () => {
+    if (state.loading) return;
+    submitPasscode(field.value);
+  };
+  field.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onSubmit();
+    }
+  });
+  const box = el("div", { class: "state gate" },
     el("h1", null, "Log"),
-    el("p", null, "This link is missing its access key. Open the full link you were sent, including the part after #."),
+    el("p", null, "Enter your passcode to open the dashboard. This device will remember it until you lock."),
+    err ? el("p", { class: "err" }, err) : null,
+    el("div", { class: "gate-row" },
+      field,
+      el("button", { type: "button", class: "primary", disabled: state.loading, onClick: onSubmit }, state.loading ? "Checking…" : "Unlock"),
+    ),
   );
+  setTimeout(() => field.focus(), 0);
+  return box;
 }
 
 function renderUnauthorized() {
@@ -660,6 +745,7 @@ function renderApp(data) {
         el("div", { class: "updated" }, updatedLabel),
       ),
       el("div", { class: "top-actions" },
+        el("button", { type: "button", disabled: state.updating, onClick: lock }, "Lock"),
         el("button", { type: "button", class: "primary", disabled: state.updating, onClick: () => load(true) }, refreshLabel),
       ),
     ),
@@ -688,19 +774,27 @@ function fmtShortDate(isoDate) {
 function render() {
   const root = $("#app");
   root.innerHTML = "";
-  if (!state.token) root.append(renderMissing());
-  else if (state.loading && !state.data) root.append(renderLoading());
+  if (!hasCredential() || state.error === "bad-passcode" || state.error === "empty-passcode") {
+    root.append(renderGate());
+  } else if (state.loading && !state.data) root.append(renderLoading());
   else if (state.error === "unauthorized") root.append(renderUnauthorized());
   else if (state.error && !state.data) root.append(renderError());
   else if (state.data) root.append(renderApp(state.data));
 }
 
-state.token = readToken();
-window.addEventListener("hashchange", () => {
+function boot() {
   state.token = readToken();
+  if (!state.token) {
+    try { state.passcode = localStorage.getItem(PASS_KEY) || ""; }
+    catch (_) { state.passcode = ""; }
+  } else {
+    state.passcode = "";
+  }
   load(false);
-});
-load(false);
+}
+
+window.addEventListener("hashchange", boot);
+boot();
 setInterval(() => {
-  if (state.token && !state.loading) load(true);
+  if (hasCredential() && !state.loading) load(true);
 }, 60000);
