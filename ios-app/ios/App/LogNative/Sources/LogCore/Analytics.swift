@@ -87,6 +87,15 @@ public enum Analytics {
         return Sites.all[(i + 1) % Sites.all.count]
     }
 
+    /// The retatrutide protocol's start date, else Dec 6 (web retaSwitchAt).
+    public static func retaSwitchAt(_ d: Dashboard) -> Date {
+        if let started = d.protocols.first(where: { ($0.compound ?? "").lowercased() == "retatrutide" })?.startedOn,
+           !started.isEmpty {
+            return LogTime.noon(started)
+        }
+        return LogTime.retaStart
+    }
+
     // MARK: Weight
 
     /// Weigh-ins sorted by time with an exponentially smoothed trend (tau in days): each reading

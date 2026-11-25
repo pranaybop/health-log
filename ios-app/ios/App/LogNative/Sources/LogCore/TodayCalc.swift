@@ -165,15 +165,6 @@ extension Analytics {
         return next >= LogTime.retaStart ? nil : next
     }
 
-    /// The retatrutide protocol's start date, else Dec 6.
-    public static func retaSwitchAt(_ d: Dashboard) -> Date {
-        if let p = d.protocols.first(where: { ($0.compound ?? "").lowercased() == "retatrutide" }),
-           let s = p.startedOn, !s.isEmpty {
-            return LogTime.noon(s)
-        }
-        return LogTime.retaStart
-    }
-
     // MARK: Days
 
     /// The first day anything was logged: the earliest of the first weigh-in, meal, Apple Health
