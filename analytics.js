@@ -508,7 +508,7 @@ function earnDays(data, weeks) {
     // The start was computed from todayKey as UTC date, which matches YYYY-MM-DD of CT dates we store
     const day = shiftDay(today, -(n - 1 - i));
     const row = byDay.get(day);
-    cells.push({ day, earned: row ? !!row.earned : null, has: !!row, today: day === today });
+    cells.push({ day, earned: row && row.earned != null ? !!row.earned : null, has: !!row, today: day === today });
   }
   return cells;
 }
