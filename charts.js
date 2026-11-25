@@ -206,13 +206,15 @@ function attachScrub(wrap, svg, { positions, height, padTop, padBottom, onMove, 
 function timeChart(opts) {
   const width = chartWidth();
   const height = opts.height || 200;
-  const pad = { l: 40, r: 10, t: 12, b: 24 };
+  const hasRight = opts.series.some((s) => s.axis === "right");
+  const pad = { l: 40, r: hasRight ? 42 : 10, t: 12, b: 24 };
   const t0 = opts.t0.getTime();
   const t1 = Math.max(opts.t1.getTime(), t0 + 86400000);
   const vals = [];
+  const rvals = [];
   for (const s of opts.series) for (const p of s.points) {
     const tt = p.t.getTime();
-    if (tt >= t0 && tt <= t1 && Number.isFinite(p.v)) vals.push(p.v);
+    if (tt >= t0 && tt <= t1 && Number.isFinite(p.v)) (s.axis === "right" ? rvals : vals).push(p.v);
   }
   for (const r of opts.refs || []) if (Number.isFinite(r.v) && r.inDomain !== false) vals.push(r.v);
   if (!vals.length) return el("p", { class: "empty" }, "Not enough data in this range.");
@@ -226,12 +228,34 @@ function timeChart(opts) {
   const X = (t) => pad.l + ((t - t0) / (t1 - t0)) * (width - pad.l - pad.r);
   const Y = (v) => pad.t + (1 - (v - yt.lo) / (yt.hi - yt.lo)) * (height - pad.t - pad.b);
   const fmtY = opts.fmtY || ((v) => fmtNum(v, 0));
+  // Optional second scale on the right for an overlay line. Always labeled, so it can't pass for weight.
+  let rt = null;
+  let YR = Y;
+  if (hasRight && rvals.length) {
+    let rlo = Math.min(...rvals);
+    let rhi = Math.max(...rvals);
+    const rp = (rhi - rlo) * 0.12 || Math.max(1, Math.abs(rhi) * 0.1);
+    rlo = opts.rightMin != null ? Math.max(opts.rightMin, rlo - rp) : rlo - rp;
+    rhi += rp;
+    rt = niceTicks(rlo, rhi, 3);
+    YR = (v) => pad.t + (1 - (v - rt.lo) / (rt.hi - rt.lo)) * (height - pad.t - pad.b);
+  }
+  const Yfor = (s) => (s.axis === "right" && rt ? YR : Y);
+  const clampFor = (s, v) => (s.axis === "right" && rt ? Math.max(rt.lo, Math.min(rt.hi, v)) : Math.max(yt.lo, Math.min(yt.hi, v)));
 
   const svg = svgEl("svg", { class: "chart", width, height, viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": opts.aria || "Chart" });
   for (const v of yt.ticks) {
     if (v < yt.lo - 1e-9 || v > yt.hi + 1e-9) continue;
     svg.append(svgEl("line", { class: "grid", x1: pad.l, x2: width - pad.r, y1: Y(v), y2: Y(v) }));
     svg.append(svgEl("text", { class: "tick", x: pad.l - 8, y: Y(v) + 4, "text-anchor": "end" }, fmtY(v)));
+  }
+  if (rt) {
+    const fmtR = opts.fmtRight || ((v) => fmtNum(v, 0));
+    for (const v of rt.ticks) {
+      if (v < rt.lo - 1e-9 || v > rt.hi + 1e-9) continue;
+      svg.append(svgEl("line", { class: "axis-tick", x1: width - pad.r, x2: width - pad.r + 4, y1: YR(v), y2: YR(v) }));
+      svg.append(svgEl("text", { class: "tick right", x: width - pad.r + 7, y: YR(v) + 4, "text-anchor": "start" }, fmtR(v)));
+    }
   }
   for (const tk of timeTicks(new Date(t0), new Date(t1), width - pad.l - pad.r)) {
     const x = X(tk.t.getTime());
@@ -257,7 +281,7 @@ function timeChart(opts) {
   for (const s of opts.series) {
     const pts = s.points
       .filter((p) => Number.isFinite(p.v) && p.t.getTime() >= t0 && p.t.getTime() <= t1)
-      .map((p) => [X(p.t.getTime()), Y(Math.max(yt.lo, Math.min(yt.hi, p.v))), p]);
+      .map((p) => [X(p.t.getTime()), Yfor(s)(clampFor(s, p.v)), p]);
     plotted[s.id] = pts;
     if (!pts.length) continue;
     const cls = `series ${s.cls || "s1"}${s.dashed ? " dashed" : ""}`;
@@ -315,71 +339,6 @@ function timeChart(opts) {
         for (const { c } of markers) c.setAttribute("visibility", "hidden");
         opts.onScrub(null);
       },
-    });
-  }
-  return wrap;
-}
-
-/*
-  barStrip({ t0, t1, points: [{ t, v }], cls, height, fmtY, target, aria, onScrub })
-  A short bar panel that sits under a timeChart. Same width and side padding, so a day
-  lines up with the chart above it. Values start at zero; no x labels of its own.
-*/
-function barStrip(opts) {
-  const width = chartWidth();
-  const height = opts.height || 96;
-  const pad = { l: 40, r: 10, t: 10, b: 6 };
-  const t0 = opts.t0.getTime();
-  const t1 = Math.max(opts.t1.getTime(), t0 + 86400000);
-  const pts = opts.points.filter((p) => Number.isFinite(p.v) && p.t.getTime() >= t0 && p.t.getTime() <= t1);
-  if (!pts.length) return null;
-  const vals = pts.map((p) => p.v);
-  if (opts.target != null) vals.push(opts.target);
-  const yt = niceTicks(0, Math.max(1e-6, ...vals) * 1.05, 2);
-  yt.lo = 0;
-  const X = (t) => pad.l + ((t - t0) / (t1 - t0)) * (width - pad.l - pad.r);
-  const Y = (v) => pad.t + (1 - v / yt.hi) * (height - pad.t - pad.b);
-  const fmtY = opts.fmtY || ((v) => fmtNum(v, 0));
-  const svg = svgEl("svg", { class: "chart strip", width, height, viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": opts.aria || "Bars" });
-  for (const v of yt.ticks) {
-    if (v > yt.hi + 1e-9) continue;
-    svg.append(svgEl("line", { class: v === 0 ? "axis" : "grid", x1: pad.l, x2: width - pad.r, y1: Y(v), y2: Y(v) }));
-    if (v > 0) svg.append(svgEl("text", { class: "tick", x: pad.l - 8, y: Y(v) + 4, "text-anchor": "end" }, fmtY(v)));
-  }
-  if (opts.target != null && opts.target <= yt.hi) {
-    svg.append(svgEl("line", { class: "ref", x1: pad.l, x2: width - pad.r, y1: Y(opts.target), y2: Y(opts.target) }));
-  }
-  const stepMs = opts.stepMs || 86400000;
-  const slot = ((width - pad.l - pad.r) * stepMs) / (t1 - t0);
-  const bw = Math.max(1.5, Math.min(10, slot * 0.7));
-  const base = Y(0);
-  const g = svgEl("g", { class: "bars" });
-  const centers = [];
-  for (const p of pts) {
-    const cx = X(p.t.getTime());
-    centers.push(cx);
-    if (p.v <= 0) continue;
-    const top = Y(p.v);
-    const x = cx - bw / 2;
-    const r = Math.min(bw >= 5 ? 3 : 0, base - top);
-    g.append(svgEl("path", {
-      class: `col ${opts.cls || "s1"}`,
-      d: r > 0
-        ? `M${x.toFixed(1)},${base}V${(top + r).toFixed(1)}Q${x.toFixed(1)},${top.toFixed(1)} ${(x + r).toFixed(1)},${top.toFixed(1)}H${(x + bw - r).toFixed(1)}Q${(x + bw).toFixed(1)},${top.toFixed(1)} ${(x + bw).toFixed(1)},${(top + r).toFixed(1)}V${base}Z`
-        : `M${x.toFixed(1)},${base}V${top.toFixed(1)}H${(x + bw).toFixed(1)}V${base}Z`,
-    }));
-  }
-  svg.append(g);
-  const wrap = el("div", { class: "chart-wrap strip-wrap", tabindex: "0", "aria-label": `${opts.aria || "Bars"}. Use left and right arrow keys to read values.` });
-  wrap.append(svg);
-  if (opts.onScrub) {
-    attachScrub(wrap, svg, {
-      positions: centers,
-      height,
-      padTop: pad.t,
-      padBottom: pad.b,
-      onMove: (i) => opts.onScrub(pts[i]),
-      onEnd: () => opts.onScrub(null),
     });
   }
   return wrap;

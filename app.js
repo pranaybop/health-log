@@ -3,6 +3,7 @@ const TZ = "America/Chicago";
 const HALF_LIFE_DAYS = 5;
 const RETA_START = new Date("2026-12-06T12:00:00-06:00");
 const HALF_MARATHON = new Date("2026-12-13T08:00:00-06:00");
+const CHECKIN_PROMPT_HOUR = 18; // the "No check-in yet" prompt waits until 6 PM Central
 const GOAL_LB = 235;
 const TIRZ_START = new Date("2026-11-02T12:00:00-06:00");
 
@@ -32,6 +33,9 @@ const state = {
   explorerX: "weight",
   explorerY: "steps",
   overlay: (() => { try { return localStorage.getItem("log.overlay") || "none"; } catch (_) { return "none"; } })(),
+  dayOffset: 0,
+  daySlide: null,
+  checkinOpen: false,
   editTargets: false,
   targetsBusy: false,
   targetsMsg: null,
@@ -112,6 +116,10 @@ function dateKeyCT(date) {
     day: "2-digit",
   });
   return fmt.format(date);
+}
+
+function hourCT(date) {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", hourCycle: "h23" }).format(date)) % 24;
 }
 
 function fmtTimeCT(date) {
@@ -224,7 +232,7 @@ async function load(isRefresh, background) {
     state.loading = false;
     state.updating = false;
     // A background refresh never redraws the Log tab, so half-filled forms survive.
-    if (background && state.tab === "log" && state.data) {
+    if (background && (state.tab === "log" || state.checkinOpen || state.editTargets) && state.data) {
       const btn = document.querySelector('.icon-btn[aria-label="Refresh"]');
       if (btn) btn.disabled = state.formBusy;
     } else {
@@ -329,10 +337,17 @@ function isStandalone() {
 /* ---------- data helpers ---------- */
 
 function todayTotals(data) {
-  const key = todayKey();
+  return totalsOn(data, todayKey());
+}
+
+function todayMeals(data) {
+  return mealsOn(data, todayKey());
+}
+
+function totalsOn(data, key) {
   const row = (data.daily_totals || []).find((d) => d.date === key);
   if (row) return row;
-  const meals = todayMeals(data);
+  const meals = mealsOn(data, key);
   if (!meals.length) return null;
   const sum = (f) => meals.reduce((a, m) => a + (num(m[f]) || 0), 0);
   return {
@@ -346,12 +361,74 @@ function todayTotals(data) {
   };
 }
 
-function todayMeals(data) {
-  const key = todayKey();
+function mealsOn(data, key) {
   return (data.meals || []).filter((m) => {
     const t = parseTs(m.eaten_at);
     return t && dateKeyCT(t) === key;
   });
+}
+
+function healthOn(data, key) {
+  return (data.daily_health || []).find((r) => r.day === key) || null;
+}
+
+function checkinOn(data, key) {
+  return (data.checkins || []).find((c) => c.day === key) || null;
+}
+
+/* ---------- which day Today is showing ---------- */
+
+function viewKey() {
+  return state.dayOffset ? shiftDay(todayKey(), state.dayOffset) : todayKey();
+}
+
+function dayDiff(a, b) {
+  return Math.round((Date.parse(a + "T00:00:00Z") - Date.parse(b + "T00:00:00Z")) / 86400000);
+}
+
+function earliestDayKey(data) {
+  const keys = [];
+  const w = (data.weights || [])[0];
+  if (w && parseTs(w.measured_at)) keys.push(dateKeyCT(parseTs(w.measured_at)));
+  const m = (data.meals || [])[0];
+  if (m && parseTs(m.eaten_at)) keys.push(dateKeyCT(parseTs(m.eaten_at)));
+  const h = (data.daily_health || [])[0];
+  if (h) keys.push(h.day);
+  const c = (data.checkins || [])[0];
+  if (c) keys.push(c.day);
+  return keys.filter(Boolean).sort()[0] || todayKey();
+}
+
+/* Days that have something logged, for the dots under the week strip. */
+function loggedDays(data) {
+  const set = new Set();
+  for (const w of data.weights || []) { const t = parseTs(w.measured_at); if (t) set.add(dateKeyCT(t)); }
+  for (const m of data.meals || []) { const t = parseTs(m.eaten_at); if (t) set.add(dateKeyCT(t)); }
+  for (const c of data.checkins || []) if (c.day) set.add(c.day);
+  return set;
+}
+
+function goToDay(data, offset) {
+  const min = dayDiff(earliestDayKey(data), todayKey());
+  const next = Math.max(min, Math.min(0, offset));
+  const cur = state.dayOffset || 0;
+  if (next === cur) return;
+  state.daySlide = next > cur ? "next" : "prev";
+  state.dayOffset = next;
+  state.editTargets = false;
+  state.targetsMsg = null;
+  state.checkinOpen = false;
+  state.formMessage = null;
+  render();
+}
+
+function dayTitle(key) {
+  const off = dayDiff(key, todayKey());
+  if (off === 0) return "Today";
+  if (off === -1) return "Yesterday";
+  const d = keyToNoon(key);
+  if (off > -7) return new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long" }).format(d);
+  return fmtDateYearCT(d);
 }
 
 function latestHealth(data) {
@@ -415,9 +492,14 @@ function tabNav() {
       type: "button",
       "aria-current": state.tab === t.id ? "page" : null,
       onClick: () => {
-        if (state.tab === t.id) { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+        if (state.tab === t.id) {
+          if (t.id === "today" && state.dayOffset) { state.daySlide = "next"; state.dayOffset = 0; render(); }
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
         state.tab = t.id;
         state.formMessage = null;
+        state.checkinOpen = false;
         render();
         window.scrollTo(0, 0);
       },
@@ -427,11 +509,11 @@ function tabNav() {
 
 function renderTopbar(data) {
   const asOf = parseTs(data.as_of) || new Date();
-  const title = (TABS.find((t) => t.id === state.tab) || TABS[0]).label;
+  const title = state.tab === "today" ? dayTitle(viewKey()) : (TABS.find((t) => t.id === state.tab) || TABS[0]).label;
   const updated = state.error === "refresh-failed"
     ? `Couldn’t refresh. Showing data from ${fmtTimeCT(asOf)}.`
     : state.updating ? "Refreshing…" : `Updated ${fmtTimeCT(asOf).replace(" CT", "")}`;
-  const sub = state.tab === "today" ? `${fmtLongDateCT(new Date())}` : updated;
+  const sub = state.tab === "today" ? fmtLongDateYearCT(keyToNoon(viewKey())) : updated;
   return el("header", { class: "topbar" },
     el("div", { class: "titles" },
       el("div", { class: "eyebrow-date" + (state.error === "refresh-failed" && state.tab !== "today" ? " err" : "") }, sub),
@@ -448,6 +530,12 @@ function fmtLongDateCT(date) {
   return new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" }).format(date);
 }
 
+function fmtLongDateYearCT(date) {
+  const sameYear = partsInTZ(date).year === partsInTZ(new Date()).year;
+  return sameYear ? fmtLongDateCT(date)
+    : new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(date);
+}
+
 function fmtDateYearCT(date) {
   const p = partsInTZ(date);
   const thisYear = partsInTZ(new Date()).year;
@@ -456,11 +544,12 @@ function fmtDateYearCT(date) {
 
 /* ---------- Today ---------- */
 
-function renderHero(data) {
+function renderHero(data, key) {
   const parsed = parseWeights(data.weights || []);
   if (!parsed.length) {
     return el("section", { class: "hero" }, el("p", { class: "empty" }, "Log a weigh-in on the Log tab to start your journey."));
   }
+  if (key && key !== todayKey()) return renderDayWeight(data, parsed, key);
   const sm = smoothWeights(parsed);
   const cur = parsed[parsed.length - 1];
   const trendNow = sm[sm.length - 1].trend;
@@ -504,7 +593,49 @@ function renderHero(data) {
   );
 }
 
-function gauge(kind, label, value, target, unit) {
+/* Weight on a past day: that day's weigh-in, or the smoothed trend if there wasn't one. */
+function renderDayWeight(data, parsed, key) {
+  const sm = smoothWeights(parsed);
+  const endOfDay = new Date(keyToNoon(key).getTime() + 12 * 3600000);
+  const onDay = parsed.filter((w) => dateKeyCT(w.at) === key);
+  const before = parsed.filter((w) => dateKeyCT(w.at) < key);
+  const trend = trendAt(sm, endOfDay);
+  if (!onDay.length && trend == null) {
+    return el("section", { class: "hero" }, el("p", { class: "empty" }, "No weigh-ins yet by this day."));
+  }
+  const cur = onDay[onDay.length - 1] || null;
+  const shown = cur ? cur.lb : trend;
+  const prev = before[before.length - 1] || null;
+  const j = journeyStats(data);
+  const inJourney = keyToNoon(key) >= TIRZ_START && j;
+  const lost = inJourney ? j.startLb - shown : null;
+  const total = inJourney && j.goalLb != null ? j.startLb - j.goalLb : null;
+  const pct = total && total > 0 ? Math.max(0, Math.min(1, lost / total)) : null;
+  return el("section", { class: "hero", "aria-label": "Weight that day" },
+    el("div", { class: "hero-num" + (cur ? "" : " muted") }, fmtNum(shown, 1), el("span", { class: "unit" }, "lb")),
+    el("div", { class: "hero-meta" }, cur
+      ? `Weighed ${fmtTimeCT(cur.at)}${onDay.length > 1 ? `, ${onDay.length} weigh-ins that day` : ""}`
+      : "No weigh-in this day. Showing the smoothed trend."),
+    el("div", { class: "hero-chips" },
+      cur && prev ? el("span", { class: cur.lb < prev.lb ? "chip good" : cur.lb > prev.lb ? "chip watch" : "chip" }, `${signed(cur.lb - prev.lb)} lb vs ${fmtDateCT(prev.at, false)}`) : null,
+      cur && trend != null ? el("span", { class: "chip" }, `Trend ${fmtNum(trend, 1)}`) : null,
+      lost != null ? el("span", { class: lost > 0 ? "chip good" : "chip" }, `${signed(-lost)} lb since start`) : null,
+    ),
+    pct != null ? el("div", { class: "course" },
+      el("div", { class: "course-track", role: "img", "aria-label": `${fmtNum(lost, 1)} of ${fmtNum(total, 1)} pounds to goal by this day` },
+        el("div", { class: "course-fill", style: { width: `${(pct * 100).toFixed(1)}%` } }),
+        el("div", { class: "course-dot", style: { left: `${(pct * 100).toFixed(1)}%` } }),
+      ),
+      el("div", { class: "course-ends" },
+        el("span", null, el("b", null, fmtNum(j.startLb, 1)), " start"),
+        el("span", { class: "mid" }, `${Math.round(pct * 100)}% by this day`),
+        el("span", null, el("b", null, fmtNum(j.goalLb, 0)), " goal"),
+      ),
+    ) : null,
+  );
+}
+
+function gauge(kind, label, value, target, unit, past) {
   const has = value != null;
   const hasT = target != null && target > 0;
   const pct = has && hasT ? value / target : 0;
@@ -512,8 +643,8 @@ function gauge(kind, label, value, target, unit) {
   if (has && hasT) {
     const diff = target - value;
     status = kind === "protein"
-      ? (diff > 0 ? `${fmtNum(diff, 0)} ${unit} to go` : `Hit, ${fmtNum(-diff, 0)} ${unit} over`)
-      : (diff >= 0 ? `${fmtNum(diff, 0)} left` : `${fmtNum(-diff, 0)} over`);
+      ? (diff > 0 ? `${fmtNum(diff, 0)} ${unit} ${past ? "short" : "to go"}` : `Hit, ${fmtNum(-diff, 0)} ${unit} over`)
+      : (diff >= 0 ? `${fmtNum(diff, 0)} ${past ? "under" : "left"}` : `${fmtNum(-diff, 0)} over`);
   }
   return el("div", { class: `gauge ${kind}` },
     el("div", { class: "gauge-row" },
@@ -600,18 +731,21 @@ function renderTargetsEditor(data, t) {
   );
 }
 
-function renderFood(data) {
-  const today = todayTotals(data);
+function renderFood(data, key) {
+  const k = key || todayKey();
+  const past = k !== todayKey();
+  const today = totalsOn(data, k);
   const t = getTargets(data);
   const cal = today ? num(today.calories) : null;
   const pro = today ? num(today.protein_g) : null;
-  const action = el("button", { type: "button", class: "link", onClick: () => { state.editTargets = !state.editTargets; state.targetsMsg = null; render(); } },
+  const action = past ? null : el("button", { type: "button", class: "link", onClick: () => { state.editTargets = !state.editTargets; state.targetsMsg = null; render(); } },
     state.editTargets ? "Close" : (t.calories == null && t.protein == null ? "Set targets" : "Edit targets"));
+  if (past && !today) return card("Food", el("p", { class: "empty" }, "No food logged this day."));
   const meals = today ? `${today.meal_count} meal${today.meal_count === 1 ? "" : "s"} logged` : "Nothing logged yet today";
-  return cardWithAction("Food today", action,
+  return cardWithAction(past ? "Food" : "Food today", action,
     el("div", { class: "gauges" },
-      gauge("calories", "Calories", cal, t.calories, "kcal"),
-      gauge("protein", "Protein", pro, t.protein, "g"),
+      gauge("calories", "Calories", cal, t.calories, "kcal", past),
+      gauge("protein", "Protein", pro, t.protein, "g", past),
     ),
     state.editTargets ? renderTargetsEditor(data, t) : null,
     state.targetsMsg ? el("p", { class: "target-msg " + (state.targetsMsg.ok ? "ok" : "err"), role: "status" }, state.targetsMsg.text) : null,
@@ -633,25 +767,52 @@ function renderVerdict(data) {
   );
 }
 
-function renderCheckinNudge(data) {
-  const cur = todayCheckin(data);
-  if (cur && (cur.ate_vs_usual || cur.moved_vs_usual || cur.dose_feel || cur.mood != null)) {
-    const bits = [
-      cur.ate_vs_usual ? `ate ${String(VS_LABELS[cur.ate_vs_usual] || cur.ate_vs_usual).toLowerCase()}` : null,
-      cur.moved_vs_usual ? `moved ${String(VS_LABELS[cur.moved_vs_usual] || cur.moved_vs_usual).toLowerCase()}` : null,
-      cur.dose_feel ? `dose feels ${String(FEEL_LABELS[cur.dose_feel] || cur.dose_feel).toLowerCase()}` : null,
-    ].filter(Boolean);
-    return el("div", { class: "callout done" },
-      el("strong", null, "Checked in today"),
-      el("span", null, bits.length ? capitalize(bits.join(", ")) + "." : "Open the Log tab to add more."),
+function checkinSummary(c) {
+  const bits = [
+    c.ate_vs_usual ? `ate ${String(VS_LABELS[c.ate_vs_usual] || c.ate_vs_usual).toLowerCase()}` : null,
+    c.moved_vs_usual ? `moved ${String(VS_LABELS[c.moved_vs_usual] || c.moved_vs_usual).toLowerCase()}` : null,
+    c.dose_feel ? `dose feels ${String(FEEL_LABELS[c.dose_feel] || c.dose_feel).toLowerCase()}` : null,
+  ].filter(Boolean);
+  const scores = [
+    c.mood != null ? `mood ${c.mood}` : null,
+    c.food_noise != null ? `food noise ${c.food_noise}` : null,
+    c.energy != null ? `energy ${c.energy}` : null,
+    c.sleep_quality != null ? `sleep ${c.sleep_quality}` : null,
+  ].filter(Boolean);
+  return [bits.length ? capitalize(bits.join(", ")) + "." : null, scores.length ? capitalize(scores.join(", ")) + " out of 10." : null].filter(Boolean).join(" ");
+}
+
+function renderCheckinNudge(data, key) {
+  const k = key || todayKey();
+  const isToday = k === todayKey();
+  const cur = checkinOn(data, k);
+  const hasAnswers = cur && (cur.ate_vs_usual || cur.moved_vs_usual || cur.dose_feel || cur.mood != null || cur.energy != null || cur.food_noise != null || cur.sleep_quality != null);
+  if (state.checkinOpen) {
+    return card(isToday ? "Today’s check-in" : `Check-in for ${fmtShortDate(k)}`,
+      renderCheckinForm(data, k, {
+        onSaved: () => { state.checkinOpen = false; render(); },
+        onCancel: () => { state.checkinOpen = false; state.formMessage = null; render(); },
+      }),
     );
   }
-  return el("div", { class: "callout" },
+  const open = el("button", { type: "button", class: hasAnswers ? "link" : "primary", onClick: () => { state.checkinOpen = true; state.formMessage = null; render(); } }, hasAnswers ? "Edit" : "Check in");
+  if (hasAnswers) {
+    return el("div", { class: "callout done" },
+      el("div", null,
+        el("strong", null, isToday ? "Checked in today" : "Checked in"),
+        el("span", null, checkinSummary(cur) || "Saved."),
+      ),
+      open,
+    );
+  }
+  // Today's prompt waits for the evening; past days can be filled in any time.
+  if (isToday && hourCT(new Date()) < CHECKIN_PROMPT_HOUR) return null;
+  return el("div", { class: "callout" + (isToday ? "" : " quiet") },
     el("div", null,
-      el("strong", null, "No check-in yet today"),
-      el("span", null, "Three taps: ate, moved, and how the dose feels."),
+      el("strong", null, isToday ? "No check-in yet today" : "No check-in this day"),
+      el("span", null, "How you ate, moved, felt and slept."),
     ),
-    el("button", { type: "button", class: "primary", onClick: () => { state.tab = "log"; render(); window.scrollTo(0, 0); } }, "Check in"),
+    open,
   );
 }
 
@@ -693,8 +854,29 @@ function renderMedSummary(data) {
   );
 }
 
-function renderSignals(data) {
-  const h = latestHealth(data);
+function renderDayMeds(data, key) {
+  const doses = data.doses || [];
+  const firstReal = doses.find((d) => !d.skipped && parseTs(d.taken_at));
+  if (!firstReal || dateKeyCT(parseTs(firstReal.taken_at)) > key) return null;
+  const that = doses.filter((d) => parseTs(d.taken_at) && dateKeyCT(parseTs(d.taken_at)) === key);
+  const at = new Date(Math.min(Date.now(), keyToNoon(key).getTime() + 9 * 3600000));
+  const level = remainingAt(at, doses, data.protocol);
+  return card("Medication",
+    el("div", { class: "med-level" },
+      el("span", { class: "big" }, fmtNum(level, 2), el("span", { class: "unit" }, "mg")),
+      el("span", { class: "detail" }, "Estimated in your system at 9 PM that day"),
+    ),
+    el("div", { class: "props" },
+      prop("Dose that day", that.length
+        ? that.map((d) => d.skipped ? "Skipped" : `${fmtNum(d.dose_mg, 1)} mg ${capitalize(d.compound || "")}${d.site ? `, ${SITE_LABELS[d.site] || d.site}` : ""}`).join("; ")
+        : "None"),
+    ),
+  );
+}
+
+function renderSignals(data, key) {
+  const past = key && key !== todayKey();
+  const h = past ? healthOn(data, key) : latestHealth(data);
   if (!h) return null;
   const isToday = h.day === todayKey();
   return card("Body",
@@ -704,7 +886,7 @@ function renderSignals(data) {
       metric("Resting HR", h.resting_hr != null ? fmtNum(h.resting_hr, 0) : "—", "bpm"),
       metric("HRV", h.hrv_ms != null ? fmtNum(h.hrv_ms, 0) : "—", "ms"),
     ),
-    el("p", { class: "caption" }, isToday ? "From Apple Health, today so far." : `From Apple Health, ${fmtShortDate(h.day)}. Newer days appear after the next import.`),
+    el("p", { class: "caption" }, past ? "From Apple Health." : isToday ? "From Apple Health, today so far." : `From Apple Health, ${fmtShortDate(h.day)}. Newer days appear after the next import.`),
   );
 }
 
@@ -728,7 +910,7 @@ function renderMacros(today) {
   );
 }
 
-function renderMeals(meals) {
+function renderMeals(meals, past) {
   return card("Meals",
     meals.length
       ? el("ul", { class: "list" },
@@ -744,27 +926,100 @@ function renderMeals(meals) {
             ),
           )),
         )
-      : el("p", { class: "empty" }, "No meals yet today. Ask Log or Claude to record them."),
+      : el("p", { class: "empty" }, past ? "No meals logged this day." : "No meals yet today. Ask Log or Claude to record them."),
   );
 }
 
-function renderTodayTab(data) {
-  const today = todayTotals(data);
-  return el("div", { class: "stack" },
-    renderHero(data),
-    renderFood(data),
-    renderCheckinNudge(data),
-    renderCountdowns(data),
-    renderVerdict(data),
-    renderMedSummary(data),
-    renderSignals(data),
-    renderMacros(today),
-    renderMeals(todayMeals(data)),
-    el("p", { class: "install" + (state.error === "refresh-failed" ? " err" : "") }, state.error === "refresh-failed"
-      ? `Couldn’t refresh. Showing data from ${fmtTimeCT(parseTs(data.as_of) || new Date())}.`
-      : `Updated ${fmtTimeCT(parseTs(data.as_of) || new Date())}. Refreshes every minute.`),
-    isStandalone() ? null : el("p", { class: "install" }, "Add to Home Screen: in Safari, tap Share, then Add to Home Screen. Your passcode stays on this phone."),
+/* Mon–Sun strip for the week that holds the day showing. Dots mark days with anything logged. */
+function renderWeekStrip(data) {
+  const key = viewKey();
+  const today = todayKey();
+  const min = earliestDayKey(data);
+  const t = keyToNoon(key);
+  const dow = (t.getUTCDay() + 6) % 7;
+  const monday = shiftDay(key, -dow);
+  const logged = loggedDays(data);
+  const picker = el("input", {
+    type: "date",
+    class: "day-picker",
+    value: key,
+    min,
+    max: today,
+    "aria-label": "Jump to a day",
+    onChange: (e) => { if (e.target.value) goToDay(data, dayDiff(e.target.value, today)); },
+  });
+  const month = new Intl.DateTimeFormat("en-US", { timeZone: TZ, month: "long", year: "numeric" }).format(t);
+  return el("div", { class: "weekstrip" },
+    el("div", { class: "weekstrip-head" },
+      el("label", { class: "month-pick" }, el("span", null, month), el("span", { class: "chev", "aria-hidden": "true" }, "⌄"), picker),
+      key !== today ? el("button", { type: "button", class: "pill", onClick: () => goToDay(data, 0) }, "Today") : null,
+    ),
+    el("div", { class: "week", role: "group", "aria-label": "Days of this week" },
+      ...Array.from({ length: 7 }, (_, i) => {
+        const k = shiftDay(monday, i);
+        const d = keyToNoon(k);
+        const future = k > today;
+        const early = k < min;
+        return el("button", {
+          type: "button",
+          class: "day" + (k === key ? " on" : "") + (k === today ? " is-today" : "") + (logged.has(k) ? " has" : ""),
+          disabled: future || early,
+          "aria-pressed": k === key ? "true" : "false",
+          "aria-label": fmtLongDateYearCT(d),
+          onClick: () => goToDay(data, dayDiff(k, today)),
+        },
+          el("span", { class: "dow" }, "MTWTFSS"[i]),
+          el("span", { class: "dnum" }, String(Number(k.slice(8)))),
+          el("i", { class: "dot", "aria-hidden": "true" }),
+        );
+      }),
+    ),
   );
+}
+
+/* Horizontal swipe on the day's cards: left for the next day, right for the day before. */
+function attachDaySwipe(node, data) {
+  let sx = 0, sy = 0, st = 0, armed = false;
+  node.addEventListener("touchstart", (e) => {
+    armed = e.touches.length === 1 && !e.target.closest("input, textarea, select, .checkin-form, .targets-editor, .chart-wrap");
+    if (!armed) return;
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    st = Date.now();
+  }, { passive: true });
+  node.addEventListener("touchend", (e) => {
+    if (!armed) return;
+    armed = false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx;
+    const dy = t.clientY - sy;
+    if (Date.now() - st > 700 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8) return;
+    goToDay(data, (state.dayOffset || 0) + (dx < 0 ? 1 : -1));
+  }, { passive: true });
+}
+
+function renderTodayTab(data) {
+  const key = viewKey();
+  const isToday = key === todayKey();
+  const body = el("div", { class: "stack day-body" + (state.daySlide ? ` slide-${state.daySlide}` : "") },
+    state.formMessage && state.formMessage.ok ? renderToast() : null,
+    renderHero(data, key),
+    renderFood(data, key),
+    renderCheckinNudge(data, key),
+    isToday ? renderCountdowns(data) : null,
+    isToday ? renderVerdict(data) : null,
+    isToday ? renderMedSummary(data) : renderDayMeds(data, key),
+    renderSignals(data, key),
+    renderMacros(totalsOn(data, key)),
+    renderMeals(mealsOn(data, key), !isToday),
+    isToday ? el("p", { class: "install" + (state.error === "refresh-failed" ? " err" : "") }, state.error === "refresh-failed"
+      ? `Couldn’t refresh. Showing data from ${fmtTimeCT(parseTs(data.as_of) || new Date())}.`
+      : `Updated ${fmtTimeCT(parseTs(data.as_of) || new Date())}. Refreshes every minute.`) : null,
+    isToday && !isStandalone() ? el("p", { class: "install" }, "Add to Home Screen: in Safari, tap Share, then Add to Home Screen. Your passcode stays on this phone.") : null,
+  );
+  state.daySlide = null;
+  attachDaySwipe(body, data);
+  return el("div", { class: "stack" }, renderWeekStrip(data), body);
 }
 
 /* ---------- Meds ---------- */
@@ -953,7 +1208,7 @@ function renderMedsTab(data) {
 /* Daily series that can sit under the weight chart. Same days, separate scale. */
 const OVERLAYS = [
   { id: "none", label: "None" },
-  { id: "calories", label: "Calories", cls: "s1", title: "Calories eaten", fmt: (v) => `${fmtNum(v, 0)} kcal` },
+  { id: "calories", label: "Calories", cls: "s2", title: "Calories", fmt: (v) => `${fmtNum(v, 0)} kcal` },
   { id: "steps", label: "Steps", cls: "s4", title: "Steps", fmt: (v) => `${fmtNum(v, 0)} steps` },
   { id: "sleep", label: "Sleep", cls: "s3", title: "Sleep", fmt: (v) => `${fmtNum(v, 1)} h sleep` },
 ];
@@ -972,10 +1227,21 @@ function keyToNoon(key) {
   return ctNoon(y, m, d);
 }
 
-/* Daily bars on short ranges; weekly averages (Monday weeks) on 1Y and All so bars stay readable. */
+/* Overlay line: 7-day average on 1M/3M, weekly averages (Monday weeks) on 1Y and All. */
 function overlayPoints(daily, weekly) {
   const keys = [...daily.keys()].sort();
-  if (!weekly) return keys.map((k) => ({ t: keyToNoon(k), v: daily.get(k), key: k, n: 1 }));
+  if (!weekly) {
+    return keys.map((k) => {
+      const t = keyToNoon(k);
+      let sum = 0;
+      let n = 0;
+      for (let i = 0; i < 7; i++) {
+        const v = daily.get(dateKeyCT(new Date(t.getTime() - i * 86400000)));
+        if (v != null) { sum += v; n += 1; }
+      }
+      return { t, v: sum / n, key: k, n, day: daily.get(k) };
+    });
+  }
   const weeks = new Map();
   for (const k of keys) {
     const t = keyToNoon(k);
@@ -1035,6 +1301,8 @@ function renderWeightCard(data) {
   const ov = OVERLAYS.find((o) => o.id === state.overlay && o.id !== "none") || null;
   const ovDaily = ov ? overlayDaily(data, ov.id) : null;
   const ovWeekly = range.id === "1y" || range.id === "all";
+  const ovPts = ov ? overlayPoints(ovDaily, ovWeekly).filter((p) => p.t >= startT && p.t <= end) : null;
+  const ovFmtAxis = ov && ov.id === "sleep" ? (v) => `${fmtNum(v, 0)}h` : (v) => (v >= 1000 ? `${fmtNum(v / 1000, v % 1000 ? 1 : 0)}k` : fmtNum(v, 0));
 
   const chart = inRange.length >= 2
     ? timeChart({
@@ -1048,52 +1316,37 @@ function renderWeightCard(data) {
           { id: "raw", label: "Weigh-ins", cls: "s1 faint", type: "dots", r: range.id === "all" ? 2 : 3, points: inRange.map((w) => ({ t: w.at, v: w.lb, w })) },
           { id: "trend", label: "Trend", cls: "s1", type: "area", endDot: true, points: inRange.map((w) => ({ t: w.at, v: w.trend, w })) },
           showProj ? { id: "proj", label: "Projection", cls: "s1", type: "line", dashed: true, points: projPts } : null,
+          ovPts && ovPts.length ? { id: "ov", label: ov.title, cls: `${ov.cls} overlay-line`, type: "line", axis: "right", endDot: true, points: ovPts } : null,
         ].filter(Boolean),
+        fmtRight: ov ? ovFmtAxis : undefined,
+        rightMin: 0,
         refs: goal != null ? [{ v: goal, label: `Goal ${fmtNum(goal, 0)}`, inDomain: range.id !== "all" ? Math.abs(goal - last.trend) < 30 : true }] : [],
         marks: TIRZ_START >= startT ? [{ t: TIRZ_START, label: "Tirzepatide" }] : [],
         snap: "trend",
         onScrub: (r) => {
           if (!r) return ro.reset();
           const w = r.point.w;
-          const extra = ovDaily && ovDaily.has(dateKeyCT(w.at)) ? `, ${ov.fmt(ovDaily.get(dateKeyCT(w.at)))}` : "";
+          const avg = r.readings && r.readings.ov;
+          const extra = ovDaily && ovDaily.has(dateKeyCT(w.at))
+            ? `, ${ov.fmt(ovDaily.get(dateKeyCT(w.at)))}`
+            : avg ? `, ${ov.fmt(avg.v)} ${ovWeekly ? "weekly avg" : "7-day avg"}` : "";
           ro.set(`${fmtNum(w.lb, 1)} lb`, `${fmtDateCT(w.at, true)}${withYear ? `, ${w.at.getFullYear()}` : ""}, trend ${fmtNum(w.trend, 1)}${extra}`);
         },
       })
     : el("p", { class: "empty" }, "Only one weigh-in in this range. Try a longer range.");
 
-  // Optional bar strip under the chart: same days, its own scale.
-  let strip = null;
-  if (ov && inRange.length >= 2) {
-    const pts = overlayPoints(ovDaily, ovWeekly);
-    const shown = pts.filter((p) => p.t >= startT && p.t <= t1);
-    const tg = ov.id === "calories" ? getTargets(data).calories : null;
-    const bars = shown.length ? barStrip({
-      t0: startT,
-      t1,
-      points: pts,
-      cls: ov.cls,
-      stepMs: ovWeekly ? 7 * 86400000 : 86400000,
-      target: tg,
-      fmtY: ov.id === "sleep" ? (v) => fmtNum(v, 0) : (v) => (v >= 1000 ? `${fmtNum(v / 1000, v % 1000 ? 1 : 0)}k` : fmtNum(v, 0)),
-      aria: `${ov.title} ${ovWeekly ? "weekly averages" : "by day"}, lined up with the weight chart`,
-      onScrub: (p) => {
-        if (!p) return ro.reset();
-        const tr = trendAt(sm, p.t);
-        ro.set(`${ov.fmt(p.v)}${p.week ? " a day" : ""}`,
-          `${p.week ? "Week of " : ""}${fmtDateCT(p.week ? keyToNoon(p.key) : p.t, true)}${withYear ? `, ${p.t.getFullYear()}` : ""}${tr != null ? `, weight trend ${fmtNum(tr, 1)}` : ""}`);
-      },
-    }) : null;
+  // Note under the chart about what the overlay line covers.
+  let ovNote = null;
+  if (ov) {
+    const logged = ovPts.reduce((a, p) => a + (ovWeekly ? p.n : (p.day != null ? 1 : 0)), 0);
     const firstKey = [...ovDaily.keys()].sort()[0];
-    const note = !shown.length
+    ovNote = !ovPts.length
       ? (ov.id === "calories" ? "No food logged in this range." : `No ${ov.label.toLowerCase()} data in this range.`)
-      : ov.id === "calories"
-        ? `${shown.reduce((a, p) => a + p.n, 0)} day${shown.reduce((a, p) => a + p.n, 0) === 1 ? "" : "s"} of food logged in this range.${tg != null ? " The dashed line is your target." : ""}`
-        : (firstKey && keyToNoon(firstKey) > startT ? `Apple Health data here starts ${fmtShortDate(firstKey)}.` : null);
-    strip = el("div", { class: "overlay" },
-      el("p", { class: "strip-label" }, `${ov.title}, ${ovWeekly ? "weekly average a day" : "by day"}`),
-      bars,
-      note ? el("p", { class: "strip-note" }, note) : null,
-    );
+      : ov.id === "calories" && logged < 7
+        ? `${logged} day${logged === 1 ? "" : "s"} of food logged in this range, so the line fills in as you log.`
+        : firstKey && keyToNoon(firstKey) > startT
+          ? `${ov.title} data starts ${fmtShortDate(firstKey)}.`
+          : null;
   }
   const compare = el("div", { class: "compare" },
     el("span", null, "Compare"),
@@ -1111,14 +1364,15 @@ function renderWeightCard(data) {
     seg,
     ro.node,
     chart,
-    strip,
     el("div", { class: "legend" },
       el("span", null, el("i", { class: "key dot s1 faint" }), "Weigh-ins"),
       el("span", null, el("i", { class: "key line s1" }), "Smoothed trend"),
       showProj ? el("span", null, el("i", { class: "key line s1 dashed" }), "Straight-line projection") : null,
       goal != null ? el("span", null, el("i", { class: "key line ref" }), "Goal") : null,
+      ov ? el("span", null, el("i", { class: `key line ${ov.cls}` }), `${ov.title}, ${ovWeekly ? "weekly average" : "7-day average"} (right scale)`) : null,
     ),
     compare,
+    ovNote ? el("p", { class: "strip-note" }, ovNote) : null,
     el("div", { class: "stats" },
       metric(`Change, ${range.label}`, `${signed(change)} lb`, "trend to trend"),
       metric("Pace", rp ? `${signed(rp.weekly)} lb/wk` : "—", "last 4 weeks"),
@@ -1586,8 +1840,8 @@ function boot() {
 /* Redraw charts when the width really differs from the one they were drawn at. */
 let resizeTimer = null;
 window.addEventListener("resize", () => {
-  // The Log tab has no charts; redrawing it would wipe what you've typed.
-  if (state.tab === "log") return;
+  // The Log tab has no charts; redrawing it, or an open form, would wipe what you've typed.
+  if (state.tab === "log" || state.checkinOpen || state.editTargets) return;
   if (Math.abs(window.innerWidth - lastWidth) < 24) return;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
@@ -1596,11 +1850,17 @@ window.addEventListener("resize", () => {
   }, 150);
 });
 
+window.addEventListener("keydown", (e) => {
+  if (state.tab !== "today" || !state.data || e.target.closest("input, textarea, select, .chart-wrap")) return;
+  if (e.key === "ArrowLeft") goToDay(state.data, (state.dayOffset || 0) - 1);
+  else if (e.key === "ArrowRight") goToDay(state.data, (state.dayOffset || 0) + 1);
+});
+
 window.addEventListener("hashchange", boot);
 boot();
 // Background refresh every minute, but not while you're filling in a form on the Log tab.
 setInterval(() => {
   if (!hasCredential() || state.loading || state.formBusy) return;
-  if (state.tab === "log") return;
+  if (state.tab === "log" || state.checkinOpen || state.editTargets) return;
   load(true, true);
 }, 60000);

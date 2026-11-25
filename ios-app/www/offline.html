@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Log</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f2f2f7; --ink: #10131a; --ink-2: #5d6472; --accent: #1b64be; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #000; --ink: #f2f3f5; --ink-2: #9ba1ac; --accent: #2370cd; } }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 17px/1.45 -apple-system, system-ui, sans-serif; }
+    main { min-height: 100%; display: grid; place-content: center; gap: 12px; padding: 24px; text-align: center; }
+    h1 { margin: 0; font-size: 28px; }
+    p { margin: 0; color: var(--ink-2); max-width: 30ch; }
+    button { margin-top: 8px; border: 0; border-radius: 14px; padding: 14px 28px; font: inherit; font-weight: 600; color: #fff; background: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Can’t reach Log</h1>
+    <p>Log needs an internet connection to load your data. Check Wi-Fi or cellular, then try again.</p>
+    <button type="button" onclick="location.href='https://pranaybop.github.io/health-log/'">Try again</button>
+  </main>
+</body>
+</html>

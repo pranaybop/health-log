@@ -91,10 +91,12 @@ function setFormMessage(ok, text) {
 }
 
 async function handleWrite(action, payload, success) {
+  let ok = false;
   try {
     state.formBusy = true;
     render();
     await writeLog(action, payload);
+    ok = true;
     setFormMessage(true, success);
     await load(true);
   } catch (err) {
@@ -104,11 +106,11 @@ async function handleWrite(action, payload, success) {
     state.formBusy = false;
     render();
   }
+  return ok;
 }
 
 function todayCheckin(data) {
-  const key = todayKey();
-  return (data.checkins || []).find((c) => c.day === key) || null;
+  return checkinOn(data, todayKey());
 }
 
 function renderToast() {
@@ -131,8 +133,15 @@ function fold(id, title, hint, ...kids) {
   return d;
 }
 
-function renderThreeTap(data) {
-  const cur = todayCheckin(data) || {};
+/*
+  One check-in, always the full one: the three taps plus mood, food noise, energy,
+  sleep and activity. Used inline on Today (for whichever day is showing) and on Log.
+*/
+const CHECKIN_INT_FIELDS = ["mood", "food_noise", "energy", "sleep_quality", "exercise_minutes", "steps", "resting_hr", "active_calories"];
+
+function renderCheckinForm(data, key, opts) {
+  const o = opts || {};
+  const cur = checkinOn(data, key) || {};
   const ate = chips("ate_vs_usual", [
     { value: "less", label: "Ate less" },
     { value: "usual", label: "Usual" },
@@ -148,83 +157,79 @@ function renderThreeTap(data) {
     { value: "fading", label: "Fading" },
     { value: "not_feeling_it", label: "Not feeling it" },
   ], cur.dose_feel);
-  return card("Today’s check-in",
-    el("p", { class: "caption first" }, "Three taps. A deep check-in later keeps these answers."),
-    el("div", { class: "log-form" },
-      el("div", { class: "field" }, "Ate vs usual", ate),
-      el("div", { class: "field" }, "Moved vs usual", moved),
-      el("div", { class: "field" }, "Dose feel", feel),
-      el("div", { class: "form-actions" },
-        el("button", {
-          type: "button",
-          class: "primary",
-          disabled: state.formBusy,
-          onClick: () => {
-            const payload = {};
-            if (chipValue(ate)) payload.ate_vs_usual = chipValue(ate);
-            if (chipValue(moved)) payload.moved_vs_usual = chipValue(moved);
-            if (chipValue(feel)) payload.dose_feel = chipValue(feel);
-            if (!Object.keys(payload).length) {
-              setFormMessage(false, "Pick at least one of the three.");
-              render();
-              return;
-            }
-            handleWrite("checkin_upsert", payload, "Saved today’s 3-tap check-in.");
-          },
-        }, "Save check-in"),
-      ),
+  const numField = (label, name, attrs) => field(label, input({ type: "number", name, value: cur[name] ?? "", ...attrs }));
+  const health = el("details", { class: "sub-fold" },
+    el("summary", null, "Health numbers (optional)"),
+    el("div", { class: "grid two tight" },
+      numField("Steps", "steps", { min: "0", step: "1", inputmode: "numeric" }),
+      numField("Resting HR", "resting_hr", { min: "20", max: "220", step: "1", inputmode: "numeric" }),
+      numField("Active calories", "active_calories", { min: "0", step: "1", inputmode: "numeric" }),
+    ),
+  );
+  const form = el("div", { class: "log-form checkin-form" },
+    el("div", { class: "field" }, "Ate vs usual", ate),
+    el("div", { class: "field" }, "Moved vs usual", moved),
+    el("div", { class: "field" }, "Dose feel", feel),
+    rangeField("Mood", "mood", 1, 10, cur.mood),
+    rangeField("Food noise", "food_noise", 1, 10, cur.food_noise),
+    rangeField("Energy", "energy", 1, 10, cur.energy),
+    rangeField("Sleep quality", "sleep_quality", 1, 10, cur.sleep_quality),
+    el("div", { class: "grid two tight" },
+      numField("Sleep hours", "sleep_hours", { min: "0", max: "24", step: "0.1", inputmode: "decimal" }),
+      numField("Exercise minutes", "exercise_minutes", { min: "0", max: "1440", step: "1", inputmode: "numeric" }),
+    ),
+    health,
+    field("Notes", el("textarea", { name: "notes" }, cur.notes || "")),
+  );
+  const valOf = (name) => form.querySelector(`[name="${name}"]`);
+  const maybe = (name, integer) => {
+    const node = valOf(name);
+    if (!node) return undefined;
+    if (node.type === "range" && node.dataset.unset === "1") return undefined;
+    const v = (node.value || "").trim();
+    if (v === "") return undefined;
+    return integer ? parseInt(v, 10) : Number(v);
+  };
+  const isToday = key === todayKey();
+  const save = el("button", {
+    type: "button",
+    class: "primary",
+    disabled: state.formBusy,
+    onClick: async () => {
+      const payload = { day: key };
+      if (chipValue(ate)) payload.ate_vs_usual = chipValue(ate);
+      if (chipValue(moved)) payload.moved_vs_usual = chipValue(moved);
+      if (chipValue(feel)) payload.dose_feel = chipValue(feel);
+      for (const k of CHECKIN_INT_FIELDS) {
+        const v = maybe(k, true);
+        if (v != null && !Number.isNaN(v)) payload[k] = v;
+      }
+      const sh = maybe("sleep_hours", false);
+      if (sh != null && !Number.isNaN(sh)) payload.sleep_hours = sh;
+      const n = valOf("notes").value.trim();
+      if (n) payload.notes = n;
+      if (Object.keys(payload).length === 1) {
+        setFormMessage(false, "Answer at least one question first.");
+        render();
+        return;
+      }
+      const ok = await handleWrite("checkin_upsert", payload, isToday ? "Saved today’s check-in." : `Saved the check-in for ${fmtShortDate(key)}.`);
+      if (ok && o.onSaved) o.onSaved();
+    },
+  }, "Save check-in");
+  return el("div", { class: "checkin" },
+    form,
+    el("div", { class: "form-actions" },
+      save,
+      o.onCancel ? el("button", { type: "button", onClick: o.onCancel }, "Cancel") : null,
     ),
   );
 }
 
-function renderDeepCheckin(data) {
-  const cur = todayCheckin(data) || {};
-  const mood = rangeField("Mood", "mood", 1, 10, cur.mood);
-  const noise = rangeField("Food noise", "food_noise", 1, 10, cur.food_noise);
-  const energy = rangeField("Energy", "energy", 1, 10, cur.energy);
-  const sleepQ = rangeField("Sleep quality", "sleep_quality", 1, 10, cur.sleep_quality);
-  const sleepH = field("Sleep hours", input({ type: "number", name: "sleep_hours", min: "0", max: "24", step: "0.1", value: cur.sleep_hours ?? "", inputmode: "decimal" }));
-  const ex = field("Exercise minutes", input({ type: "number", name: "exercise_minutes", min: "0", max: "1440", step: "1", value: cur.exercise_minutes ?? "", inputmode: "numeric" }));
-  const steps = field("Steps", input({ type: "number", name: "steps", min: "0", step: "1", value: cur.steps ?? "", inputmode: "numeric" }));
-  const rhr = field("Resting HR", input({ type: "number", name: "resting_hr", min: "20", max: "220", step: "1", value: cur.resting_hr ?? "", inputmode: "numeric" }));
-  const kcal = field("Active calories", input({ type: "number", name: "active_calories", min: "0", step: "1", value: cur.active_calories ?? "", inputmode: "numeric" }));
-  const notes = field("Notes", el("textarea", { name: "notes" }, cur.notes || ""));
-  const form = el("div", { class: "log-form" }, mood, noise, energy, sleepQ, sleepH, ex, steps, rhr, kcal, notes);
-  const valOf = (sel) => form.querySelector(`[name="${sel}"]`);
-  const maybe = (name, integer) => {
-    const node = valOf(name);
-    if (!node) return;
-    if (node.type === "range" && node.dataset.unset === "1") return;
-    const v = (node.value || "").trim();
-    if (v === "") return;
-    return integer ? parseInt(v, 10) : Number(v);
-  };
-  return fold("deep", "Deep check-in", "Mood, food noise, energy, sleep, activity",
-    form,
-    el("div", { class: "form-actions" },
-      el("button", {
-        type: "button",
-        class: "primary",
-        disabled: state.formBusy,
-        onClick: () => {
-          const payload = {};
-          for (const k of ["mood", "food_noise", "energy", "sleep_quality", "exercise_minutes", "steps", "resting_hr", "active_calories"]) {
-            const v = maybe(k, true);
-            if (v != null && !Number.isNaN(v)) payload[k] = v;
-          }
-          const sh = maybe("sleep_hours", false);
-          if (sh != null && !Number.isNaN(sh)) payload.sleep_hours = sh;
-          const n = valOf("notes").value.trim();
-          if (n) payload.notes = n;
-          if (!Object.keys(payload).length) {
-            setFormMessage(false, "Fill in at least one deep-check-in field.");
-            render();
-            return;
-          }
-          handleWrite("checkin_upsert", payload, "Saved today’s deep check-in.");
-        },
-      }, "Save deep check-in"),
-    ),
+function renderCheckinCard(data) {
+  return card("Today’s check-in",
+    el("p", { class: "caption first" }, "How the day went. Everything is optional, and saving again updates today’s answers."),
+    renderCheckinForm(data, todayKey()),
   );
 }
 
@@ -460,10 +465,9 @@ function renderReconCalc() {
 function renderLogTab(data) {
   return el("div", { class: "stack" },
     renderToast(),
-    renderThreeTap(data),
+    renderCheckinCard(data),
     el("div", { class: "grid two" }, renderWeighIn(), renderEarnIt(data)),
     el("h2", { class: "section-title" }, "More to log"),
-    renderDeepCheckin(data),
     renderDoseForm(data),
     renderSideEffectForm(),
     renderMeasurementForm(),

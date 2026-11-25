@@ -16,6 +16,10 @@ Calorie and protein targets on Today come from active `log.goals` rows (`kind` `
 
 The weight chart's Compare control draws calories (`daily_totals`), steps or sleep (`daily_health`, last 365 days) as a bar strip under the chart on the same days, with its own scale. 1Y and All use weekly averages. The choice is kept on the device (`log.overlay`).
 
+Today shows one day at a time: swipe left or right on the cards (or use the week strip, the month picker, or the arrow keys) to move between days. Past days show that day's weight or trend, food, check-in, medication level, Apple Health numbers and meals. The check-in is one full form (three taps plus mood, food noise, energy, sleep and activity) that opens in place on Today for whichever day is showing, and also sits on the Log tab. The "No check-in yet" prompt appears from 6 PM Central.
+
+`ios-app/` is an optional iPhone app shell (Capacitor) that loads this site; see `ios-app/README.md`. It isn't part of the web build.
+
 To test locally, serve the folder on port 4173 (for example `npx serve -l 4173`) so CORS allows it.
 
 ## Endpoints

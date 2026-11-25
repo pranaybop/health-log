@@ -330,7 +330,9 @@ button.link {
 }
 .callout strong { display: block; font-size: 16px; }
 .callout span { display: block; font-size: 14px; color: var(--ink-2); }
-.callout.done { display: block; background: var(--good-soft); }
+.callout.done { background: var(--good-soft); }
+.callout.done button.link { color: var(--good-ink); }
+.callout.quiet { background: var(--surface); }
 .callout.done strong { color: var(--good-ink); }
 .callout button { flex: none; }
 
@@ -465,8 +467,7 @@ button.link {
 .chart .col.s2 { fill: var(--s2); }
 .chart .col.s4 { fill: var(--s4); }
 .chart .col.s3 { fill: var(--s3); }
-.strip-label { margin: 10px 0 2px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
-.strip-note { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); }
+.strip-note { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
 .compare { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 .compare > span { font-size: 13px; color: var(--ink-2); white-space: nowrap; }
 .compare .seg { flex: 1; margin: 0; }
@@ -851,3 +852,41 @@ table.data td .sub { display: block; color: var(--ink-2); font-size: 13px; }
 }
 .sitemap .ribs { fill: none; stroke: var(--hairline); stroke-width: 1.5; stroke-linecap: round; }
 .tiles + .props { margin-top: 12px; }
+.chart .tick.right { text-anchor: start; }
+.chart .axis-tick { stroke: var(--hairline); stroke-width: 1; }
+.chart .overlay-line.stroke { stroke-width: 2; opacity: .95; }
+
+/* Week strip on Today: which day is showing, and which days have something logged. */
+.weekstrip { background: var(--surface); border-radius: 22px; padding: 12px 10px 10px; }
+.weekstrip-head { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px; min-height: 32px; }
+.month-pick { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 650; color: var(--ink); }
+.month-pick .chev { font-size: 14px; color: var(--ink-2); transform: translateY(-3px); }
+.day-picker { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; font-size: 16px; }
+.pill { border: 0; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 14px; font-weight: 600; background: var(--accent-soft); color: var(--link); min-height: 32px; }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.week .day { display: grid; justify-items: center; gap: 2px; padding: 6px 0 5px; border: 0; border-radius: 14px; background: none; color: var(--ink); font: inherit; min-height: 58px; }
+.week .day .dow { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.week .day .dnum { font-family: var(--font-num); font-size: 18px; font-weight: 650; line-height: 1.2; }
+.week .day .dot { width: 5px; height: 5px; border-radius: 50%; background: transparent; }
+.week .day.has .dot { background: var(--ink-2); }
+.week .day.is-today .dnum { color: var(--link); }
+.week .day.on { background: var(--ink); }
+.week .day.on .dow, .week .day.on .dnum { color: var(--surface); }
+.week .day.on.has .dot { background: var(--surface); }
+.week .day:disabled { opacity: .3; }
+.week .day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hero-num.muted { color: var(--ink-2); }
+
+/* Sliding between days: a short nudge in the direction you swiped. */
+@keyframes day-in-next { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes day-in-prev { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+.day-body.slide-next { animation: day-in-next .2s ease-out; }
+.day-body.slide-prev { animation: day-in-prev .2s ease-out; }
+@media (prefers-reduced-motion: reduce) { .day-body.slide-next, .day-body.slide-prev { animation: none; } }
+
+/* Optional group inside the check-in. */
+.sub-fold { border-top: 1px solid var(--hairline); padding-top: 10px; }
+.sub-fold > summary { cursor: pointer; font-size: 15px; font-weight: 600; color: var(--link); list-style: none; padding: 6px 0; }
+.sub-fold > summary::-webkit-details-marker { display: none; }
+.sub-fold[open] > summary { margin-bottom: 8px; }
+.checkin .form-actions { margin-top: 16px; }
