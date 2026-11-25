@@ -165,8 +165,14 @@ let goalSetLive = false;
   await page.tap("text=Edit targets");
   await page.fill("[name=t_cal]", "2200");
   await page.fill("[name=t_pro]", "150");
+  const beforeGoals = dashStarted;
   await page.tap("text=Save targets");
   await page.waitForSelector(".target-msg.ok >> text=saved to your log");
+  const goalDeadline = Date.now() + 15000;
+  while (dashFinished < beforeGoals + 1 || dashStarted !== dashFinished) {
+    if (Date.now() > goalDeadline) throw new Error("dashboard reload did not finish after saving targets");
+    await page.waitForTimeout(20);
+  }
   const status2 = await page.$$eval(".gauge-status", (n) => n.map((x) => x.textContent));
   const gw = writes.filter((w) => w.action === "goal_set").slice(-2);
   check("targets save to the log via goal_set", status2[0].includes("585 left") && status2[1].includes("88 g to go")
