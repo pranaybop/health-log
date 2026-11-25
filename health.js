@@ -12,10 +12,20 @@
 */
 
 const HEALTH_LAST_KEY = "log.healthSync";
-const HEALTH_READ = [
+// Everything this plugin version can read on iPhone (dietaryProtein is Android-only, and
+// totalCalories is the same HealthKit type as calories). Asking for all of them at once means
+// one permission sheet; types the app doesn't store yet are simply not sent anywhere.
+const HEALTH_CORE = [
   "steps", "distance", "calories", "exerciseTime", "appleStandHour",
   "restingHeartRate", "heartRateVariability", "vo2Max", "sleep",
   "weight", "bodyFat", "workouts",
+];
+const HEALTH_READ = [
+  ...HEALTH_CORE,
+  "heartRate", "respiratoryRate", "oxygenSaturation", "bloodPressure", "bloodGlucose",
+  "bodyTemperature", "basalBodyTemperature", "appleSleepingWristTemperature", "height",
+  "flightsClimbed", "distanceCycling", "basalCalories", "mindfulness", "dietaryWater",
+  "dietaryEnergyConsumed", "stateOfMind",
 ];
 const KG_TO_LB = 2.2046226218;
 const M_TO_MI = 1 / 1609.344;
@@ -85,8 +95,24 @@ async function collectHealth(H, days) {
   await agg("exerciseTime", "sum", "exercise_min", Math.round);
   await agg("appleStandHour", "sum", "stand_hours", Math.round);
   await agg("restingHeartRate", "average", "resting_hr", Math.round);
-  await agg("heartRateVariability", "average", "hrv_ms", Math.round);
   await agg("vo2Max", "max", "vo2max", (v) => Math.round(v * 10) / 10);
+
+  // HRV can't be aggregated by the plugin (it's a spot measurement), so average the samples per day.
+  try {
+    const r = await H.readSamples({ dataType: "heartRateVariability", startDate: range.startDate, endDate: range.endDate, limit: 5000, ascending: true });
+    const sums = new Map();
+    for (const s of r.samples || []) {
+      const v = Number(s.value);
+      if (!Number.isFinite(v)) continue;
+      const key = dateKeyCT(new Date(s.startDate));
+      if (key < startKey || key > today) continue;
+      const a = sums.get(key) || { sum: 0, n: 0 };
+      a.sum += v;
+      a.n += 1;
+      sums.set(key, a);
+    }
+    for (const [key, a] of sums) dayRow(key).hrv_ms = Math.round(a.sum / a.n);
+  } catch (_) { /* no HRV access */ }
 
   // Sleep: add up asleep segments and credit them to the morning you woke up.
   try {
@@ -161,7 +187,12 @@ async function syncAppleHealth(opts) {
   try {
     const avail = await H.isAvailable();
     if (!avail || !avail.available) return { ok: false, reason: "Apple Health isn't available on this device." };
-    await H.requestAuthorization({ read: HEALTH_READ });
+    // One sheet for every type; if this iOS version doesn't know one of them, ask for the core set.
+    try {
+      await H.requestAuthorization({ read: HEALTH_READ });
+    } catch (_) {
+      await H.requestAuthorization({ read: HEALTH_CORE });
+    }
     const data = await collectHealth(H, o.days || 14);
     const totals = { days: 0, weights: 0, body: 0, workouts: 0 };
     const send = async (payload) => {
