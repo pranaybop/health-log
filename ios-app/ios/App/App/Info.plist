@@ -64,6 +64,10 @@
 	<string>Log reads your steps, sleep, resting heart rate, HRV, weigh-ins, body fat and workouts from Apple Health to show them on your dashboard.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Log doesn't write to Apple Health. iOS asks apps that use Health to explain this anyway.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Log uses the camera so you can add a private progress photo after a weigh-in.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Log uses your photo library so you can choose a private progress photo after a weigh-in.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

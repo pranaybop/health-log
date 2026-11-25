@@ -235,6 +235,21 @@ public struct Goal: Codable, Hashable, Sendable, Identifiable {
     public var status: String?
 }
 
+/// A private progress photo linked to a weigh-in. `url` is a short-lived signed URL
+/// from log-dashboard; the object itself stays in a private bucket.
+public struct ProgressPhoto: Codable, Hashable, Sendable, Identifiable {
+    @FlexText public var id: String?
+    public var takenAt: String?
+    public var day: String?
+    @Flex public var weightLb: Double?
+    @FlexText public var weightId: String?
+    public var notes: String?
+    public var url: String?
+    public var takenDate: Date? { LogTime.parse(takenAt) }
+    /// Stable identity for lists. The server id is a uuid; fall back so a row still renders.
+    public var stableID: String { id ?? "\(day ?? "")|\(takenAt ?? "")|\(weightLb ?? 0)" }
+}
+
 public struct Dashboard: Codable, Sendable {
     public var asOf: String?
     public var meals: [Meal]
@@ -257,12 +272,13 @@ public struct Dashboard: Codable, Sendable {
     public var measurements: [Measurement]
     public var profile: Profile?
     public var goals: [Goal]
+    public var progressPhotos: [ProgressPhoto]
 
     enum CodingKeys: String, CodingKey {
         case asOf, meals, weights, doses, dailyTotals, weeklySummary, dailyHealth, healthMetrics, workouts
         case workoutCount, runWeeks, healthSpan, checkins, sideEffects, foodThoughts
         case protocols = "protocol"
-        case dosePlan, vials, measurements, profile, goals
+        case dosePlan, vials, measurements, profile, goals, progressPhotos
     }
 
     public init(from decoder: Decoder) throws {
@@ -289,6 +305,7 @@ public struct Dashboard: Codable, Sendable {
         measurements = list(.measurements)
         profile = try? c.decodeIfPresent(Profile.self, forKey: .profile)
         goals = list(.goals)
+        progressPhotos = list(.progressPhotos)
     }
 
     public var asOfDate: Date? { LogTime.parse(asOf) }

@@ -39,6 +39,23 @@ public enum LogAPI {
         catch { throw LogError.decoding(String(describing: error)) }
     }
 
+    /// PUT bytes to a signed Storage URL. The URL already carries its own token.
+    public static func putSigned(_ url: URL, body: Data, contentType: String) async throws {
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        req.timeoutInterval = 60
+        req.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        req.setValue("max-age=3600", forHTTPHeaderField: "cache-control")
+        req.httpBody = body
+        let (data, response) = try await send(req)
+        guard let http = response as? HTTPURLResponse else { throw LogError.network("No response.") }
+        guard (200..<300).contains(http.statusCode) else {
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            let snippet = bodyText.count > 180 ? String(bodyText.prefix(180)) : bodyText
+            throw LogError.server(snippet.isEmpty ? "The photo upload returned \(http.statusCode)." : snippet)
+        }
+    }
+
     /// POST {action, payload} to log-write. Returns the response JSON (counts, ok, etc.).
     @discardableResult
     public static func write(_ action: String, payload: [String: Any], passcode: String) async throws -> [String: Any] {

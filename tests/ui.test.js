@@ -9,7 +9,8 @@ const OUT = SHOTS;
 const SCHEME = process.argv[2] === "dark" ? "dark" : "light";
 const fixture = makeFixture();
 
-const writes = [];
+  const writes = [];
+  const uploads = [];
 const errors = [];
 let passed = 0;
 // Dashboard GETs. A save's toast is painted when its reload starts, and Log is
@@ -39,6 +40,11 @@ let goalSetLive = false;
   await page.clock.setFixedTime(CLOCK);
   page.on("console", (m) => { if (m.type() === "error" && !/status of (401|400)/.test(m.text())) errors.push("console: " + m.text()); });
   page.on("pageerror", (e) => errors.push("pageerror: " + e.message));
+
+  await page.route("https://example.test/progress-upload", async (route) => {
+    uploads.push(route.request().postDataBuffer()?.length || 0);
+    return route.fulfill({ status: 200, headers: { "content-type": "application/json" }, body: "{}" });
+  });
 
   await page.route(API, async (route) => {
     const req = route.request();
@@ -70,7 +76,22 @@ let goalSetLive = false;
       for (const g of fixture.goals) if (g.kind === body.payload.kind && g.status === "active") g.status = "retired";
       fixture.goals.push({ id: "g" + fixture.goals.length, kind: body.payload.kind, target: body.payload.target, unit: body.payload.kind === "calories" ? "kcal" : "g", due_on: null, notes: null, status: "active" });
     }
-    if (body.action === "weigh_in") fixture.weights.push({ id: "new", measured_at: "2026-11-25T05:19:00+00:00", weight_lb: Number(body.payload.weight_lb), notes: body.payload.notes || null });
+    if (body.action === "weigh_in") {
+      const row = { id: "11111111-1111-4111-8111-111111111111", measured_at: "2026-11-25T05:19:00+00:00", weight_lb: Number(body.payload.weight_lb), notes: body.payload.notes || null };
+      fixture.weights.push(row);
+      return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: true, action: "weigh_in", id: row.id, weight_lb: row.weight_lb, measured_at: row.measured_at }) });
+    }
+    if (body.action === "progress_photo_sign") {
+      return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: true, path: "2026/11/11111111-1111-4111-8111-111111111111.jpg", signed_url: "https://example.test/progress-upload", token: "t" }) });
+    }
+    if (body.action === "progress_photo_save") {
+      fixture.progress_photos.unshift({ id: "p-new", taken_at: body.payload.taken_at, day: "2026-11-24", weight_lb: Number(body.payload.weight_lb), weight_id: body.payload.weight_id || null, notes: null, url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" });
+      return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: true, id: "p-new" }) });
+    }
+    if (body.action === "progress_photo_delete") {
+      fixture.progress_photos = fixture.progress_photos.filter((p) => p.id !== body.payload.id);
+      return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: true }) });
+    }
     return route.fulfill({ status: 200, headers: { ...cors, "content-type": "application/json" }, body: JSON.stringify({ ok: true }) });
   });
 
@@ -339,6 +360,21 @@ let goalSetLive = false;
   const bc = await page.locator("section.card:has(h2:text-is('Body composition'))").innerText();
   check("body composition tiles", /BMI\s*34\.2/.test(bc) && /Body fat\s*35\.2%/.test(bc) && /Loss that was lean/.test(bc), bc.replace(/\n/g, " | "));
   await page.locator("section.card:has(h2:text-is('Body composition'))").screenshot({ path: path.join(OUT, `${SCHEME}-37-body.png`) });
+  const ph = page.locator("section.card:has(h2:text-is('Progress photos'))");
+  await ph.evaluate((n) => n.scrollIntoView({ block: "center" }));
+  const ptext = await ph.innerText();
+  check("progress photos show date and weight", /Nov 18/.test(ptext) && /241\.4 lb/.test(ptext) && /Nov 2/.test(ptext) && /247\.2 lb/.test(ptext), ptext.replace(/\n/g, " | "));
+  await ph.screenshot({ path: path.join(OUT, `${SCHEME}-54-progress-photos.png`) });
+  await ph.locator(".photo-tile").first().locator(".photo-delete").tap();
+  check("deleting a photo asks first", /Delete\?/.test(await ph.innerText()));
+  const beforeDelete = dashStarted;
+  await ph.locator(".photo-delete", { hasText: "Delete?" }).tap();
+  const deleteDeadline = Date.now() + 15000;
+  while (dashFinished < beforeDelete + 1 || dashStarted !== dashFinished) {
+    if (Date.now() > deleteDeadline) throw new Error("dashboard reload did not finish after deleting a photo");
+    await page.waitForTimeout(20);
+  }
+  check("deleting a photo removes it", writes.some((w) => w.action === "progress_photo_delete" && w.payload.id === "p-nov18") && !/241\.4 lb/.test(await ph.innerText()) && /247\.2 lb/.test(await ph.innerText()), await ph.innerText());
 
   await go("Food");
   // Maintenance calories: from food logs + weight trend, and the watch's figure.
@@ -392,6 +428,31 @@ let goalSetLive = false;
   await page.fill("[name=weight_lb]", "256.4");
   await save("text=Save weigh-in", ".toast.ok >> text=Logged 256.4 lb.");
   check("weigh-in writes", writes[writes.length - 1].action === "weigh_in" && writes[writes.length - 1].payload.weight_lb === "256.4");
+  check("weigh-in offers an optional photo", await page.isVisible(".photo-offer >> text=Add a progress photo") && await page.isVisible(".photo-offer >> text=Not now"));
+  await page.locator(".photo-offer").screenshot({ path: path.join(OUT, `${SCHEME}-55-photo-offer.png`) });
+  const fs = require("fs");
+  const tiny = path.join(OUT, "tiny.png");
+  fs.writeFileSync(tiny, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+  const beforePhoto = dashStarted;
+  await page.setInputFiles(".photo-offer input.photo-library", tiny);
+  await page.waitForSelector(".toast.ok >> text=Photo saved.");
+  const photoDeadline = Date.now() + 15000;
+  while (dashFinished < beforePhoto + 1 || dashStarted !== dashFinished) {
+    if (Date.now() > photoDeadline) throw new Error("dashboard reload did not finish after saving a photo");
+    await page.waitForTimeout(20);
+  }
+  const signed = writes.filter((w) => w.action === "progress_photo_sign").pop();
+  const savedPhoto = writes.filter((w) => w.action === "progress_photo_save").pop();
+  check("photo signs a private upload then saves it",
+    signed && savedPhoto
+      && savedPhoto.payload.path === "2026/11/11111111-1111-4111-8111-111111111111.jpg"
+      && Number(signed.payload.weight_lb) === 256.4
+      && savedPhoto.payload.weight_id === "11111111-1111-4111-8111-111111111111"
+      && Number(savedPhoto.payload.weight_lb) === 256.4
+      && savedPhoto.payload.byte_size > 50
+      && uploads[0] > 50,
+    JSON.stringify({ sign: signed && signed.payload, save: savedPhoto && savedPhoto.payload, bytes: uploads[0] }));
+  check("photo offer goes away after a save", !(await page.isVisible(".photo-offer")));
   await save("text=Yes, earned it", ".toast.ok >> text=Earned it.");
   check("earn it writes", writes[writes.length - 1].action === "earn_it" && writes[writes.length - 1].payload.earned === true);
 

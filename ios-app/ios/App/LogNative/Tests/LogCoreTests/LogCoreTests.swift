@@ -23,6 +23,19 @@ final class LogCoreTests: XCTestCase {
         XCTAssertEqual(d.doses.last?.doseMg, 3)
     }
 
+    func testProgressPhotoDecodes() throws {
+        let json = """
+        {"as_of":"2026-11-24T23:20:00-06:00","progress_photos":[{"id":"p1","taken_at":"2026-11-18T14:00:00Z","day":"2026-11-18","weight_lb":"241.4","weight_id":"11111111-1111-4111-8111-111111111111","url":"https://example.test/p.jpg"}]}
+        """.data(using: .utf8)!
+        let d = try Dashboard.decode(json)
+        XCTAssertEqual(d.progressPhotos.count, 1)
+        XCTAssertEqual(d.progressPhotos[0].day, "2026-11-18")
+        XCTAssertEqual(d.progressPhotos[0].weightLb ?? 0, 241.4, accuracy: 0.001)
+        XCTAssertEqual(d.progressPhotos[0].weightId, "11111111-1111-4111-8111-111111111111")
+        XCTAssertEqual(d.progressPhotos[0].url, "https://example.test/p.jpg")
+        XCTAssertEqual(d.meals.count, 0)
+    }
+
     func testTimeKeys() {
         XCTAssertEqual(LogTime.dayKey(LogTime.parse("2026-11-25T05:20:00Z")!), "2026-11-24")
         XCTAssertEqual(LogTime.monday("2026-11-24"), "2026-11-23")

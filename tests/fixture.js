@@ -303,6 +303,10 @@ function makeFixture() {
     food_thoughts,
     run_weeks,
     health_metrics: hm,
+    progress_photos: [
+      { id: "p-nov18", taken_at: "2026-11-18T14:00:00Z", day: "2026-11-18", weight_lb: 241.4, weight_id: null, notes: null, url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" },
+      { id: "p-nov2", taken_at: "2026-11-02T14:00:00Z", day: "2026-11-02", weight_lb: 247.2, weight_id: null, notes: null, url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" },
+    ],
   };
 }
 

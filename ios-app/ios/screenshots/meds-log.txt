@@ -12,6 +12,7 @@ meds-vials meds light -scrollTo vials
 meds-history meds light -scrollTo history
 log-dark log dark
 log-weigh log light -scrollTo weigh
+log-photo log light -scrollTo weigh -samplePhoto
 log-dose log light -scrollTo dose
 log-dose-dark log dark -scrollTo dose
 log-side log light -scrollTo side

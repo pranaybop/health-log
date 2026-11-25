@@ -95,9 +95,17 @@ async function handleWrite(action, payload, success) {
   try {
     state.formBusy = true;
     render();
-    await writeLog(action, payload);
+    const result = await writeLog(action, payload);
     ok = true;
     setFormMessage(true, success);
+    if (action === "weigh_in") {
+      state.photoOffer = {
+        weightLb: result.weight_lb != null ? result.weight_lb : payload.weight_lb,
+        weightId: result.id || null,
+        measuredAt: result.measured_at || new Date().toISOString(),
+      };
+      state.photoNote = null;
+    }
     await load(true);
   } catch (err) {
     setFormMessage(false, err.message === "unauthorized" ? "Passcode was rejected. Lock and unlock again." : `Could not save: ${err.message}`);
@@ -258,7 +266,101 @@ function renderWeighIn() {
         },
       }, "Save weigh-in"),
     ),
+    renderPhotoOffer(),
   );
+}
+
+/* Optional, after a weigh-in. Camera on a phone, library everywhere. Nothing is saved until one is chosen. */
+function renderPhotoOffer() {
+  const offer = state.photoOffer;
+  if (!offer) return null;
+  const file = (capture, label, cls) => {
+    const input = el("input", {
+      type: "file",
+      accept: "image/*",
+      class: cls,
+      "aria-label": label,
+      onChange: (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (f) uploadProgressPhoto(f, offer);
+      },
+    });
+    if (capture) input.setAttribute("capture", capture);
+    return el("label", { class: "photo-file" }, label, input);
+  };
+  return el("div", { class: "photo-offer" },
+    el("p", { class: "caption" }, "Add a progress photo"),
+    el("div", { class: "photo-offer-actions" },
+      file("environment", "Camera", "photo-camera"),
+      file(null, "Library", "photo-library"),
+      el("button", { type: "button", class: "link", disabled: state.photoBusy, onClick: () => { state.photoOffer = null; state.photoNote = null; render(); } }, "Not now"),
+    ),
+    state.photoBusy ? el("p", { class: "caption" }, "Saving photo…") : null,
+    state.photoNote ? el("p", { class: "toast err", role: "status" }, state.photoNote) : null,
+  );
+}
+
+async function compressProgressPhoto(file) {
+  let bitmap;
+  try { bitmap = await createImageBitmap(file); }
+  catch (_) { throw new Error("Couldn’t read that photo."); }
+  try {
+    const maxEdge = 1600;
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    let quality = 0.72;
+    let blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    while (blob && blob.size > 1800000 && quality > 0.45) {
+      quality = Math.round((quality - 0.08) * 100) / 100;
+      blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    }
+    if (!blob) throw new Error("Couldn’t read that photo.");
+    if (blob.size > 2097152) throw new Error("That photo is too large.");
+    return blob;
+  } finally {
+    bitmap.close();
+  }
+}
+
+async function uploadProgressPhoto(file, offer) {
+  if (state.photoBusy) return;
+  state.photoBusy = true;
+  state.photoNote = null;
+  render();
+  try {
+    const blob = await compressProgressPhoto(file);
+    const sign = { weight_lb: offer.weightLb, taken_at: offer.measuredAt };
+    if (offer.weightId) sign.weight_id = offer.weightId;
+    const signed = await writeLog("progress_photo_sign", sign);
+    const put = await fetch(signed.signed_url, {
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg", "cache-control": "max-age=3600" },
+      body: blob,
+    });
+    if (!put.ok) throw new Error("upload_failed");
+    const save = { path: signed.path, weight_lb: offer.weightLb, taken_at: offer.measuredAt, byte_size: blob.size };
+    if (offer.weightId) save.weight_id = offer.weightId;
+    await writeLog("progress_photo_save", save);
+    state.photoOffer = null;
+    setFormMessage(true, "Photo saved.");
+    await load(true);
+  } catch (err) {
+    const msg = err && err.message === "unauthorized"
+      ? "Passcode was rejected. Lock and unlock again."
+      : `Could not save the photo: ${err && err.message ? err.message : "try again"}`;
+    state.photoNote = msg;
+  } finally {
+    state.photoBusy = false;
+    render();
+  }
 }
 
 function renderDoseForm(data) {

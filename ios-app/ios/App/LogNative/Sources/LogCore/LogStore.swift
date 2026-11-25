@@ -136,6 +136,48 @@ public final class LogStore {
 
     // MARK: Writes
 
+    /// Upload a JPEG and link it to the weigh-in, then refresh. Throws LogError.
+    public func uploadProgressPhoto(jpeg: Data, weightLb: Double, weightId: String?, takenAt: String) async throws {
+        if isDemo { return }
+        guard jpeg.count > 0, jpeg.count <= 2_097_152 else { throw LogError.server("That photo is too large.") }
+        guard let code = passcode else { lock(); throw LogError.unauthorized }
+        var signPayload: [String: Any] = ["weight_lb": weightLb, "taken_at": takenAt]
+        if let weightId, !weightId.isEmpty { signPayload["weight_id"] = weightId }
+        let signed: [String: Any]
+        do { signed = try await LogAPI.write("progress_photo_sign", payload: signPayload, passcode: code) }
+        catch LogError.unauthorized { lock(); throw LogError.unauthorized }
+        if (signed["ok"] as? Bool) == false {
+            throw LogError.server((signed["error"] as? String) ?? "sign_failed")
+        }
+        guard let urlString = signed["signed_url"] as? String, let uploadURL = URL(string: urlString),
+              let path = signed["path"] as? String, !path.isEmpty else {
+            throw LogError.server("Could not start the photo upload.")
+        }
+        try await LogAPI.putSigned(uploadURL, body: jpeg, contentType: "image/jpeg")
+        var savePayload: [String: Any] = [
+            "path": path,
+            "weight_lb": weightLb,
+            "taken_at": takenAt,
+            "byte_size": jpeg.count,
+        ]
+        if let weightId, !weightId.isEmpty { savePayload["weight_id"] = weightId }
+        let saved: [String: Any]
+        do { saved = try await LogAPI.write("progress_photo_save", payload: savePayload, passcode: code) }
+        catch LogError.unauthorized { lock(); throw LogError.unauthorized }
+        if (saved["ok"] as? Bool) == false {
+            throw LogError.server((saved["error"] as? String) ?? "save_failed")
+        }
+        await refresh()
+    }
+
+    /// Delete one progress photo (the row and the private object), then refresh.
+    public func deleteProgressPhoto(id: String) async throws {
+        let result = try await write("progress_photo_delete", ["id": id])
+        if (result["ok"] as? Bool) == false {
+            throw LogError.server((result["error"] as? String) ?? "delete_failed")
+        }
+    }
+
     /// Send a log-write action, then refresh in the background. Throws LogError.
     @discardableResult
     public func write(_ action: String, _ payload: [String: Any]) async throws -> [String: Any] {

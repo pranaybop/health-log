@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { attachProgressPhotos } from "../_shared/progress_photos.ts";
 
 const TOKEN_SHA256 =
   "90914af968e4fcf68e45dae85c4a5922e4b3c2107c5b1488e9b5ef47479ad0c1";
@@ -125,6 +126,11 @@ Deno.serve(async (req: Request) => {
         status: 500,
         headers: { ...cors, "Content-Type": "application/json" },
       });
+    }
+    try {
+      await attachProgressPhotos(admin, data);
+    } catch (err) {
+      console.error("progress_photos", err);
     }
     return new Response(JSON.stringify(data), {
       status: 200,

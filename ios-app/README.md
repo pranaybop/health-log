@@ -19,6 +19,12 @@ The app is going native in stages. Stage 1 (version 1.2) wraps the screens in na
 
 Next stages move screens to SwiftUI one at a time (Trends first), then Apple Health sync to native Swift with background refresh.
 
+## Progress photos
+
+After a weigh-in, the Log tab offers an optional photo (camera or library). It’s resized to a JPEG and stored in the private `progress-photos` bucket. Trends → Weight scrolls the photos with their date and weight, and a photo can be deleted.
+
+The bucket, its RLS policies, and the `log.progress_photos` columns are in `supabase/migrations/20261125_progress_photos.sql`. That migration has to be applied by hand, then the `log-dashboard` and `log-write` Edge Functions deployed. Until both are live, the rest of the app still loads and the photo step reports that it couldn’t save.
+
 ## Making changes
 
 1. Edit the files in `www/`.

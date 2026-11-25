@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { handleProgressPhoto, isProgressPhotoAction } from "../_shared/progress_photos.ts";
 
 const TOKEN_SHA256 =
   "90914af968e4fcf68e45dae85c4a5922e4b3c2107c5b1488e9b5ef47479ad0c1";
@@ -27,6 +28,9 @@ const ACTIONS = new Set([
   "food_thought",
   "health_sync",
   "health_metrics",
+  "progress_photo_sign",
+  "progress_photo_save",
+  "progress_photo_delete",
 ]);
 
 function corsHeaders(origin: string | null): Record<string, string> {
@@ -318,6 +322,34 @@ function validate(action: string, payload: Record<string, unknown>) {
     }
     return null;
   }
+  if (action === "progress_photo_sign" || action === "progress_photo_save") {
+    const at = asString(payload.taken_at);
+    if (at && Number.isNaN(Date.parse(at))) return reject("taken_at", "invalid_timestamp");
+    if (asString(payload.weight_lb) === undefined || asString(payload.weight_lb) === "") {
+      return reject("weight_lb", "required");
+    }
+    const range = checkRange("weight_lb", 50, 600);
+    if (range) return range;
+    const id = asString(payload.weight_id);
+    if (id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return reject("weight_id", "invalid_id");
+    }
+    if (action === "progress_photo_save") {
+      const path = asString(payload.path) ?? "";
+      if (!/^[0-9]{4}\/[0-9]{2}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/.test(path)) {
+        return reject("path", "invalid_path");
+      }
+      return checkRange("byte_size", 1, 2097152, true);
+    }
+    return null;
+  }
+  if (action === "progress_photo_delete") {
+    const id = asString(payload.id) ?? "";
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return reject("id", "invalid_id");
+    }
+    return null;
+  }
   if (action === "goal_set") {
     const kind = (asString(payload.kind) ?? "").trim().toLowerCase();
     if (kind !== "calories" && kind !== "protein") return reject("kind", "invalid_enum");
@@ -387,15 +419,21 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(url, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    // Apple Health daily metrics have their own function; everything else goes through log_write.
-    const { data, error } = action === "health_metrics"
-      ? await admin.rpc("log_health_metrics", { p_payload: payload })
-      : await admin.rpc("log_write", { p_action: action, p_payload: payload });
-    if (error) {
-      console.error("log_write", error.message);
-      return json(cors, 500, { ok: false, error: "query_failed" });
+    // Apple Health daily metrics and progress photos have their own functions.
+    // Everything else goes through log_write.
+    let result: unknown;
+    if (isProgressPhotoAction(action)) {
+      result = await handleProgressPhoto(admin, action, payload, url);
+    } else {
+      const { data, error } = action === "health_metrics"
+        ? await admin.rpc("log_health_metrics", { p_payload: payload })
+        : await admin.rpc("log_write", { p_action: action, p_payload: payload });
+      if (error) {
+        console.error("log_write", error.message);
+        return json(cors, 500, { ok: false, error: "query_failed" });
+      }
+      result = data ?? { ok: false, error: "empty_result" };
     }
-    const result = data ?? { ok: false, error: "empty_result" };
     const ok = !!(result as { ok?: boolean }).ok;
     return json(cors, ok ? 200 : 400, result);
   } catch (err) {

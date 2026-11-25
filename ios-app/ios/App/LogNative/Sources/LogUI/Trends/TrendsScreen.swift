@@ -59,7 +59,7 @@ public struct TrendsScreen: View {
         case "weight":
             TrWeightSectionView(m: cache.get("weight", stamp: stamp) {
                 TrWeightSection(weight: TrWeightModel(d, now: now), stall: TrendsCalc.stallCheck(d, now: now), body: TrendsCalc.bodyComp(d))
-            })
+            }, photos: d.progressPhotos)
         case "food":
             TrFoodSectionView(m: cache.get("food", stamp: stamp) { TrFoodModel(d, now: now, targets: targets) })
         case "meds":

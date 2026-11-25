@@ -4,6 +4,7 @@ trends-summary trends light -section summary
 trends-summary-dark trends dark -section summary
 trends-summary-weight trends light -section summary -scrollTo weight
 trends-weight trends light -section weight
+trends-weight-photos trends light -section weight -scrollTo photos
 trends-weight-dark trends dark -section weight
 trends-weight-stall trends light -section weight -scrollTo stall
 trends-food trends light -section food
