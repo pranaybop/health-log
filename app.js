@@ -231,7 +231,7 @@ function lineChart(seriesList, opts) {
   const pad = { l: 44, r: 12, t: 16, b: 28 };
   const all = seriesList.flatMap((s) => s.values.filter((v) => Number.isFinite(v)));
   if (!all.length) return el("p", { class: "caption" }, "Not enough points to chart.");
-  const lo = opts.floor != null ? opts.floor : Math.min(0, ...all);
+  const lo = opts.floor != null ? opts.floor : Math.min(...all);
   const hi = opts.ceiling != null ? opts.ceiling : Math.max(...all);
   const span = hi - lo || 1;
   const n = seriesList[0].values.length;
