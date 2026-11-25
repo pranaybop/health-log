@@ -950,6 +950,69 @@ function renderApp(data) {
 }
 
 
+
+function renderGate() {
+  const err = state.error === "bad-passcode"
+    ? "That passcode was not accepted."
+    : state.error === "empty-passcode"
+      ? "Enter your passcode."
+      : null;
+  const field = el("input", {
+    type: "password",
+    id: "passcode",
+    name: "passcode",
+    autocomplete: "current-password",
+    enterkeyhint: "done",
+    inputmode: "text",
+    "aria-label": "Passcode",
+    disabled: state.loading ? "disabled" : null,
+  });
+  const onSubmit = () => {
+    if (state.loading) return;
+    submitPasscode(field.value);
+  };
+  field.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onSubmit();
+    }
+  });
+  const box = el("div", { class: "state gate" },
+    el("h1", null, "Log"),
+    el("p", null, "Enter your passcode to open the dashboard. This device will remember it until you lock."),
+    err ? el("p", { class: "err" }, err) : null,
+    el("div", { class: "gate-row" },
+      field,
+      el("button", { type: "button", class: "primary", disabled: state.loading, onClick: onSubmit }, state.loading ? "Checking…" : "Unlock"),
+    ),
+  );
+  setTimeout(() => field.focus(), 0);
+  return box;
+}
+
+function renderUnauthorized() {
+  return el("div", { class: "state" },
+    el("h1", null, "Log"),
+    el("p", null, "The access key in this link is not valid. Ask Log for a new link."),
+  );
+}
+
+function renderError() {
+  return el("div", { class: "state" },
+    el("h1", null, "Log"),
+    el("p", { class: "err" }, "The dashboard could not load the log."),
+    el("button", { class: "primary", onClick: () => load(false) }, "Try again"),
+  );
+}
+
+function renderLoading() {
+  return el("div", { class: "skel" },
+    el("div", { class: "topbar" }, el("h1", null, "Log")),
+    el("div", { class: "card" }, el("div", { class: "pulse" }), el("div", { class: "pulse" }), el("div", { class: "pulse" })),
+    el("div", { class: "card" }, el("div", { class: "pulse" }), el("div", { class: "pulse" })),
+  );
+}
+
 function fmtShortDate(isoDate) {
   if (!isoDate) return "—";
   const [y, m, d] = String(isoDate).split("-").map(Number);
