@@ -119,4 +119,72 @@ final class LogCoreTests: XCTestCase {
         let r = Analytics.rollingMean(v, days: 7)
         XCTAssertEqual(r.map(\.value), [1, 2, 5])
     }
+
+    func testReminderSettingsRoundTrip() {
+        let name = "log.reminders.tests"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        let saved = ReminderSettings(shot: true, shotHour: 9, shotMinute: 30, checkin: true, weighIn: false, shotPromptDismissed: true)
+        saved.save(defaults)
+        XCTAssertEqual(ReminderSettings.load(defaults), saved)
+        XCTAssertEqual(ReminderSettings(shotHour: 99).shotHour, 9)
+        XCTAssertEqual(ReminderSettings(shotMinute: 80).shotMinute, 0)
+        let six = ReminderSettings.clock(18, 0)
+        XCTAssertTrue(six.hasPrefix("6:00") && six.contains("PM"), six)
+        defaults.removePersistentDomain(forName: name)
+    }
+
+    func testReminderPlanKeepsMissedDose() throws {
+        let open = try Self.planDashboard(doses: "[]")
+        let evening = LogTime.parse("2026-11-24T23:20:00-06:00")!
+        XCTAssertTrue(ReminderPlanner.requests(open, settings: ReminderSettings(), now: evening).isEmpty)
+
+        let daily = ReminderSettings(checkin: true, weighIn: true)
+        let habits = ReminderPlanner.requests(open, settings: daily, now: evening)
+        XCTAssertEqual(habits.map(\.id), ["log.checkin", "log.weigh"])
+        XCTAssertEqual(habits.map(\.hour), [18, 8])
+        XCTAssertEqual(habits.map(\.route), ["checkin", "weigh"])
+        XCTAssertTrue(habits.allSatisfy { $0.day == nil })
+
+        let shot = ReminderSettings(shot: true, shotHour: 9)
+        XCTAssertEqual(ReminderPlanner.requests(open, settings: shot, now: evening).map(\.id), [
+            "log.shot.2026-11-29",
+            "log.shot.2026-12-06",
+            "log.shot.2026-11-29.due.2026-11-30",
+            "log.shot.2026-11-29.due.2026-12-01",
+            "log.shot.2026-11-29.due.2026-12-02",
+            "log.shot.2026-11-29.due.2026-12-03",
+            "log.shot.2026-11-29.due.2026-12-04",
+            "log.shot.2026-11-29.due.2026-12-05",
+        ])
+
+        let afterShotTime = LogTime.parse("2026-11-30T10:00:00-06:00")!
+        let late = ReminderPlanner.requests(open, settings: shot, now: afterShotTime)
+        XCTAssertFalse(late.contains { $0.day == "2026-11-29" || $0.day == "2026-11-30" })
+        let catchUp = try XCTUnwrap(late.first { $0.day == "2026-12-01" })
+        XCTAssertEqual(catchUp.title, "Dose overdue")
+        XCTAssertTrue(catchUp.body.contains("Sun, Nov 29"))
+        XCTAssertEqual(catchUp.route, "meds")
+        XCTAssertEqual(late.first { $0.day == "2026-12-06" }?.title, "Shot day")
+
+        let beforeShotTime = LogTime.parse("2026-11-30T08:00:00-06:00")!
+        XCTAssertTrue(ReminderPlanner.requests(open, settings: shot, now: beforeShotTime).contains { $0.day == "2026-11-30" && $0.title == "Dose overdue" })
+
+        let weeksLater = LogTime.parse("2026-12-20T08:00:00-06:00")!
+        let still = ReminderPlanner.requests(open, settings: shot, now: weeksLater)
+        XCTAssertTrue(still.contains { $0.title == "Dose overdue" && $0.day == "2026-12-20" })
+        XCTAssertFalse(still.contains { $0.id == "log.shot.2026-11-29" || $0.id == "log.shot.2026-12-06" })
+
+        let logged = try Self.planDashboard(doses: #"[{"taken_at":"2026-11-30T18:00:00Z","compound":"tirzepatide","dose_mg":3,"skipped":false}]"#)
+        let moved = ReminderPlanner.requests(logged, settings: shot, now: afterShotTime)
+        XCTAssertFalse(moved.contains { $0.body.contains("Nov 29") })
+        XCTAssertEqual(moved.first { $0.day == "2026-12-06" }?.body, "Retatrutide 2.0 mg today.")
+    }
+
+    private static func planDashboard(doses: String) throws -> Dashboard {
+        let json = """
+        {"doses":\(doses),"dose_plan":[{"planned_on":"2026-11-29","compound":"tirzepatide","dose_mg":3},{"planned_on":"2026-12-06","compound":"retatrutide","dose_mg":2,"units":20}]}
+        """
+        return try Dashboard.decode(Data(json.utf8))
+    }
 }

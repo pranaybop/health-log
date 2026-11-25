@@ -7,6 +7,7 @@ import LogCore
 struct MLDosePlanCard: View {
     let data: Dashboard
     @Environment(LogStore.self) private var store
+    @State private var reminders = ReminderModel.shared
     @State private var busy = false
     @State private var message: MLMessage?
 
@@ -50,7 +51,10 @@ struct MLDosePlanCard: View {
                     }
                     if !reta.isEmpty { MLHairline(); PropRow("Retatrutide used", "\(Fmt.num(used, 1)) of \(Fmt.num(total, 0)) mg planned") }
                 }
-                if next.plannedOn <= today { skipButton(next) }
+                if next.plannedOn <= today {
+                    skipButton(next)
+                    if reminders.offersShotPrompt { remindOffer }
+                }
             } else {
                 Text("Every planned dose is done.").font(.headline).foregroundStyle(LogColor.ink)
             }
@@ -58,6 +62,20 @@ struct MLDosePlanCard: View {
             Caption("From your titration sheet. The plan is a guide; what you actually take is what you log. 1 mg = 10 units at 10 mg/mL.")
         }
         .modifier(MLAutoClear(message: $message))
+    }
+
+    private var remindOffer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Remind you at \(ReminderSettings.clock(reminders.settings.shotHour, reminders.settings.shotMinute)), including while this dose is still open.")
+                .font(.footnote).foregroundStyle(LogColor.ink2).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button("Remind me") { Task { await reminders.enableShot() } }
+                    .buttonStyle(.borderedProminent)
+                    .tint(LogColor.accent)
+                Button("Not now") { reminders.dismissShotPrompt() }
+                    .buttonStyle(.bordered)
+            }
+        }
     }
 
     private func skipButton(_ row: DosePlanRow) -> some View {

@@ -16,7 +16,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "LogCore"),
-        .target(name: "LogUI", dependencies: ["LogCore", "LogHealth"]),
+        .target(name: "LogUI", dependencies: ["LogCore", "LogHealth"], linkerSettings: [.linkedFramework("UserNotifications")]),
         .target(name: "LogHealth", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("HealthKit")]),
         .testTarget(name: "LogCoreTests", dependencies: ["LogCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "LogHealthTests", dependencies: ["LogHealth", "LogCore"]),
