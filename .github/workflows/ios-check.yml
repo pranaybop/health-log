@@ -32,9 +32,8 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     # Applies on the mini and on macos-15, so a stuck simulator job cannot run forever.
     timeout-minutes: 50
-    concurrency:
-      group: ${{ (contains(inputs.runs_on, 'mac-mini') && 'mac-mini-ios') || format('hosted-{0}-simulator', github.run_id) }}
-      cancel-in-progress: false
+    # No concurrency group: the mini is one runner, so it already runs one job at a time,
+    # and a group would cancel a waiting build whenever another job queued behind it.
     steps:
       - uses: actions/checkout@v4
 

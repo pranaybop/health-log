@@ -5,10 +5,10 @@
 # iOS jobs use the same runner choice as the .ipa workflow (mac-mini, unless IOS_RUNNER=hosted).
 name: Native work branches
 
+# native/** pushes now run the full iPhone app workflow (ios-ipa.yml: tests, simulator check
+# and an .ipa), so this soft check only runs when started by hand.
 on:
   workflow_dispatch:
-  push:
-    branches: ["native/**"]
 
 permissions:
   contents: read
