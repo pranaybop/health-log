@@ -47,6 +47,15 @@ final class WeightProgressTests: XCTestCase {
         XCTAssertEqual(WeightProgress.run([old, before] + points(), since: LogTime.noon("2026-08-31")).first, before)
     }
 
+    /// A run younger than 4 weeks (first shot 3 weeks ago) still has a pace and goal dates.
+    func testShortRunHasPace() throws {
+        let sm = Array(points().suffix(22))
+        let s = try XCTUnwrap(WeightProgress.make(sm, startLb: 260.5, goalLb: 240, since: sm[0].at, now: sm.last!.at))
+        XCTAssertEqual(s.weekly ?? 0, -1.75, accuracy: 1e-9)
+        XCTAssertNotNil(s.goalETA)
+        XCTAssertNotNil(s.milestones.first { $0.reached == nil }?.eta)
+    }
+
     func testNoGoalNoMilestones() throws {
         let s = try XCTUnwrap(WeightProgress.make(points(), startLb: nil, goalLb: nil, now: Date()))
         XCTAssertTrue(s.milestones.isEmpty)

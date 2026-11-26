@@ -299,7 +299,7 @@ struct TrProgressCard: View {
             TrendsCalc.Tile("Lost so far", "\(TrendsCalc.num(abs(p.done), 1)) lb", p.done >= 0 ? "since \(date(p.startDate))" : "above the start"),
         ]
         if let toGo = p.toGo { t.append(TrendsCalc.Tile("To go", "\(TrendsCalc.num(toGo, 1)) lb", p.goal.map { "to \(TrendsCalc.num($0))" })) }
-        t.append(TrendsCalc.Tile("Pace", p.weekly.map { "\(TrendsCalc.signed($0, 2)) lb/wk" } ?? "—", "trend, last 4 weeks"))
+        t.append(TrendsCalc.Tile("Pace", p.weekly.map { "\(TrendsCalc.signed($0, 2)) lb/wk" } ?? "—", "last 4 weeks, same as Weight"))
         if p.goal != nil {
             t.append(TrendsCalc.Tile("Goal date", p.goalETA.map { date($0) } ?? (p.toGo == 0 ? "Reached" : "—"),
                                      p.goalETA.map { "about \(weeksText($0)) at this pace" } ?? (p.toGo == 0 ? nil : "needs a steady pace toward it")))

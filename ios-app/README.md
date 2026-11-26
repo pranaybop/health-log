@@ -34,7 +34,7 @@ Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today
 ### Trends
 - **Summary:** tiles for weight, food, maintenance, medication and recovery that open their section.
 - **Ask your data:** chat with your log in the app, answered by Bonsai 2 running on the phone, Apple Intelligence, or your own AI key (details below).
-- **Weight:** smoothed trend line over weigh-ins, ranges 1M / 3M / 1Y / All / Since GLP-1, swipe back through history with the scale refitting to what's on screen, compare-with overlays (calories, steps, sleep, resting HR, HRV, food thoughts, food noise), a straight-line projection, goal line and dose markers. **Progress** (counted from your first GLP-1 shot, so years-old Apple Health weigh-ins don't count): % of the way to goal, lost and to go, pace, predicted goal date, 5 lb milestones with the date each was reached or is expected, today's trend change, lowest trend, change over 1 week to all time. **Stall check**, **body composition** (BMI, body fat, lean mass, share of loss that was lean) and **progress photos**.
+- **Weight:** smoothed trend line over weigh-ins, ranges 1M / 3M / 1Y / All / Since GLP-1, swipe back through history with the scale refitting to what's on screen, compare-with overlays (calories, steps, sleep, resting HR, HRV, food thoughts, food noise), a straight-line projection, goal line and dose markers. **Progress** (counted from your first GLP-1 shot, so years-old Apple Health weigh-ins don't count): % of the way to goal, lost and to go, pace (the same as the Weight card's), predicted goal date, 5 lb milestones with the date each was reached or is expected, today's trend change, lowest trend, change over 1 week to all time. **Stall check**, **body composition** (BMI, body fat, lean mass, share of loss that was lean) and **progress photos**.
 - **Food:** daily calories and protein against targets, **maintenance calories** (from food logs and weight trend, and from the Apple Watch), **protein target** hit rate, **food thoughts** by day and time.
 - **Meds:** wear-off, the week after a shot, appetite by drug level, retatrutide vs tirzepatide, cycle recaps, feel report, side effects.
 - **Body:** **Readiness** score (below), off your normal history, heart, everything else from Apple Health, measurements.
@@ -65,9 +65,9 @@ Trends → Body opens with a 0–10 readiness score (`LogCore/Readiness.swift`),
 
 Trends → **Ask** answers questions about the log inside the app. Three choices:
 
-- **Local model** (default once one is downloaded): an open model run on the phone's GPU with [MLX Swift](https://github.com/ml-explore/mlx-swift-lm) (`LogLocalAI`). Free, private, works offline; it sees the last 30 days. Download it once from Hugging Face into Application Support/Models (not backed up); delete it from the same panel.
-  - **Bonsai 2 9B** (PrismML, `prism-ml/Ternary-Bonsai-2-9B-mlx-2bit`, 3.6 GB): the default on iPhones with 8 GB (iPhone 15 Pro and later). A 9B Qwen 3.5–based model with ternary weights, the strongest that fits an 8 GB phone.
-  - **Bonsai 2 4B** (`prism-ml/Ternary-Bonsai-2-4B-mlx-2bit`, 1.9 GB): faster and lighter; the default on phones with less memory.
+- **Local model** (default once one is downloaded): an open model run on the phone's GPU with [MLX Swift](https://github.com/ml-explore/mlx-swift-lm) (`LogLocalAI`). Free, private, works offline; it sees the last two weeks (a shorter snapshot answers sooner), and answers appear as they're written. The downloaded model loads when Ask opens. Download it once from Hugging Face into Application Support/Models (not backed up); delete it from the same panel.
+  - **Bonsai 2 4B** (PrismML, `prism-ml/Ternary-Bonsai-2-4B-mlx-2bit`, 1.9 GB): the default. Quick on an iPhone 15 Pro.
+  - **Bonsai 2 9B** (`prism-ml/Ternary-Bonsai-2-9B-mlx-2bit`, 3.6 GB): a 9B Qwen 3.5–based model with ternary weights, the sharpest that fits an 8 GB phone, at about half the speed.
   - **Qwen 3.5 4B** (`mlx-community/Qwen3.5-4B-4bit`, 3.1 GB).
 
   These are the models from the Locally AI app's list that MLX Swift loads as-is. Thinking is off for quick answers (PrismML's non-thinking sampler). Before loading, the app checks there's enough free memory and suggests the 4B model if not; a memory warning unloads it.

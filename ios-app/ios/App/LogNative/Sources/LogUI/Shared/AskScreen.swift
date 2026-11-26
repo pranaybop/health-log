@@ -97,8 +97,8 @@ struct AskSectionView: View {
                 }
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(turns) { t in bubble(t) }
-                    if busy {
+                    ForEach(turns.filter { !$0.text.isEmpty }) { t in bubble(t) }
+                    if busy && (turns.last?.role != .assistant || turns.last?.text.isEmpty == true) {
                         HStack(spacing: 8) { ProgressView(); Text(busyText).font(.subheadline).foregroundStyle(LogColor.ink2) }
                     }
                 }
@@ -128,13 +128,19 @@ struct AskSectionView: View {
             Caption(privacyNote)
         }
         .id("ask")
-        .onAppear { config = MealAIConfig.load() }
+        .onAppear {
+            config = MealAIConfig.load()
+            // Load the downloaded model now so the first question doesn't wait for it.
+            if mode == .local, local.isDownloaded(localChoice), local.loadedID != localChoice.id {
+                Task { await local.prepare(localChoice) }
+            }
+        }
     }
 
     var privacyNote: String {
         switch mode {
         case .local:
-            return "Answered by \(localChoice.name) running on this iPhone from your last 30 days. Nothing leaves the phone, it works offline and costs nothing. Answers can be wrong; check the numbers it quotes."
+            return "Answered by \(localChoice.name) running on this iPhone from your last two weeks. Nothing leaves the phone, it works offline and costs nothing. Answers can be wrong; check the numbers it quotes."
         case .onDevice:
             return "Answered by Apple Intelligence on this iPhone from your last two weeks. Nothing leaves the phone and it costs nothing. Answers can be wrong; check the numbers it quotes."
         case .key:
@@ -204,10 +210,21 @@ struct AskSectionView: View {
                     await LocalModel.shared.prepare(choice)
                     if case .failed(let why) = LocalModel.shared.state { throw LogError.server(why) }
                     if localChat == nil || localChat?.modelID != choice.id {
-                        localChat = LocalModel.shared.newChat(instructions: DataDigest.instructions + "\n\n" + DataDigest.make(d, size: .medium))
+                        // Two weeks, not 30 days: the model reads the whole snapshot before it
+                        // writes a word, so a shorter one answers much sooner.
+                        localChat = LocalModel.shared.newChat(instructions: DataDigest.instructions + "\n\n" + DataDigest.make(d, size: .compact))
                     }
                     guard let chat = localChat else { throw LogError.server("\(choice.name) isn’t loaded. Try again.") }
-                    answer = try await chat.ask(q)
+                    // Show the answer as it's written.
+                    turns.append(AskTurn(role: .assistant, text: ""))
+                    let i = turns.count - 1
+                    var raw = ""
+                    for try await chunk in chat.stream(q) {
+                        raw += chunk
+                        turns[i].text = LocalChat.clean(raw)
+                    }
+                    if turns[i].text.isEmpty { turns[i].text = "No answer came back. Try asking another way." }
+                    return
                 } else if m == .onDevice {
                     let r = try await OnDevice.ask(q, dashboard: d, session: localSession)
                     localSession = r.session
@@ -314,7 +331,7 @@ struct LocalModelPanel: View {
                     HStack(spacing: 6) {
                         Text(choice.name).font(.headline).foregroundStyle(LogColor.ink)
                         if choice == .recommended {
-                            Text("Best for this iPhone")
+                            Text("Recommended")
                                 .font(.caption2.weight(.semibold))
                                 .foregroundStyle(LogColor.goodInk)
                                 .padding(.horizontal, 6).padding(.vertical, 2)

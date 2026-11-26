@@ -28,11 +28,11 @@ public struct LocalModelChoice: Identifiable, Hashable, Sendable {
 
     public static let bonsai9B = LocalModelChoice(
         id: "prism-ml/Ternary-Bonsai-2-9B-mlx-2bit", name: "Bonsai 2 9B",
-        detail: "PrismML. The strongest model that fits an 8 GB iPhone; answers take a little longer.",
+        detail: "PrismML. The sharpest model that fits an 8 GB iPhone, but about half the speed of the 4B.",
         sizeGB: 3.6, needsGB: 4.3)
     public static let bonsai4B = LocalModelChoice(
         id: "prism-ml/Ternary-Bonsai-2-4B-mlx-2bit", name: "Bonsai 2 4B",
-        detail: "PrismML. Faster and lighter, a little less sharp.",
+        detail: "PrismML. Quick answers on an iPhone 15 Pro; the best balance of speed and quality.",
         sizeGB: 1.9, needsGB: 2.5)
     public static let qwen4B = LocalModelChoice(
         id: "mlx-community/Qwen3.5-4B-4bit", name: "Qwen 3.5 4B",
@@ -41,10 +41,8 @@ public struct LocalModelChoice: Identifiable, Hashable, Sendable {
 
     public static let all: [LocalModelChoice] = [bonsai9B, bonsai4B, qwen4B]
 
-    /// Bonsai 2 9B on phones with 8 GB or more (iPhone 15 Pro and later), else Bonsai 2 4B.
-    public static var recommended: LocalModelChoice {
-        ProcessInfo.processInfo.physicalMemory >= 7_500_000_000 ? bonsai9B : bonsai4B
-    }
+    /// Bonsai 2 4B: on an iPhone 15 Pro the 9B fits but answers about half as fast.
+    public static var recommended: LocalModelChoice { bonsai4B }
 
     public static func named(_ id: String?) -> LocalModelChoice? { all.first { $0.id == id } }
 
@@ -192,7 +190,7 @@ public final class LocalModel {
     public func newChat(instructions: String) -> LocalChat? {
         guard let container else { return nil }
         var p = GenerateParameters()
-        p.maxTokens = 900
+        p.maxTokens = 600
         p.temperature = 0.7
         p.topP = 0.8
         p.topK = 20
@@ -219,8 +217,13 @@ public final class LocalChat {
         return Self.clean(raw)
     }
 
+    /// The answer as it's written, chunk by chunk (raw; pass the running text through `clean`).
+    public func stream(_ question: String) -> AsyncThrowingStream<String, Error> {
+        session.streamResponse(to: question)
+    }
+
     /// Drops any <think>…</think> block the model wrote anyway.
-    nonisolated static func clean(_ text: String) -> String {
+    nonisolated public static func clean(_ text: String) -> String {
         var t = text
         while let open = t.range(of: "<think>") {
             if let close = t.range(of: "</think>", range: open.upperBound..<t.endIndex) {

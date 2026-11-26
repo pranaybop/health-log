@@ -32,7 +32,7 @@ public enum WeightProgress {
         public var toGo: Double?
         /// 0...1 of the way from start to goal.
         public var fraction: Double?
-        /// lb a week, trend over the last 4 weeks (negative = losing).
+        /// lb a week over the last 4 weeks, as the Weight card shows it (negative = losing).
         public var weekly: Double?
         public var goalETA: Date?
         public var milestones: [Milestone]
@@ -65,7 +65,11 @@ public enum WeightProgress {
         let toGo = goalLb.map { max(0, ($0 - current) * dir) }
         var fraction: Double?
         if let g = goalLb, abs(g - start) > 0.01 { fraction = min(1, max(0, done / abs(g - start))) }
-        let weekly = Analytics.trendRate(sm, days: 28)
+        // The Weight card's pace (a line through the last 4 weeks of weigh-ins, or as many
+        // as this run has), so both cards agree; else the trend's change over what there is.
+        let span = last.at.timeIntervalSince(first.at) / 86400
+        let weekly = Analytics.Trends.recentPace(sm, days: 28)?.weekly
+            ?? (span >= 7 ? Analytics.trendRate(sm, days: min(28, span)) : nil)
         let towardPerWeek = weekly.map { $0 * dir } ?? 0
 
         func eta(_ target: Double) -> Date? {
