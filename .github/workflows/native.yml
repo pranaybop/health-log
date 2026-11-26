@@ -2,6 +2,7 @@
 # tests, LogNative package tests, simulator build and screenshots), in soft mode. The summary says
 # NATIVE-CHECK: PASS or FAIL and WEB-TESTS: success or failure, but these runs never fail, so work
 # in progress sends no failure emails. No .ipa is built here; that happens on main.
+# iOS jobs use the same runner choice as the .ipa workflow (mac-mini when it is online).
 name: Native work branches
 
 on:
@@ -22,7 +23,18 @@ jobs:
     with:
       soft: true
 
+  pick-runner:
+    name: Pick runner
+    uses: ./.github/workflows/pick-runner.yml
+    with:
+      event_name: ${{ github.event_name }}
+      ref: ${{ github.ref }}
+      repository: ${{ github.repository }}
+      head_repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+
   ios:
+    needs: pick-runner
     uses: ./.github/workflows/ios-check.yml
     with:
       soft: true
+      runs_on: ${{ needs.pick-runner.outputs.runs_on }}
