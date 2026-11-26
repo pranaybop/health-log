@@ -288,6 +288,7 @@ struct TrHealthGroup: Identifiable {
 }
 
 struct TrBodyModel {
+    var readiness: [Readiness.Day]
     var off: TrendsCalc.OffTrends?
     var heart: [TrendsCalc.HeartPanel]
     var health: [TrHealthGroup]
@@ -296,6 +297,7 @@ struct TrBodyModel {
 
     init(_ d: Dashboard, now: Date) {
         self.now = now
+        readiness = Readiness.history(d, now: now)
         off = TrendsCalc.offNormalTrends(d, now: now)
         heart = TrendsCalc.heart(d, now: now)
         measurements = TrendsCalc.measurements(d)

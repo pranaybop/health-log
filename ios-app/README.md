@@ -25,6 +25,10 @@ After a weigh-in, the Log tab offers an optional photo (camera or library). It�
 
 The bucket, its RLS policies, and the `log.progress_photos` columns are in `supabase/migrations/20261125_progress_photos.sql`. That migration has to be applied by hand, then the `log-dashboard` and `log-write` Edge Functions deployed. Until both are live, the rest of the app still loads and the photo step reports that it couldn’t save.
 
+## Readiness
+
+Trends → Body opens with a 0–10 readiness score (`LogCore/Readiness.swift`), worked out on the phone from what Apple Health sync already stores: overnight HRV 35%, resting heart rate 30%, sleep 25%, and the last 3 days' training load against the 4 weeks before 10%. Each signal is compared with your own last 4 weeks (median and spread), so 5 is a normal day for you. It lists the day's calories, weight trend and days since the last shot next to the score. No extra tables or Shortcuts: it reads `log.daily_health` and `log.workouts`.
+
 ## Ask your data
 
 Trends → **Ask** answers questions about the log inside the app. Three choices:
