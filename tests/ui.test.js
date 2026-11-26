@@ -297,6 +297,8 @@ let goalSetLive = false;
   const before = await page.textContent(".thoughts + .caption");
   await page.tap(".thought-btn >> text=Strong pull");
   await page.waitForSelector(".toast.ok >> text=Logged a food thought");
+  // The caption redraws just after the toast; wait for it rather than reading it mid-redraw.
+  await page.waitForFunction((b) => document.querySelector(".thoughts + .caption")?.textContent !== b, before, { timeout: 3000 }).catch(() => {});
   const fw = writes[writes.length - 1];
   check("food thought logs with strength", fw.action === "food_thought" && fw.payload.strength === 2 && (await page.textContent(".thoughts + .caption")) !== before, `${before} -> ${await page.textContent(".thoughts + .caption")}`);
   // Quick side effect from Today.

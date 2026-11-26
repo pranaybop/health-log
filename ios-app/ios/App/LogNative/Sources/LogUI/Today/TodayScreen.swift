@@ -85,6 +85,10 @@ public struct TodayScreen: View {
     private func dayBody(_ m: TodayModel) -> some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TodayHero(m: m).id("hero")
+            if let r = Readiness.day(m.key, d: m.d, trend: m.points) {
+                TodayReadiness(day: r, week: Readiness.history(m.d, now: LogTime.noon(m.key), days: 7), isToday: m.isToday)
+                    .id("readiness")
+            }
             if m.isToday {
                 TodayPhotoPrompt(d: m.d, now: m.now).id("photo")
             }
