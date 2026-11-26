@@ -6,9 +6,6 @@ import LogCore
 /// row of chips and remembered in "log.trendsSection" like the web app's localStorage key.
 /// Each section's numbers are worked out once per payload (TrendsCache), not on every render.
 public struct TrendsScreen: View {
-    /// Flip to true when this screen covers everything the web version does.
-    public static let isReady = true
-
     @Environment(LogStore.self) var store
     @AppStorage("log.trendsSection") var savedSection: String = "summary"
     @State var picked: String? = nil

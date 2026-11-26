@@ -124,8 +124,7 @@ struct TodayBodyCard: View {
     private func caption(_ h: DailyHealth) -> String {
         if !m.isToday { return "From Apple Health." }
         if h.day == m.today { return "From Apple Health, today so far." }
-        let next = NativeHealthSync.isReady ? "Sync to bring in newer days." : "Newer days appear after the next sync from the iPhone app."
-        return "From Apple Health, \(LogTime.shortDate(key: h.day)). \(next)"
+        return "From Apple Health, \(LogTime.shortDate(key: h.day)). Sync to bring in newer days."
     }
 }
 
