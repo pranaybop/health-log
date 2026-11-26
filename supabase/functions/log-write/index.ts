@@ -133,7 +133,7 @@ function validate(action: string, payload: Record<string, unknown>) {
     ate_vs_usual: ["less", "usual", "more"],
     moved_vs_usual: ["less", "usual", "more"],
     dose_feel: ["strong", "fading", "not_feeling_it"],
-    compound: ["tirzepatide", "retatrutide"],
+    compound: ["tirzepatide", "retatrutide", "tesamorelin"],
     site: ["Abd LR", "Abd LL", "Abd UR", "Abd UL", "Love L", "Love R"],
     unit: ["in", "cm", "%", "lb", "kg", "mm"],
   };
