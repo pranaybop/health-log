@@ -69,6 +69,10 @@ public final class LocalModel {
     @ObservationIgnored private var container: ModelContainer?
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var memoryObserver: NSObjectProtocol?
+    /// A session that has already read the instructions and tools; new conversations fork it so
+    /// they don't read them again. Keyed by model and instructions.
+    @ObservationIgnored private var base: (key: String, session: ChatSession)?
+    @ObservationIgnored private var warming: Task<Void, Never>?
 
     private init() {
         memoryObserver = NotificationCenter.default.addObserver(
@@ -108,6 +112,9 @@ public final class LocalModel {
     }
 
     public func unload() {
+        warming?.cancel()
+        warming = nil
+        base = nil
         container = nil
         loadedID = nil
         if state == .ready { state = .idle }
@@ -185,18 +192,61 @@ public final class LocalModel {
 
     // MARK: Chat
 
-    /// A conversation with the loaded model. Thinking is off, with the sampler PrismML and Qwen
-    /// recommend for non-thinking chat.
-    public func newChat(instructions: String) -> LocalChat? {
-        guard let container else { return nil }
+    static var parameters: GenerateParameters {
         var p = GenerateParameters()
         p.maxTokens = 600
         p.temperature = 0.7
         p.topP = 0.8
         p.topK = 20
         p.presencePenalty = 1.5
-        let session = ChatSession(container, instructions: instructions, generateParameters: p,
-                                  additionalContext: ["enable_thinking": false])
+        return p
+    }
+
+    private func key(_ instructions: String) -> String { "\(loadedID ?? "")|\(instructions.hashValue)" }
+
+    private func makeSession(_ container: ModelContainer, instructions: String, dashboard: Dashboard?) -> ChatSession {
+        var tools: [ToolSpec]?
+        var dispatch: (@Sendable (ToolCall) async throws -> String)?
+        if let d = dashboard {
+            tools = AskTools.functionSchemas
+            dispatch = { call in
+                AskTools.run(call.function.name, arguments: call.function.arguments.mapValues { $0.anyValue }, d: d)
+            }
+        }
+        return ChatSession(container, instructions: instructions, generateParameters: Self.parameters,
+                           additionalContext: ["enable_thinking": false], tools: tools, toolDispatch: dispatch)
+    }
+
+    /// Reads the instructions (and tools) once in the background, so the first question only
+    /// has to read itself. Call when Ask opens; it's a no-op if already done for these instructions.
+    public func warm(instructions: String, dashboard: Dashboard?) {
+        guard let container, base?.key != key(instructions), warming == nil else { return }
+        let session = makeSession(container, instructions: instructions, dashboard: dashboard)
+        base = (key(instructions), session)
+        warming = Task { @MainActor in
+            var quick = Self.parameters
+            quick.maxTokens = 1
+            session.generateParameters = quick
+            _ = try? await session.respond(to: "Ready?")
+            session.generateParameters = Self.parameters
+            self.warming = nil
+        }
+    }
+
+    /// A conversation with the loaded model. Thinking is off, with the sampler PrismML and Qwen
+    /// recommend for non-thinking chat. With a dashboard, the model can call AskTools.
+    public func newChat(instructions: String, dashboard: Dashboard? = nil) async -> LocalChat? {
+        guard let container else { return nil }
+        if let w = warming { await w.value }
+        if let b = base, b.key == key(instructions) {
+            // Keeps the cached instructions and tools; the warm-up turn is dropped.
+            let fork = await b.session.fork(history: [])
+            fork.generateParameters = Self.parameters
+            return LocalChat(session: fork, modelID: loadedID ?? "")
+        }
+        // Not warmed: this conversation reads the instructions, and later ones fork from it.
+        let session = makeSession(container, instructions: instructions, dashboard: dashboard)
+        base = (key(instructions), session)
         return LocalChat(session: session, modelID: loadedID ?? "")
     }
 }

@@ -11,9 +11,9 @@ import FoundationModels
 ///   Needs an Apple Intelligence iPhone on iOS 26 with Apple Intelligence turned on. Its context
 ///   is small, so it sees the last two weeks.
 /// - Local model: an open model (Bonsai 2 or Qwen 3.5) downloaded once and run on the phone
-///   with MLX. Free, private, works offline; sees 30 days.
+///   with MLX. Free, private, works offline; two weeks of overview plus tools to look up any date.
 /// - Your AI key: the key saved under Account (the one meal logging uses: OpenAI, Anthropic,
-///   Google or xAI), called straight from the phone. Sees about 90 days.
+///   Google or xAI), called straight from the phone, with the same tools.
 struct AskSectionView: View {
     var dashboard: Dashboard
 
@@ -130,22 +130,19 @@ struct AskSectionView: View {
         .id("ask")
         .onAppear {
             config = MealAIConfig.load()
-            // Load the downloaded model now so the first question doesn't wait for it.
-            if mode == .local, local.isDownloaded(localChoice), local.loadedID != localChoice.id {
-                Task { await local.prepare(localChoice) }
-            }
+            warmLocal()
         }
     }
 
     var privacyNote: String {
         switch mode {
         case .local:
-            return "Answered by \(localChoice.name) running on this iPhone from your last two weeks. Nothing leaves the phone, it works offline and costs nothing. Answers can be wrong; check the numbers it quotes."
+            return "Answered by \(localChoice.name) running on this iPhone. It starts from your last two weeks and looks up older days when a question needs them. Nothing leaves the phone, it works offline and costs nothing. Answers can be wrong; check the numbers it quotes."
         case .onDevice:
             return "Answered by Apple Intelligence on this iPhone from your last two weeks. Nothing leaves the phone and it costs nothing. Answers can be wrong; check the numbers it quotes."
         case .key:
             let who = config?.provider.name ?? "your AI company"
-            return "Your question and about 90 days of your log go from this iPhone straight to \(who) with your key, billed to your account there. Never through the log. Answers can be wrong; check the numbers it quotes."
+            return "Your question, two weeks of your log and anything it looks up go from this iPhone straight to \(who) with your key, billed to your account there. Never through the log. Answers can be wrong; check the numbers it quotes."
         }
     }
 
@@ -166,6 +163,26 @@ struct AskSectionView: View {
         }
     }
 
+    /// The prompt for models that can call AskTools: instructions, two weeks of overview, and
+    /// a line saying to use the tools for anything else. The day only changes it once a day.
+    static func toolInstructions(_ d: Dashboard) -> String {
+        DataDigest.instructions + "\n" + AskTools.hint + "\n\n" + DataDigest.make(d, size: .compact)
+    }
+
+    /// Loads the downloaded model and has it read the instructions now, so the first question
+    /// only has to read itself.
+    func warmLocal() {
+        guard mode == .local, local.isDownloaded(localChoice) else { return }
+        let choice = localChoice
+        let d = dashboard
+        Task { @MainActor in
+            await LocalModel.shared.prepare(choice)
+            if LocalModel.shared.loadedID == choice.id {
+                LocalModel.shared.warm(instructions: Self.toolInstructions(d), dashboard: d)
+            }
+        }
+    }
+
     var busyText: String {
         guard mode == .local else { return "Thinking…" }
         switch local.state {
@@ -180,6 +197,7 @@ struct AskSectionView: View {
         modeID = id
         config = MealAIConfig.load()
         reset()
+        warmLocal()
     }
 
     func reset() {
@@ -210,9 +228,9 @@ struct AskSectionView: View {
                     await LocalModel.shared.prepare(choice)
                     if case .failed(let why) = LocalModel.shared.state { throw LogError.server(why) }
                     if localChat == nil || localChat?.modelID != choice.id {
-                        // Two weeks, not 30 days: the model reads the whole snapshot before it
-                        // writes a word, so a shorter one answers much sooner.
-                        localChat = LocalModel.shared.newChat(instructions: DataDigest.instructions + "\n\n" + DataDigest.make(d, size: .compact))
+                        // Two weeks of overview plus tools to look up anything else; the
+                        // instructions were read in advance when Ask opened (see warmLocal).
+                        localChat = await LocalModel.shared.newChat(instructions: Self.toolInstructions(d), dashboard: d)
                     }
                     guard let chat = localChat else { throw LogError.server("\(choice.name) isn’t loaded. Try again.") }
                     // Show the answer as it's written.
@@ -231,8 +249,7 @@ struct AskSectionView: View {
                     answer = r.answer
                 } else {
                     guard let cfg else { throw LogError.server("Add an AI key under Account first.") }
-                    let system = DataDigest.instructions + "\n\n" + DataDigest.make(d, size: .full)
-                    answer = try await AskCloud.send(cfg, system: system, turns: history)
+                    answer = try await AskCloud.send(cfg, system: Self.toolInstructions(d), turns: history, dashboard: d)
                 }
                 turns.append(AskTurn(role: .assistant, text: answer))
             } catch let e as LogError {

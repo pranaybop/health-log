@@ -65,14 +65,14 @@ Trends → Body opens with a 0–10 readiness score (`LogCore/Readiness.swift`),
 
 Trends → **Ask** answers questions about the log inside the app. Three choices:
 
-- **Local model** (default once one is downloaded): an open model run on the phone's GPU with [MLX Swift](https://github.com/ml-explore/mlx-swift-lm) (`LogLocalAI`). Free, private, works offline; it sees the last two weeks (a shorter snapshot answers sooner), and answers appear as they're written. The downloaded model loads when Ask opens. Download it once from Hugging Face into Application Support/Models (not backed up); delete it from the same panel.
+- **Local model** (default once one is downloaded): an open model run on the phone's GPU with [MLX Swift](https://github.com/ml-explore/mlx-swift-lm) (`LogLocalAI`). Free, private, works offline. It starts from a two-week overview and calls lookup tools (`LogCore/AskTools.swift`: days, doses and side effects, meals, workouts, weekly averages, any Apple Health metric) for any other dates. Answers appear as they're written. When Ask opens, the downloaded model loads and reads the instructions once; every new conversation forks that session, so it doesn't read them again. Download it once from Hugging Face into Application Support/Models (not backed up); delete it from the same panel.
   - **Bonsai 2 4B** (PrismML, `prism-ml/Ternary-Bonsai-2-4B-mlx-2bit`, 1.9 GB): the default. Quick on an iPhone 15 Pro.
   - **Bonsai 2 9B** (`prism-ml/Ternary-Bonsai-2-9B-mlx-2bit`, 3.6 GB): a 9B Qwen 3.5–based model with ternary weights, the sharpest that fits an 8 GB phone, at about half the speed.
   - **Qwen 3.5 4B** (`mlx-community/Qwen3.5-4B-4bit`, 3.1 GB).
 
   These are the models from the Locally AI app's list that MLX Swift loads as-is. Thinking is off for quick answers (PrismML's non-thinking sampler). Before loading, the app checks there's enough free memory and suggests the 4B model if not; a memory warning unloads it.
 - **Apple AI**: Apple Intelligence's on-device model (`FoundationModels`, iOS 26, with Apple Intelligence turned on). Free and private, but its context is small, so it sees two weeks.
-- **Your key**: the key saved under Account › AI (the same one meal logging uses: OpenAI, Anthropic, Google or xAI), called straight from the phone. About 90 days go with each question. A ChatGPT, Claude or SuperGrok subscription doesn't include API access, so this is a key from the company's developer console, billed per question.
+- **Your key**: the key saved under Account › AI (the same one meal logging uses: OpenAI, Anthropic, Google or xAI), called straight from the phone. It gets the same two-week overview and the same lookup tools (each provider's own tool-calling format), so it can answer about any date. A ChatGPT, Claude or SuperGrok subscription doesn't include API access, so this is a key from the company's developer console, billed per question.
 
 The snapshot sent to the model is built by `DataDigest` in `LogCore/AskData.swift`. Nothing about Ask goes through Supabase.
 
