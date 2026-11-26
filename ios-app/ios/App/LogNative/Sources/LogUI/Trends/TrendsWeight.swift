@@ -30,7 +30,7 @@ struct TrSummaryTileView: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(tile.label).font(.caption.weight(.semibold)).foregroundStyle(LogColor.ink2)
-                Text(tile.value).font(.logNumber(21)).foregroundStyle(LogColor.ink).lineLimit(1).minimumScaleFactor(0.6)
+                Text(tile.value).font(.logNumber(26)).foregroundStyle(LogColor.ink).lineLimit(1).minimumScaleFactor(0.6)
                 Text(tile.sub).font(.caption).foregroundStyle(LogColor.ink2).multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 4)
@@ -39,8 +39,8 @@ struct TrSummaryTileView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(14)
-            .background(LogColor.surface, in: RoundedRectangle(cornerRadius: LogMetric.cardRadius - 4, style: .continuous))
+            .padding(16)
+            .background(LogColor.surface, in: RoundedRectangle(cornerRadius: LogMetric.cardRadius, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

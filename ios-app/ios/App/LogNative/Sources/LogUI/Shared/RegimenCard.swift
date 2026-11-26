@@ -8,6 +8,19 @@ struct RegimenCard: View {
     @Environment(LogStore.self) private var store
     let status: RegimenStatus
     var compact = false
+    /// Later steps of the same compound (1 mg to start, then 1.4 mg).
+    var later: [Regimen] = []
+
+    /// One card per compound: the step that's current or next, with the later steps listed in it.
+    static func grouped(_ statuses: [RegimenStatus]) -> [(RegimenStatus, [Regimen])] {
+        var seen: [String: Int] = [:]
+        var out: [(RegimenStatus, [Regimen])] = []
+        for s in statuses.sorted(by: { ($0.regimen.startOn ?? "") < ($1.regimen.startOn ?? "") }) where !s.finished {
+            let c = s.regimen.compound ?? ""
+            if let i = seen[c] { out[i].1.append(s.regimen) } else { seen[c] = out.count; out.append((s, [])) }
+        }
+        return out
+    }
 
     @State private var busy = false
     @State private var message: MLMessage?
@@ -29,6 +42,10 @@ struct RegimenCard: View {
                 }
                 Text(scheduleLine).font(.subheadline).foregroundStyle(LogColor.ink2)
                     .fixedSize(horizontal: false, vertical: true)
+                ForEach(later, id: \.self) { r in
+                    Text(thenLine(r)).font(.subheadline.weight(.medium)).foregroundStyle(LogColor.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if !compact, let total = status.totalShots, status.daysToStart == 0, let n = status.shotNumber {
                     VStack(alignment: .leading, spacing: 6) {
                         ShareBar(share: Double(n) / Double(max(1, total)), color: LogColor.s3)
@@ -98,6 +115,18 @@ struct RegimenCard: View {
             parts.append("next \(LogTime.shortDate(LogTime.noon(next)))")
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// "Then 1.4 mg (14 units) daily, Jan 3 to Mar 4"
+    private func thenLine(_ r: Regimen) -> String {
+        var t = "Then \(Fmt.mg(r.doseMg)) mg"
+        if let u = r.drawUnits { t += " (\(Fmt.num(u, 0)) units)" }
+        t += " \(r.frequencyText)"
+        if let s = r.startOn.map({ String($0.prefix(10)) }) {
+            t += ", \(LogTime.shortDate(key: s))"
+            if let e = r.endOn.map({ String($0.prefix(10)) }) { t += " to \(LogTime.shortDate(key: e))" }
+        }
+        return t
     }
 
     private func log(site: String) {
