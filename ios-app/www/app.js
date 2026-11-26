@@ -3,10 +3,8 @@ const TZ = "America/Chicago";
 // Opens the Log bot in the Grok Bot app. Same value as LogBot.urlString in LogNative.
 const LOG_BOT_URL = "grokbot://app/v1/agent?id=81acb34c-2ba4-4bde-aa1b-98e865272965";
 const LOG_BOT_UNAVAILABLE = "Grok Bot isn’t installed.";
-const HALF_LIFE_DAYS = 5;
 const RETA_START = new Date("2026-12-06T12:00:00-06:00");
 const CHECKIN_PROMPT_HOUR = 18; // the "No check-in yet" prompt waits until 6 PM Central
-const GOAL_LB = 235;
 const TIRZ_START = new Date("2026-11-02T12:00:00-06:00");
 
 const SITE_LABELS = {
@@ -377,14 +375,6 @@ function isStandalone() {
 
 /* ---------- data helpers ---------- */
 
-function todayTotals(data) {
-  return totalsOn(data, todayKey());
-}
-
-function todayMeals(data) {
-  return mealsOn(data, todayKey());
-}
-
 function totalsOn(data, key) {
   const row = (data.daily_totals || []).find((d) => d.date === key);
   if (row) return row;
@@ -588,9 +578,7 @@ function renderHero(data, key) {
     return el("section", { class: "hero" }, el("p", { class: "empty" }, "Log a weigh-in on the Log tab to start your journey."));
   }
   if (key && key !== todayKey()) return renderDayWeight(data, parsed, key);
-  const sm = smoothWeights(parsed);
   const cur = parsed[parsed.length - 1];
-  const trendNow = sm[sm.length - 1].trend;
   const j = journeyStats(data);
   const start = j.startLb;
   const goal = j.goalLb;
@@ -1405,7 +1393,7 @@ function renderWeightCard(data) {
   const goal = j ? j.goalLb : null;
 
   // Straight-line projection from the post-dose trend, drawn only on the short ranges.
-  const proj = weightProjection(data, 42);
+  const proj = weightProjection(data);
   const showProj = proj.ready && (range.id === "1m" || range.id === "3m");
   let t1 = end;
   let projPts = [];
