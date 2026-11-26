@@ -68,6 +68,8 @@ public struct TrendsScreen: View {
             TrBodySectionView(m: cache.get("body", stamp: stamp) { TrBodyModel(d, now: now) }, canSync: !store.isDemo)
         case "training":
             TrTrainingSectionView(m: cache.get("training", stamp: stamp) { TrTrainingModel(d, now: now) })
+        case "ask":
+            AskSectionView(dashboard: d)
         case "more":
             TrMoreSectionView(m: cache.get("more", stamp: stamp) { TrMoreModel(d, now: now) }, dashboard: d, targets: targets)
         default:

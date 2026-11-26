@@ -19,7 +19,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "LogCore"),
-        .target(name: "LogUI", dependencies: ["LogCore", "LogHealth", "LogActivity"], linkerSettings: [.linkedFramework("UserNotifications")]),
+        // FoundationModels (Apple Intelligence, iOS 26) is weak-linked so the app still opens on iOS 17-25.
+        .target(name: "LogUI", dependencies: ["LogCore", "LogHealth", "LogActivity"],
+                linkerSettings: [.linkedFramework("UserNotifications"), .unsafeFlags(["-Xlinker", "-weak_framework", "-Xlinker", "FoundationModels"])]),
         .target(name: "LogActivity", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("ActivityKit"), .linkedFramework("AppIntents")]),
         .target(name: "LogHealth", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("HealthKit")]),
         .testTarget(name: "LogCoreTests", dependencies: ["LogCore"], resources: [.copy("Fixtures")]),

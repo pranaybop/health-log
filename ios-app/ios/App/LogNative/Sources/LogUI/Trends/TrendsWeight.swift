@@ -56,6 +56,7 @@ struct TrWeightSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TrWeightCard(m: m.weight).id("weight")
+            if let p = m.weight.progress { TrProgressCard(p: p).id("progress") }
             TrStallCard(s: m.stall).id("stall")
             TrBodyCompCard(b: m.body, now: m.weight.now).id("body-comp")
             ProgressPhotosCard(photos: photos).id("photos")
@@ -100,6 +101,10 @@ struct TrWeightCard: View {
         let lows = inRange.map(\.lb).min()
         let highs = inRange.map(\.lb).max()
         let withYear = r.id == "all" || r.id == "1y"
+        // 1M / 3M / 1Y scroll back through every weigh-in; All and Since GLP-1 fit on screen.
+        let scrolls = r.days != nil && earliest < startT
+        let chartFrom = scrolls ? earliest : startT
+        let drawn = scrolls ? m.sm : inRange
 
         // Straight-line projection from the post-dose trend, on the short ranges only.
         let proj = (r.id == "1m" || r.id == "3m") ? m.proj : nil
@@ -124,8 +129,8 @@ struct TrWeightCard: View {
         let avgWord = ovWeekly ? "weekly avg" : "7-day avg"
 
         var series: [TrSeries] = [
-            TrSeries(id: "raw", kind: .dots, color: LogColor.s1, points: inRange.map { TrendsCalc.Point(at: $0.at, value: $0.lb) }, faint: true, radius: r.id == "all" ? 2 : 3),
-            TrSeries(id: "trend", kind: .area, color: LogColor.s1, points: inRange.map { TrendsCalc.Point(at: $0.at, value: $0.trend) }, endDot: true),
+            TrSeries(id: "raw", kind: .dots, color: LogColor.s1, points: drawn.map { TrendsCalc.Point(at: $0.at, value: $0.lb) }, faint: true, radius: r.id == "all" ? 2 : 3),
+            TrSeries(id: "trend", kind: .area, color: LogColor.s1, points: drawn.map { TrendsCalc.Point(at: $0.at, value: $0.trend) }, endDot: true),
         ]
         if proj != nil { series.append(TrSeries(id: "proj", kind: .line, color: LogColor.s1, points: projPts, dashed: true)) }
         var refs: [TrRef] = []
@@ -133,8 +138,8 @@ struct TrWeightCard: View {
             refs.append(TrRef(value: goal, label: "Goal \(TrendsCalc.num(goal))", inDomain: r.id != "all" ? abs(goal - last.trend) < 30 : true))
         }
         var marks: [TrMark] = []
-        if m.glp1 >= startT { marks.append(TrMark(at: m.glp1, label: LogTime.journeyName)) }
-        if m.reta >= startT && m.reta <= t1 { marks.append(TrMark(at: m.reta, label: "Reta")) }
+        if m.glp1 >= chartFrom { marks.append(TrMark(at: m.glp1, label: LogTime.journeyName)) }
+        if m.reta >= chartFrom && m.reta <= t1 { marks.append(TrMark(at: m.reta, label: "Reta")) }
 
         let byTime = m.byTime
         let scrub: (TrendsCalc.Point, [String: TrendsCalc.Point]) -> TrScrub = { p, _ in
@@ -193,8 +198,14 @@ struct TrWeightCard: View {
             .onAppear { if !ranges.contains(where: { $0.id == rangeID }) { rangeID = "3m" } }
 
             if inRange.count >= 2 {
-                TrTimeChart(t0: startT, t1: t1, series: series, refs: refs, marks: marks, height: 220, yTicks: 5,
-                            snap: "trend", readout: readout, scrub: scrub, aria: "Weight, \(r.label) range")
+                TrTimeChart(t0: chartFrom, t1: t1, series: series, refs: refs, marks: marks, height: 220, yTicks: 5,
+                            snap: "trend", readout: readout, scrub: scrub, aria: "Weight, \(r.label) range",
+                            scrollWindow: scrolls ? end.timeIntervalSince(startT) : nil,
+                            scrollInitialEnd: end)
+                    .id("weight-\(r.id)")
+                if scrolls {
+                    Caption("Swipe the chart sideways to go back in time. The scale fits what’s on screen.")
+                }
             } else {
                 TrReadout(main: readout.main, sub: readout.sub)
                 EmptyNote("Only one weigh-in in this range. Try a longer range.")
@@ -233,6 +244,86 @@ struct TrWeightCard: View {
             Caption(caption)
             TrDisclosure(title: "Recent weigh-ins", headers: ["Date", "Weight", "Trend"], rows: m.recent)
         }
+    }
+}
+
+// MARK: - Goal progress and milestones
+
+struct TrProgressCard: View {
+    var p: WeightProgress.Summary
+
+    func date(_ d: Date) -> String { LogTime.longDate(d) }
+
+    var body: some View {
+        LogCard("Progress") {
+            if let goal = p.goal, let fraction = p.fraction {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("\(TrendsCalc.num(fraction * 100))% of the way to \(TrendsCalc.num(goal))")
+                        .font(.logNumber(24)).foregroundStyle(LogColor.ink)
+                    ProgressView(value: fraction)
+                        .tint(LogColor.good)
+                        .accessibilityLabel("Progress to goal")
+                    HStack {
+                        Text("Start \(TrendsCalc.num(p.start, 1))")
+                        Spacer()
+                        Text("Now \(TrendsCalc.num(p.current, 1))").fontWeight(.semibold)
+                        Spacer()
+                        Text("Goal \(TrendsCalc.num(goal, 1))")
+                    }
+                    .font(.caption).foregroundStyle(LogColor.ink2)
+                }
+            }
+            TrTileGrid(tiles: tiles, columns: 2, size: 19)
+            if !p.milestones.isEmpty {
+                TrSubHead("Milestones")
+                VStack(spacing: 0) {
+                    ForEach(Array(p.milestones.enumerated()), id: \.element.id) { i, m in
+                        if i > 0 { Divider().overlay(LogColor.hairline) }
+                        milestoneRow(m)
+                    }
+                }
+            }
+            TrDisclosure(title: "Change over time", headers: ["Period", "Change", "Per week"], rows: p.changes.map { c in
+                [c.label, "\(TrendsCalc.signed(c.delta)) lb", "\(TrendsCalc.signed(c.weekly, 2)) lb"]
+            })
+            Caption("All trend to trend, so one heavy or light morning doesn’t move these. Dates ahead assume the last 4 weeks’ pace keeps up; they shift as the trend does.")
+        }
+    }
+
+    var tiles: [TrendsCalc.Tile] {
+        var t: [TrendsCalc.Tile] = [
+            TrendsCalc.Tile("Lost so far", "\(TrendsCalc.num(abs(p.done), 1)) lb", p.done >= 0 ? "since \(TrendsCalc.short(LogTime.dayKey(p.startDate)))" : "above the start"),
+        ]
+        if let toGo = p.toGo { t.append(TrendsCalc.Tile("To go", "\(TrendsCalc.num(toGo, 1)) lb", p.goal.map { "to \(TrendsCalc.num($0))" })) }
+        t.append(TrendsCalc.Tile("Pace", p.weekly.map { "\(TrendsCalc.signed($0, 2)) lb/wk" } ?? "—", "trend, last 4 weeks"))
+        if p.goal != nil {
+            t.append(TrendsCalc.Tile("Goal date", p.goalETA.map { LogTime.shortDate($0) } ?? (p.toGo == 0 ? "Reached" : "—"),
+                                     p.goalETA.map { "about \(weeksText($0)) at this pace" } ?? (p.toGo == 0 ? nil : "needs a steady pace toward it")))
+        }
+        if let shift = p.dayShift { t.append(TrendsCalc.Tile("Trend today", "\(TrendsCalc.signed(shift, 2)) lb", "vs a day earlier")) }
+        if let low = p.lowest { t.append(TrendsCalc.Tile("Lowest trend", "\(TrendsCalc.num(low.trend, 1)) lb", TrendsCalc.short(low.day))) }
+        return t
+    }
+
+    func weeksText(_ d: Date) -> String {
+        let w = max(0, d.timeIntervalSinceNow / (7 * 86400))
+        return w < 1.5 ? "\(TrendsCalc.num(w * 7)) days" : "\(TrendsCalc.num(w)) weeks"
+    }
+
+    func milestoneRow(_ m: WeightProgress.Milestone) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: m.reached != nil ? "checkmark.circle.fill" : (m.isGoal ? "flag.checkered" : "circle"))
+                .foregroundStyle(m.reached != nil ? LogColor.good : LogColor.ink2)
+            Text("\(TrendsCalc.num(m.lb)) lb\(m.isGoal ? " · goal" : "")")
+                .font(.subheadline.weight(m.isGoal ? .semibold : .regular))
+                .foregroundStyle(LogColor.ink)
+            Spacer()
+            Text(m.reached.map { "Reached \(LogTime.shortDate($0))" } ?? m.eta.map { "Around \(LogTime.shortDate($0))" } ?? "—")
+                .font(.subheadline)
+                .foregroundStyle(m.reached != nil ? LogColor.goodInk : LogColor.ink2)
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
 }
 
