@@ -126,9 +126,10 @@ let goalSetLive = false;
   const shot = async (name, full = true) => { await page.screenshot({ path: path.join(OUT, `${SCHEME}-${name}.png`), fullPage: full }); if (full) await page.waitForTimeout(300); };
 
   // Tap a save and wait until its toast is up and the follow-up dashboard reload
-  // has redrawn Log. The toast appears at the start of that reload, so waiting
-  // only for it lets the next fill land in a form the redraw then throws away
-  // (the light-mode "Saved measurement." timeout). A real missed save still
+  // has redrawn Log. The toast appears at the start of that reload, and the
+  // write's last render (the one that enables the button again) comes after the
+  // GET returns, so waiting only for the toast or the GET lets the next fill
+  // land in a form that render then throws away. A real missed save still
   // fails: the success toast never shows, or the recorded payload is wrong.
   const save = async (button, toast) => {
     const before = dashStarted;
@@ -139,6 +140,7 @@ let goalSetLive = false;
       if (Date.now() > deadline) throw new Error(`dashboard reload did not finish after ${toast}`);
       await page.waitForTimeout(20);
     }
+    await page.locator(button).and(page.locator("button:enabled")).waitFor({ timeout: 15000 });
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   };
 
