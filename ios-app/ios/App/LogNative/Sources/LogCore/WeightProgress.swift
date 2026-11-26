@@ -42,8 +42,21 @@ public enum WeightProgress {
         public var dayShift: Double?
     }
 
-    /// `startLb` is the profile's starting weight (falls back to the first trend).
-    public static func make(_ sm: [WeightPoint], startLb: Double?, goalLb: Double?, now: Date, step: Double = 5) -> Summary? {
+    /// Weigh-ins from the start of this run: the last one up to two weeks before `since` (so the
+    /// starting weigh-in counts), else the first one after it. Apple Health backfill can bring in
+    /// years-old weigh-ins; without this, milestones and the lowest trend came from those.
+    public static func run(_ sm: [WeightPoint], since: Date?) -> [WeightPoint] {
+        guard let since else { return sm }
+        if let i = sm.lastIndex(where: { $0.at <= since }), since.timeIntervalSince(sm[i].at) <= 14 * 86400 {
+            return Array(sm[i...])
+        }
+        return sm.filter { $0.at > since }
+    }
+
+    /// `startLb` is the profile's starting weight (falls back to the first trend). `since` is when
+    /// this run started (the first GLP-1 shot); older weigh-ins are left out.
+    public static func make(_ all: [WeightPoint], startLb: Double?, goalLb: Double?, since: Date? = nil, now: Date, step: Double = 5) -> Summary? {
+        let sm = run(all, since: since)
         guard let first = sm.first, let last = sm.last else { return nil }
         let start = startLb ?? first.trend
         let current = last.trend
@@ -83,7 +96,7 @@ public enum WeightProgress {
             changes.append(Change(label: label, days: days, delta: current - then, weekly: (current - then) / days * 7))
         }
         let allDays = max(1, last.at.timeIntervalSince(first.at) / 86400)
-        changes.append(Change(label: "All time", days: nil, delta: current - first.trend, weekly: (current - first.trend) / allDays * 7))
+        changes.append(Change(label: "Since start", days: nil, delta: current - first.trend, weekly: (current - first.trend) / allDays * 7))
 
         let lowest = dir < 0 ? sm.min { $0.trend < $1.trend } : sm.max { $0.trend < $1.trend }
         let dayShift = Analytics.trend(at: last.at.addingTimeInterval(-86400), in: sm).map { current - $0 }

@@ -32,7 +32,7 @@ public enum DataDigest {
         let sm = Analytics.smoothWeights(d)
         if let last = sm.last {
             var line = "Weight: trend \(f(last.trend, 1)) lb, last weigh-in \(f(last.lb, 1)) lb on \(last.day)."
-            if let pr = WeightProgress.make(sm, startLb: d.profile?.startWeightLb, goalLb: d.profile?.goalWeightLb, now: now) {
+            if let pr = WeightProgress.make(sm, startLb: d.profile?.startWeightLb, goalLb: d.profile?.goalWeightLb, since: Analytics.Trends.firstGlp1At(d), now: now) {
                 line += " Pace (trend, 4 wk) \(f(pr.weekly, 2)) lb/week. Lost \(f(pr.done, 1)) lb since start."
                 if let toGo = pr.toGo { line += " \(f(toGo, 1)) lb to goal." }
                 if let eta = pr.goalETA { line += " Goal around \(LogTime.dayKey(eta)) at this pace." }

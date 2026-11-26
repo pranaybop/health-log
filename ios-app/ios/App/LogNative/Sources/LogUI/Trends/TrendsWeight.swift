@@ -252,7 +252,11 @@ struct TrWeightCard: View {
 struct TrProgressCard: View {
     var p: WeightProgress.Summary
 
-    func date(_ d: Date) -> String { LogTime.longDate(d) }
+    /// "Mar 4", or "Mar 4, 2027" when it isn't this year.
+    func date(_ d: Date) -> String {
+        let y = LogTime.calendar.component(.year, from: d)
+        return y == LogTime.calendar.component(.year, from: Date()) ? LogTime.shortDate(d) : "\(LogTime.shortDate(d)), \(y)"
+    }
 
     var body: some View {
         LogCard("Progress") {
@@ -292,16 +296,16 @@ struct TrProgressCard: View {
 
     var tiles: [TrendsCalc.Tile] {
         var t: [TrendsCalc.Tile] = [
-            TrendsCalc.Tile("Lost so far", "\(TrendsCalc.num(abs(p.done), 1)) lb", p.done >= 0 ? "since \(TrendsCalc.short(LogTime.dayKey(p.startDate)))" : "above the start"),
+            TrendsCalc.Tile("Lost so far", "\(TrendsCalc.num(abs(p.done), 1)) lb", p.done >= 0 ? "since \(date(p.startDate))" : "above the start"),
         ]
         if let toGo = p.toGo { t.append(TrendsCalc.Tile("To go", "\(TrendsCalc.num(toGo, 1)) lb", p.goal.map { "to \(TrendsCalc.num($0))" })) }
         t.append(TrendsCalc.Tile("Pace", p.weekly.map { "\(TrendsCalc.signed($0, 2)) lb/wk" } ?? "—", "trend, last 4 weeks"))
         if p.goal != nil {
-            t.append(TrendsCalc.Tile("Goal date", p.goalETA.map { LogTime.shortDate($0) } ?? (p.toGo == 0 ? "Reached" : "—"),
+            t.append(TrendsCalc.Tile("Goal date", p.goalETA.map { date($0) } ?? (p.toGo == 0 ? "Reached" : "—"),
                                      p.goalETA.map { "about \(weeksText($0)) at this pace" } ?? (p.toGo == 0 ? nil : "needs a steady pace toward it")))
         }
         if let shift = p.dayShift { t.append(TrendsCalc.Tile("Trend today", "\(TrendsCalc.signed(shift, 2)) lb", "vs a day earlier")) }
-        if let low = p.lowest { t.append(TrendsCalc.Tile("Lowest trend", "\(TrendsCalc.num(low.trend, 1)) lb", TrendsCalc.short(low.day))) }
+        if let low = p.lowest { t.append(TrendsCalc.Tile("Lowest trend", "\(TrendsCalc.num(low.trend, 1)) lb", date(low.at))) }
         return t
     }
 
@@ -318,7 +322,7 @@ struct TrProgressCard: View {
                 .font(.subheadline.weight(m.isGoal ? .semibold : .regular))
                 .foregroundStyle(LogColor.ink)
             Spacer()
-            Text(m.reached.map { "Reached \(LogTime.shortDate($0))" } ?? m.eta.map { "Around \(LogTime.shortDate($0))" } ?? "—")
+            Text(m.reached.map { "Reached \(date($0))" } ?? m.eta.map { "Around \(date($0))" } ?? "—")
                 .font(.subheadline)
                 .foregroundStyle(m.reached != nil ? LogColor.goodInk : LogColor.ink2)
         }

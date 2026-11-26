@@ -68,7 +68,7 @@ struct TrWeightModel {
         var ov: [String: [String: Double]] = [:]
         for o in TrOverlay.all where o.id != "none" { ov[o.id] = TrendsCalc.overlayDaily(d, o.id, now: now) }
         overlays = ov
-        progress = WeightProgress.make(sm, startLb: d.profile?.startWeightLb, goalLb: d.profile?.goalWeightLb, now: now)
+        progress = WeightProgress.make(sm, startLb: d.profile?.startWeightLb, goalLb: d.profile?.goalWeightLb, since: glp1, now: now)
         recent = sm.reversed().prefix(30).map { w in
             ["\(LogTime.weekdayDate(w.at)), \(LogTime.calendar.component(.year, from: w.at))", TrendsCalc.num(w.lb, 1), TrendsCalc.num(w.trend, 1)]
         }

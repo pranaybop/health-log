@@ -29,8 +29,22 @@ final class WeightProgressTests: XCTestCase {
         XCTAssertEqual(days, 15.25 / 1.75 * 7, accuracy: 1e-6)
         XCTAssertEqual(s.changes.first?.label, "1 week")
         XCTAssertEqual(s.changes.first?.delta ?? 0, -1.75, accuracy: 1e-9)
-        XCTAssertEqual(s.changes.last?.label, "All time")
+        XCTAssertEqual(s.changes.last?.label, "Since start")
         XCTAssertEqual(s.dayShift ?? 0, -0.25, accuracy: 1e-9)
+    }
+
+    /// Years-old Apple Health weigh-ins (190 lb in 2019) must not count as milestones reached.
+    func testOldHistoryIsLeftOut() throws {
+        let old = WeightPoint(at: LogTime.noon("2019-07-26"), lb: 190, trend: 190)
+        let sm = [old] + points()
+        let since = LogTime.noon("2026-09-01")
+        let s = try XCTUnwrap(WeightProgress.make(sm, startLb: 270, goalLb: 240, since: since, now: sm.last!.at))
+        XCTAssertEqual(s.lowest?.trend ?? 0, 255.25, accuracy: 1e-9)
+        XCTAssertNil(s.milestones.last?.reached, "goal not reached yet")
+        XCTAssertEqual(s.startDate, LogTime.noon("2026-09-01"))
+        // A weigh-in a few days before the first shot is the run's start.
+        let before = WeightPoint(at: LogTime.noon("2026-08-29"), lb: 271, trend: 271)
+        XCTAssertEqual(WeightProgress.run([old, before] + points(), since: since).first, before)
     }
 
     func testNoGoalNoMilestones() throws {

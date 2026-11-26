@@ -13,6 +13,7 @@ Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today
 
 ### Today
 - One day at a time: swipe, use the week strip or month picker to move between days.
+- **Readiness** right under the weight: a gauge with the 0–10 score, a meter for HRV, resting heart rate and sleep showing better or worse than your normal, one line on what moved it most, and the last 7 days.
 - **Weight hero:** current weight and trend, change since start, pace as lb a week and % of body weight.
 - **Food:** a calorie and protein ring against your targets, **Log a meal** (describe it, your AI key estimates the macros, review, save), then the day's meals and macros.
 - **Under-eating** card in the evening when the day is far below target.
@@ -33,7 +34,7 @@ Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today
 ### Trends
 - **Summary:** tiles for weight, food, maintenance, medication and recovery that open their section.
 - **Ask your data:** chat with your log in the app (details below).
-- **Weight:** smoothed trend line over weigh-ins, ranges 1M / 3M / 1Y / All / Since GLP-1, swipe back through history with the scale refitting to what's on screen, compare-with overlays (calories, steps, sleep, resting HR, HRV, food thoughts, food noise), a straight-line projection, goal line and dose markers. **Progress:** % of the way to goal, lost and to go, pace, predicted goal date, 5 lb milestones with the date each was reached or is expected, today's trend change, lowest trend, change over 1 week to all time. **Stall check**, **body composition** (BMI, body fat, lean mass, share of loss that was lean) and **progress photos**.
+- **Weight:** smoothed trend line over weigh-ins, ranges 1M / 3M / 1Y / All / Since GLP-1, swipe back through history with the scale refitting to what's on screen, compare-with overlays (calories, steps, sleep, resting HR, HRV, food thoughts, food noise), a straight-line projection, goal line and dose markers. **Progress** (counted from your first GLP-1 shot, so years-old Apple Health weigh-ins don't count): % of the way to goal, lost and to go, pace, predicted goal date, 5 lb milestones with the date each was reached or is expected, today's trend change, lowest trend, change over 1 week to all time. **Stall check**, **body composition** (BMI, body fat, lean mass, share of loss that was lean) and **progress photos**.
 - **Food:** daily calories and protein against targets, **maintenance calories** (from food logs and weight trend, and from the Apple Watch), **protein target** hit rate, **food thoughts** by day and time.
 - **Meds:** wear-off, the week after a shot, appetite by drug level, retatrutide vs tirzepatide, cycle recaps, feel report, side effects.
 - **Body:** **Readiness** score (below), off your normal history, heart, everything else from Apple Health, measurements.
