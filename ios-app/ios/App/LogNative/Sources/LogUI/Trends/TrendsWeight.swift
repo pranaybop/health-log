@@ -290,7 +290,7 @@ struct TrProgressCard: View {
             TrDisclosure(title: "Change over time", headers: ["Period", "Change", "Per week"], rows: p.changes.map { c in
                 [c.label, "\(TrendsCalc.signed(c.delta)) lb", "\(TrendsCalc.signed(c.weekly, 2)) lb"]
             })
-            Caption("All trend to trend, so one heavy or light morning doesn’t move these. Dates ahead assume the last 4 weeks’ pace keeps up; they shift as the trend does.")
+            Caption("A milestone is ticked on the first weigh-in at or under it. Lost, to go and pace use the trend, so one heavy or light morning barely moves them. Dates ahead assume the last 4 weeks’ pace keeps up.")
         }
     }
 
@@ -305,7 +305,10 @@ struct TrProgressCard: View {
                                      p.goalETA.map { "about \(weeksText($0)) at this pace" } ?? (p.toGo == 0 ? nil : "needs a steady pace toward it")))
         }
         if let shift = p.dayShift { t.append(TrendsCalc.Tile("Trend today", "\(TrendsCalc.signed(shift, 2)) lb", "vs a day earlier")) }
-        if let low = p.lowest { t.append(TrendsCalc.Tile("Lowest trend", "\(TrendsCalc.num(low.trend, 1)) lb", date(low.at))) }
+        if let low = p.lowestWeighIn {
+            t.append(TrendsCalc.Tile("Lowest weigh-in", "\(TrendsCalc.num(low.lb, 1)) lb",
+                                     "\(date(low.at))\(p.lowest.map { " · lowest trend \(TrendsCalc.num($0.trend, 1))" } ?? "")"))
+        }
         return t
     }
 

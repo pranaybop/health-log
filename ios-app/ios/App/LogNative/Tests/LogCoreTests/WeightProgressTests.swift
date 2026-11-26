@@ -56,6 +56,17 @@ final class WeightProgressTests: XCTestCase {
         XCTAssertNotNil(s.milestones.first { $0.reached == nil }?.eta)
     }
 
+    /// A weigh-in under 260 ticks the 260 milestone even while the trend is still above it.
+    func testWeighInTicksMilestone() throws {
+        var sm = points()
+        let last = sm[sm.count - 1]
+        sm[sm.count - 1] = WeightPoint(at: last.at, lb: 254.6, trend: last.trend) // trend 255.25
+        let s = try XCTUnwrap(WeightProgress.make(sm, startLb: 270, goalLb: 240, now: last.at))
+        XCTAssertEqual(s.milestones.first { $0.lb == 255 }?.reached, last.at)
+        XCTAssertEqual(s.lowestWeighIn?.lb ?? 0, 254.6, accuracy: 1e-9)
+        XCTAssertEqual(s.lowest?.trend ?? 0, 255.25, accuracy: 1e-9)
+    }
+
     func testNoGoalNoMilestones() throws {
         let s = try XCTUnwrap(WeightProgress.make(points(), startLb: nil, goalLb: nil, now: Date()))
         XCTAssertTrue(s.milestones.isEmpty)

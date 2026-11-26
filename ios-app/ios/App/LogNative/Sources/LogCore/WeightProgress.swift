@@ -38,6 +38,8 @@ public enum WeightProgress {
         public var milestones: [Milestone]
         public var changes: [Change]
         public var lowest: WeightPoint?
+        /// The lowest single weigh-in this run (the trend lags behind it).
+        public var lowestWeighIn: WeightPoint?
         /// Trend change since the trend a day earlier.
         public var dayShift: Double?
     }
@@ -103,15 +105,18 @@ public enum WeightProgress {
         changes.append(Change(label: "Since start", days: nil, delta: current - first.trend, weekly: (current - first.trend) / allDays * 7))
 
         let lowest = dir < 0 ? sm.min { $0.trend < $1.trend } : sm.max { $0.trend < $1.trend }
+        let lowestWeighIn = dir < 0 ? sm.min { $0.lb < $1.lb } : sm.max { $0.lb < $1.lb }
         let dayShift = Analytics.trend(at: last.at.addingTimeInterval(-86400), in: sm).map { current - $0 }
 
         return Summary(start: start, current: current, goal: goalLb, startDate: first.at, done: done, toGo: toGo,
                        fraction: fraction, weekly: weekly, goalETA: goalLb.flatMap { eta($0) },
-                       milestones: milestones, changes: changes, lowest: lowest, dayShift: dayShift)
+                       milestones: milestones, changes: changes, lowest: lowest, lowestWeighIn: lowestWeighIn, dayShift: dayShift)
     }
 
     static func milestone(_ lb: Double, sm: [WeightPoint], dir: Double, eta: Date?, isGoal: Bool) -> Milestone {
-        let hit = sm.first { ($0.trend - lb) * dir >= 0 }
+        // Reached on the first weigh-in at or past it, the way a scale app ticks it off. Dates
+        // ahead still come from the trend's pace.
+        let hit = sm.first { ($0.lb - lb) * dir >= 0 }
         return Milestone(lb: lb, reached: hit?.at, eta: hit == nil ? eta : nil, isGoal: isGoal)
     }
 }
