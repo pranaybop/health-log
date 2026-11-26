@@ -126,14 +126,6 @@ public final class LogStore {
         if changed { onLockChange?(true) }
     }
 
-    /// The shell calls this when the web view locked or unlocked on its own.
-    public func syncLockFromKeychain() {
-        let locked = isDemo ? false : PasscodeStore.read() == nil
-        guard locked != isLocked else { return }
-        if locked { dashboard = nil; clearCache() } else { loadCache() }
-        isLocked = locked
-    }
-
     // MARK: Writes
 
     /// Upload a JPEG and link it to the weigh-in, then refresh. Throws LogError.

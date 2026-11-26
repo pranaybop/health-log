@@ -4,9 +4,6 @@ import LogCore
 /// The native Meds tab (web: renderMedsTab in app.js): drug level, injection sites, dose plan,
 /// titration, the retatrutide switch, protocol, vials and dosing history.
 public struct MedsScreen: View {
-    /// Flip to true when this screen covers everything the web version does.
-    public static let isReady = true
-
     @Environment(LogStore.self) private var store
 
     public init() {}

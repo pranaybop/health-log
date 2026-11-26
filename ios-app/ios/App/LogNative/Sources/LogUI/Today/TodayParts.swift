@@ -320,8 +320,7 @@ enum TodayDebug {
 
 // MARK: Switching tabs
 
-/// Selects another tab the way a tap on the tab bar does (asking the tab bar's delegate first), so
-/// the shell gets to prepare a web tab.
+/// Selects another tab the way a tap on the tab bar does (asking the tab bar's delegate first).
 @MainActor
 enum TodayTabs {
     static func select(_ index: Int) {

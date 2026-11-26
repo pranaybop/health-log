@@ -18,12 +18,10 @@ public struct HealthSyncPanel: View {
     }
 
     public var body: some View {
-        if NativeHealthSync.isReady {
-            if compact {
-                HealthSyncCompactRow(status: HealthSyncStatus.shared)
-            } else {
-                HealthSyncFullPanel(status: HealthSyncStatus.shared)
-            }
+        if compact {
+            HealthSyncCompactRow(status: HealthSyncStatus.shared)
+        } else {
+            HealthSyncFullPanel(status: HealthSyncStatus.shared)
         }
     }
 }
