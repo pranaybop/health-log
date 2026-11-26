@@ -1,4 +1,6 @@
-# Checks the iPhone app on GitHub's Mac runners, on made-up data only (tests/fixture.js):
+# Checks the iPhone app on a Mac runner, on made-up data only (tests/fixture.js).
+# runs_on is a JSON string (default "macos-15"). Callers pass the mac-mini labels for a
+# trusted ref unless repository variable IOS_RUNNER is hosted; see pick-runner.yml.
 #   1. the LogNative package's own tests (ios-app/ios/App/LogNative, in an iOS simulator)
 #   2. a debug build of the whole app for the simulator
 #   3. screenshots: the app opens on each tab with -demo <tab>, from every list in
@@ -17,40 +19,66 @@ on:
       soft:
         type: boolean
         default: false
+      # JSON text, not a YAML list. "macos-15" or ["self-hosted","macOS","ARM64","mac-mini"].
+      runs_on:
+        type: string
+        default: '"macos-15"'
 
 permissions:
   contents: read
 
 jobs:
   simulator:
-    runs-on: macos-15
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # Applies on the mini and on macos-15, so a stuck simulator job cannot run forever.
     timeout-minutes: 50
+    concurrency:
+      group: ${{ (contains(inputs.runs_on, 'mac-mini') && 'mac-mini-ios') || format('hosted-{0}-simulator', github.run_id) }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
       - name: Pick Xcode
         run: |
-          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
-          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
-          xcodebuild -version
+          echo "RUNNER_NAME=$RUNNER_NAME RUNNER_ENVIRONMENT=$RUNNER_ENVIRONMENT"
+          # The mini already has Xcode 27.2 selected. sudo xcode-select is the hosted path.
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            xcodebuild -version
+          else
+            X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+            if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+            xcodebuild -version
+          fi
 
       - name: Pick a simulator
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, re, sys
+          data = json.load(sys.stdin)["devices"]
+          # Plain iOS-N-M runtimes only when any exist, so iOS-27-2-iPhone19-4 (iPhone Duo)
+          # cannot outrank iPhone 18 Pro on the real iOS 27.2 runtime.
+          exact = [(rt, devs) for rt, devs in data.items() if re.search(r"iOS-\d+-\d+$", rt)]
+          pool = exact or list(data.items())
           best = None
-          for rt, devs in json.load(sys.stdin)["devices"].items():
+          for rt, devs in pool:
+              if "Duo" in rt or "iPhone19" in rt:
+                  continue
               m = re.search(r"iOS-(\d+)-(\d+)", rt)
               if not m:
                   continue
               ver = (int(m.group(1)), int(m.group(2)))
               for d in devs:
                   n = d["name"]
+                  if "Duo" in n:
+                      continue
                   if not n.startswith("iPhone") or "Max" in n or "Plus" in n or "SE" in n:
                       continue
-                  score = (ver, "Pro" in n)
+                  model = re.search(r"iPhone\s*(\d+)", n)
+                  score = (ver, "Pro" in n, int(model.group(1)) if model else 0)
                   if best is None or score > best[0]:
                       best = (score, d["udid"], n, rt)
+          if best is None:
+              sys.exit("no matching iPhone simulator")
           print(best[1])
           print("Simulator:", best[2], best[3], file=sys.stderr)
           ')
@@ -72,6 +100,12 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/pkg" CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/pkg.log" 2>&1 || rc=$?
           grep -E "error:|Test Case .* (passed|failed)|XCTAssert|Executed|\*\* TEST" "$RUNNER_TEMP/pkg.log" | sort -u | tail -300 || true
           exit $rc
+
+      - name: Node for the demo fixture
+        if: runner.environment == 'self-hosted'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Bundle the app files and the demo data
         run: |
@@ -138,7 +172,17 @@ jobs:
         run: |
           P="${{ steps.package.outcome }}"; B="${{ steps.build.outcome }}"; S="${{ steps.shots.outcome }}"
           echo "package tests: $P, build: $B, screenshots: $S"
+          echo "Runner: $RUNNER_NAME ($RUNNER_ENVIRONMENT)"
           if [ "$P" = success ] && [ "$B" = success ] && [ "$S" = success ]; then R=PASS; else R=FAIL; fi
           echo "NATIVE-CHECK: $R"
           echo "### NATIVE-CHECK: $R (package tests $P, build $B, screenshots $S)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Runner: $RUNNER_NAME ($RUNNER_ENVIRONMENT)" >> "$GITHUB_STEP_SUMMARY"
           if [ "$R" = FAIL ] && [ "$SOFT" != "true" ]; then exit 1; fi
+
+      - name: Clean up the self-hosted runner
+        if: always() && runner.environment == 'self-hosted'
+        run: |
+          xcrun simctl shutdown booted || true
+          if [ -n "$RUNNER_TEMP" ]; then
+            rm -rf "$RUNNER_TEMP/pkg" "$RUNNER_TEMP/sim" "$RUNNER_TEMP/dd" "$RUNNER_TEMP/ipa"
+          fi
