@@ -67,6 +67,9 @@ struct TodayFoodCard: View {
                         .foregroundStyle(message.ok ? LogColor.goodInk : LogColor.critInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if m.isToday {
+                    LogMealButton()
+                }
                 if m.isToday, let target = t.protein {
                     ProteinLine(s: Analytics.proteinStreak(m.d, target: target, now: m.now))
                 }

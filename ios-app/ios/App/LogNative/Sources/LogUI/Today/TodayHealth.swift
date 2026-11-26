@@ -156,13 +156,52 @@ struct TodayMacros: View {
     }
 }
 
-/// The day's meals (web renderMeals). Today can open the Log bot in Grok Bot to record one.
+/// "Log a meal": opens Log in Grok Bot. Sits in the Food today card, right under today's calories.
+/// openURL calls UIApplication.open and says whether it was accepted, so this doesn't use
+/// canOpenURL and doesn't need LSApplicationQueriesSchemes.
+struct LogMealButton: View {
+    @Environment(\.openURL) private var openURL
+    @State private var unavailable = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: openLogBot) {
+                Label("Log a meal", systemImage: "fork.knife")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .tint(LogColor.accent)
+            .accessibilityHint("Opens Log in Grok Bot")
+            if unavailable {
+                Text(LogBot.unavailableMessage)
+                    .font(.footnote)
+                    .foregroundStyle(LogColor.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private func openLogBot() {
+        unavailable = false
+        guard let url = LogBot.url else {
+            unavailable = true
+            return
+        }
+        openURL(url) { accepted in
+            guard !accepted else { return }
+            Task { @MainActor in unavailable = true }
+        }
+    }
+}
+
+/// The day's meals (web renderMeals). Logging one is in the Food today card.
 struct TodayMeals: View {
     let meals: [Meal]
     let past: Bool
-
-    @Environment(\.openURL) private var openURL
-    @State private var unavailable = false
 
     var body: some View {
         LogCard("Meals") {
@@ -177,44 +216,7 @@ struct TodayMeals: View {
                         }
                     }
                 }
-                if !past {
-                    logButton
-                    if unavailable {
-                        Text(LogBot.unavailableMessage)
-                            .font(.footnote)
-                            .foregroundStyle(LogColor.ink2)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
             }
-        }
-    }
-
-    /// Opens Log in Grok Bot. openURL calls UIApplication.open and says whether it was accepted,
-    /// so this doesn't use canOpenURL and doesn't need LSApplicationQueriesSchemes.
-    private var logButton: some View {
-        Button(action: openLogBot) {
-            Text("Log a meal")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 4)
-        }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .tint(LogColor.accent)
-        .accessibilityHint("Opens Log in Grok Bot")
-    }
-
-    private func openLogBot() {
-        unavailable = false
-        guard let url = LogBot.url else {
-            unavailable = true
-            return
-        }
-        openURL(url) { accepted in
-            guard !accepted else { return }
-            Task { @MainActor in unavailable = true }
         }
     }
 
