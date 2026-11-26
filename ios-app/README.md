@@ -14,6 +14,15 @@ After a weigh-in, the Log tab offers an optional photo (camera or library). It�
 
 The bucket, its RLS policies, and the `log.progress_photos` columns are in `supabase/migrations/20261125_progress_photos.sql`. That migration has to be applied by hand, then the `log-dashboard` and `log-write` Edge Functions deployed. Until both are live, the rest of the app still loads and the photo step reports that it couldn’t save.
 
+## Ask your data
+
+Trends → **Ask** answers questions about the log inside the app. Three choices:
+
+- **On this iPhone** (default): Apple Intelligence's on-device model (`FoundationModels`, iOS 26, an Apple Intelligence iPhone with it turned on). Free, no key, nothing leaves the phone. Its context is small, so it sees the last two weeks.
+- **Claude** or **Grok**: the person's own API key from console.anthropic.com or console.x.ai, kept in the Keychain (this device only) and sent only to that provider. About 90 days of the log goes with each question. A Claude or SuperGrok subscription doesn't include API access, so a subscription can't be used here; usage is billed per question to the API account.
+
+The snapshot sent to the model is built by `DataDigest` in `LogCore/AskData.swift`. Nothing about Ask touches Supabase.
+
 ## Making changes
 
 Edit the screen in `ios/App/LogNative`. For a `www/` change, run `cd ../tests && npm test` and `sh sync-web.sh` (the workflow copies `www/` into `ios/App/App/public` itself; that copy is committed, and the tests check the two match). Bump `VERSION` for a release you want to tell apart. The build number goes up by one on every build.

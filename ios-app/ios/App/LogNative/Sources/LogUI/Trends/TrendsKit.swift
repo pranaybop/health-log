@@ -223,9 +223,28 @@ struct TrTimeChart: View {
     var readout: TrScrub? = nil
     var scrub: ((TrendsCalc.Point, [String: TrendsCalc.Point]) -> TrScrub)? = nil
     var aria: String = "Chart"
+    /// Set to make the chart scroll sideways: this much time shows at once and you swipe back
+    /// through the rest. The y axis fits whatever is on screen, so it rescales as you scroll.
+    var scrollWindow: TimeInterval? = nil
+    /// Where the window first ends (defaults to the end of the chart).
+    var scrollInitialEnd: Date? = nil
     @State var selected: Date? = nil
+    @State var scrollX: Date? = nil
 
     var end: Date { max(t1, t0.addingTimeInterval(86400)) }
+
+    /// The window on screen when scrolling (else the whole chart).
+    var window: TimeInterval? {
+        guard let w = scrollWindow, end.timeIntervalSince(t0) > w * 1.05 else { return nil }
+        return w
+    }
+    var initialFrom: Date {
+        guard let w = window else { return t0 }
+        let e = min(end, scrollInitialEnd ?? end)
+        return max(t0, e.addingTimeInterval(-w))
+    }
+    var viewFrom: Date { window == nil ? t0 : (scrollX ?? initialFrom) }
+    var viewTo: Date { window.map { viewFrom.addingTimeInterval($0) } ?? end }
 
     func visible(_ s: TrSeries) -> [TrendsCalc.Point] {
         s.points.filter { $0.at >= t0 && $0.at <= end && $0.value.isFinite }
@@ -233,7 +252,9 @@ struct TrTimeChart: View {
 
     var scale: TrNiceScale? {
         var vals: [Double] = []
-        for s in series { vals += visible(s).map(\.value) }
+        let viewLo = viewFrom.addingTimeInterval(-86400), viewHi = viewTo.addingTimeInterval(86400)
+        for s in series { vals += visible(s).filter { $0.at >= viewLo && $0.at <= viewHi }.map(\.value) }
+        if vals.isEmpty { for s in series { vals += visible(s).map(\.value) } }
         for r in refs where r.inDomain && r.value.isFinite { vals.append(r.value) }
         guard let mn = vals.min(), let mx = vals.max() else { return nil }
         var lo = yMin ?? mn
@@ -278,7 +299,8 @@ struct TrTimeChart: View {
     }
 
     func chart(_ sc: TrNiceScale, focus f: (point: TrendsCalc.Point, readings: [String: TrendsCalc.Point])?) -> some View {
-        let ticks = TrTimeTicks(t0, end)
+        let full = max(1, end.timeIntervalSince(t0))
+        let ticks = TrTimeTicks(t0, end, width: 300 * CGFloat(full / (window ?? full)))
         let shownRefs = refs.filter { $0.value >= sc.lo && $0.value <= sc.hi }
         let shownMarks = marks.filter { $0.at >= t0 && $0.at <= end }
         let span = max(1, end.timeIntervalSince(t0))
@@ -342,14 +364,39 @@ struct TrTimeChart: View {
             }
         }
         .chartXSelection(value: $selected)
+        .modifier(TrScrollable(window: window, start: initialFrom, x: $scrollX))
+        .animation(.easeOut(duration: 0.2), value: sc.lo)
+        .animation(.easeOut(duration: 0.2), value: sc.hi)
         .frame(height: height)
         .accessibilityLabel(aria)
     }
 }
 
+/// Sideways scrolling for TrTimeChart when it has a window.
+struct TrScrollable: ViewModifier {
+    var window: TimeInterval?
+    var start: Date
+    @Binding var x: Date?
+
+    func body(content: Content) -> some View {
+        if let window {
+            content
+                .chartScrollableAxes(.horizontal)
+                .chartXVisibleDomain(length: window)
+                .chartScrollPosition(x: Binding(get: { x ?? start }, set: { x = $0 }))
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - Column chart
 
-/// One column per day or week (charts.js columnChart), a dashed target, first / middle / last labels.
+/// One column per day (charts.js columnChart), a dashed target, first / middle / last labels.
+///
+/// The x axis is dates, not day-key strings: Swift Charts draws a label for every category on a
+/// string axis whatever `AxisMarks(values:)` says, so 30 days piled up into unreadable text.
+/// On a date axis the explicit values are honored, so only three labels show.
 struct TrColumnChart: View {
     var columns: [TrendsCalc.Column]
     var color: Color
@@ -361,7 +408,7 @@ struct TrColumnChart: View {
     var sub: String
     var scrub: ((TrendsCalc.Column) -> TrScrub)? = nil
     var aria: String = "Columns"
-    @State var selected: String? = nil
+    @State var selected: Date? = nil
 
     var scale: TrNiceScale {
         var vals = columns.compactMap { $0.value }.filter(\.isFinite)
@@ -371,29 +418,46 @@ struct TrColumnChart: View {
         return sc
     }
 
-    var labelKeys: [String] {
+    static func date(_ key: String) -> Date { LogTime.noon(String(key.prefix(10))) }
+
+    /// First, middle and last day.
+    var labelDates: [Date] {
         guard !columns.isEmpty else { return [] }
         let idx = [0, (columns.count - 1) / 2, columns.count - 1]
-        var out: [String] = []
-        for i in idx where !out.contains(columns[i].key) { out.append(columns[i].key) }
+        var out: [Date] = []
+        for i in idx {
+            let d = Self.date(columns[i].key)
+            if !out.contains(d) { out.append(d) }
+        }
         return out
     }
 
-    func anchor(_ key: String) -> UnitPoint {
-        if key == columns.first?.key { return .topLeading }
-        if key == columns.last?.key { return .topTrailing }
+    func anchor(_ d: Date) -> UnitPoint {
+        if d == labelDates.first, labelDates.count > 1 { return .topLeading }
+        if d == labelDates.last, labelDates.count > 1 { return .topTrailing }
         return .top
+    }
+
+    /// The column nearest the finger, within half a day.
+    func column(at d: Date?) -> TrendsCalc.Column? {
+        guard let d else { return nil }
+        let best = columns.min { abs(Self.date($0.key).timeIntervalSince(d)) < abs(Self.date($1.key).timeIntervalSince(d)) }
+        guard let best, abs(Self.date(best.key).timeIntervalSince(d)) <= 13 * 3600 else { return nil }
+        return best
     }
 
     var body: some View {
         let sc = scale
-        let picked = selected.flatMap { k in columns.first { $0.key == k } }
+        let picked = column(at: selected)
         let live: TrScrub? = picked.flatMap { scrub?($0) }
+        let barWidth = MarkDimension.ratio(columns.count > 20 ? 0.7 : 0.6)
         VStack(alignment: .leading, spacing: 8) {
             TrReadout(main: live?.main ?? main, sub: live?.sub ?? sub, live: live != nil)
             Chart {
                 ForEach(columns) { c in
-                    BarMark(x: .value("Day", c.key), y: .value("Value", max(0, c.value ?? 0)))
+                    BarMark(x: .value("Day", Self.date(c.key), unit: .day),
+                            y: .value("Value", max(0, c.value ?? 0)),
+                            width: barWidth)
                         .foregroundStyle(picked == nil || picked?.key == c.key ? color : color.opacity(0.45))
                         .cornerRadius(3)
                 }
@@ -401,18 +465,20 @@ struct TrColumnChart: View {
                     RuleMark(y: .value("Target", target))
                         .foregroundStyle(LogColor.ink2.opacity(0.8))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                        .annotation(position: .top, alignment: .trailing, spacing: 2) {
-                            Text(targetLabel ?? "Target \(fmtY(target))").font(.caption2.weight(.semibold)).foregroundStyle(LogColor.ink2)
+                        .annotation(position: .top, alignment: .leading, spacing: 2) {
+                            Text(targetLabel ?? "Target \(fmtY(target))")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(LogColor.ink2)
                         }
                 }
             }
             .chartLegend(.hidden)
             .chartYScale(domain: 0...sc.hi)
             .chartXAxis {
-                AxisMarks(values: labelKeys) { value in
-                    AxisValueLabel(anchor: anchor(value.as(String.self) ?? "")) {
-                        if let k = value.as(String.self) {
-                            Text(TrendsCalc.short(k)).font(.caption2).foregroundStyle(LogColor.ink2)
+                AxisMarks(values: labelDates) { value in
+                    AxisValueLabel(anchor: anchor(value.as(Date.self) ?? .distantPast), collisionResolution: .disabled) {
+                        if let d = value.as(Date.self) {
+                            Text(LogTime.shortDate(d)).font(.caption2).foregroundStyle(LogColor.ink2)
                         }
                     }
                 }
@@ -428,6 +494,7 @@ struct TrColumnChart: View {
                 }
             }
             .chartXSelection(value: $selected)
+            .environment(\.calendar, LogTime.calendar)
             .frame(height: height)
             .accessibilityLabel(aria)
         }
