@@ -2,7 +2,7 @@
   "name": "log-ios",
   "private": true,
   "version": "1.0.0",
-  "description": "iPhone app shell for the Log dashboard. Loads the live site, so web changes show up without rebuilding.",
+  "description": "Native iPhone app. SwiftUI screens and Apple Health sync are in LogNative; www is the browser-test target and fallback.",
   "scripts": {
     "sync": "cap sync ios",
     "open": "cap open ios"

@@ -1,23 +1,12 @@
 # Log for iPhone
 
-The Log app (Capacitor 8). Since Nov 25, 2026 the app's files are built into the app itself, from `www/`, and new work ships only here; the website is frozen.
+Today, Meds, Trends and Log are SwiftUI in `ios/App/LogNative`. `TodayScreen`, `MedsScreen`, `TrendsScreen`, `LogScreen` and `NativeHealthSync` are all `isReady = true`, so screen changes go in that package.
 
-- The app opens from its own files, so it starts offline and doesn't depend on the website.
-- API calls go through the app's native HTTP (`CapacitorHttp`), so the Edge Functions' CORS rules don't apply to it and didn't need changing.
-- The passcode is entered once on the app's lock screen and kept in the app's own storage. The first version with built-in files (1.1) starts with fresh storage: enter the passcode again, and the Apple Health history backfill runs once more (it only fills in what's missing).
+`www/` is the browser-test target (`tests/lib.js` serves it) and the fallback for a tab that is not ready. `sh sync-web.sh` bundles it into `ios/App/App/public`.
 
-Nothing in this folder holds a passcode, token or key. Keep it that way.
+The tab bar is a native `UITabBarController` (`ios/App/App/LogShell.swift`): Liquid Glass on iOS 26, and it shrinks while you scroll down. The passcode stays in the iPhone Keychain (this device only, readable after first unlock). Nothing in this folder holds a passcode, token or key.
 
-## The native shell (1.2)
-
-The app is going native in stages. Stage 1 (version 1.2) wraps the screens in native iOS:
-
-- **Tab bar:** a native `UITabBarController` (`ios/App/App/LogShell.swift`). Built with the iOS 26 SDK it is Liquid Glass on iOS 26 (and shrinks while you scroll down); older iOS gets the standard bar. The screens are still the web code in `www/`, in one web view that moves between the tabs, so nothing reloads.
-- **Passcode:** kept in the iPhone Keychain (this device only, readable after first unlock), not in the web view's storage. 1.1's stored passcode moves over on first launch.
-- **How the page and the shell talk:** `window.LOG_NATIVE` (set before the page's scripts run) tells the page it's inside the shell; the page posts `tab`, `locked`, `getPasscode`, `setPasscode` and `clearPasscode` to `window.webkit.messageHandlers.logShell`; the shell calls `window.logShellSelectTab(id)`.
-- **Simulator check:** the workflow's `simulator` job runs a debug build in the iPhone simulator with made-up data (`-demo <tab>`, debug builds only) and prints screenshots into its log.
-
-Next stages move screens to SwiftUI one at a time (Trends first), then Apple Health sync to native Swift with background refresh.
+The workflow's `simulator` job runs a debug build in the iPhone simulator with made-up data (`-demo <tab>`, debug builds only) and prints screenshots into its log.
 
 ## Progress photos
 
@@ -27,10 +16,7 @@ The bucket, its RLS policies, and the `log.progress_photos` columns are in `supa
 
 ## Making changes
 
-1. Edit the files in `www/`.
-2. Run the tests: `cd ../tests && npm test` (see the root README).
-3. Run `sh sync-web.sh` to copy `www/` into the Xcode project (`ios/App/App/public`). The workflow does this itself, but the copy is committed so building straight from Xcode works, and the tests check the two match.
-4. For a release you want to tell apart, bump `VERSION` (for example `1.1` to `1.2`). The build number goes up by one on every build by itself.
+Edit the screen in `ios/App/LogNative`. For a `www/` change, run `cd ../tests && npm test` and `sh sync-web.sh` (the workflow copies `www/` into `ios/App/App/public` itself; that copy is committed, and the tests check the two match). Bump `VERSION` for a release you want to tell apart. The build number goes up by one on every build.
 
 ## Versions
 
@@ -57,7 +43,7 @@ Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** an
 
 ## Build and install
 
-1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`), run `sh ios-app/sync-web.sh`, and open `ios-app/ios/App/App.xcodeproj` in Xcode. No npm step is needed: Capacitor comes in through Swift Package Manager, and the config and web files are committed. A build from Xcode shows as "development copy" on the Log tab; set the version under the App target's **General** tab if you want one. Run `npm install && npx cap sync ios` only after changing native plugins.
+1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`) and open `ios-app/ios/App/App.xcodeproj` in Xcode. No npm step is needed: Capacitor comes in through Swift Package Manager. A build from Xcode shows as "development copy" on the Log tab; set the version under the App target's **General** tab if you want one. Run `sh ios-app/sync-web.sh` only after changing `www/`, and `npm install && npx cap sync ios` only after changing native plugins.
 
 2. In Xcode, select the **App** target, open **Signing & Capabilities**, and pick your Apple ID under **Team** (add it in Xcode Settings > Accounts if it isn't listed). If Xcode says the bundle identifier is taken, change `com.pranaybop.log` to something unique, such as `com.yourname.log`.
 3. Plug in the iPhone, choose it as the run destination at the top of the window, and press Run (⌘R).
@@ -76,10 +62,10 @@ Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** an
 | Path | Purpose |
 | --- | --- |
 | `capacitor.config.json` | App id and name, native HTTP on (the copy the app reads is `ios/App/App/capacitor.config.json`) |
-| `www/` | The app: HTML, scripts, styles and icons |
-| `sync-web.sh` | Copies `www/` into `ios/App/App/public`, which is what gets built into the app |
+| `www/` | Browser-test target (`tests/lib.js`) and the fallback web view |
+| `sync-web.sh` | Copies `www/` into `ios/App/App/public` |
 | `VERSION` | The app version; the build number comes from the workflow run |
-| `ios/App` | The Xcode project: icon, launch screen, iPhone-only, portrait-only |
+| `ios/App` | The Xcode project: SwiftUI screens in `LogNative`, icon, launch screen, iPhone-only, portrait-only |
 
 ## Apple Health sync
 
