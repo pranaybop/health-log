@@ -95,7 +95,7 @@ jobs:
           path: ${{ env.IPA }}
           retention-days: 30
 
-  # A debug copy in the iPhone simulator on made-up data: package tests, tabs, screenshots.
+  # A debug copy in the iPhone simulator on made-up data: LogCoreTests, a debug build, tabs, and screenshots. Summary line: NATIVE-CHECK.
   simulator:
     needs: test
     uses: ./.github/workflows/ios-check.yml
