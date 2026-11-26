@@ -6,9 +6,6 @@ import LogHealth
 /// day's weight, food, check-in, food thoughts, recovery signals, and medication cards,
 /// sleep, Apple Health, macros and meals. Past days show that day's data; future days are disabled.
 public struct TodayScreen: View {
-    /// Flip to true when this screen covers everything the web version does.
-    public static let isReady = true
-
     @Environment(LogStore.self) private var store
 
     @State private var dayOffset = TodayDebug.dayOffset

@@ -163,13 +163,6 @@ extension Analytics.Trends {
         return m
     }
 
-    /// A daily_health field by day (the first row for a day wins, like the web's find()).
-    static func healthMap(_ d: Dashboard, _ field: KeyPath<DailyHealth, Double?>) -> [String: Double] {
-        var m: [String: Double] = [:]
-        for r in d.dailyHealth { if let v = r[keyPath: field], m[r.day] == nil { m[r.day] = v } }
-        return m
-    }
-
     static func protocolRow(_ d: Dashboard, _ compound: String) -> ProtocolRow? {
         d.protocols.first { ($0.compound ?? "").lowercased() == compound }
     }

@@ -80,10 +80,7 @@ The snapshot sent to the model is built by `DataDigest` in `LogCore/AskData.swif
 
 ## Making changes
 
-1. Edit the files in `www/`.
-2. Run the tests: `cd ../tests && npm test` (see the root README).
-3. Run `sh sync-web.sh` to copy `www/` into the Xcode project (`ios/App/App/public`). The workflow does this itself, but the copy is committed so building straight from Xcode works, and the tests check the two match.
-4. For a release you want to tell apart, bump `VERSION` (for example `1.1` to `1.2`). The build number goes up by one on every build by itself.
+Edit the screen in `ios/App/LogNative`. For a `www/` change, run `cd ../tests && npm test` and `sh sync-web.sh` (the workflow copies `www/` into `ios/App/App/public` itself; that copy is committed, and the tests check the two match). Bump `VERSION` for a release you want to tell apart. The build number goes up by one on every build.
 
 ## Versions
 
@@ -110,7 +107,7 @@ Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** an
 
 ## Build and install
 
-1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`), run `sh ios-app/sync-web.sh`, and open `ios-app/ios/App/App.xcodeproj` in Xcode. No npm step is needed: Capacitor comes in through Swift Package Manager, and the config and web files are committed. A build from Xcode shows as "development copy" on the Log tab; set the version under the App target's **General** tab if you want one. Run `npm install && npx cap sync ios` only after changing native plugins.
+1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`) and open `ios-app/ios/App/App.xcodeproj` in Xcode. No npm step is needed: Capacitor comes in through Swift Package Manager. A build from Xcode shows as "development copy" on the Log tab; set the version under the App target's **General** tab if you want one. Run `sh ios-app/sync-web.sh` only after changing `www/`, and `npm install && npx cap sync ios` only after changing native plugins.
 
 2. In Xcode, select the **App** target, open **Signing & Capabilities**, and pick your Apple ID under **Team** (add it in Xcode Settings > Accounts if it isn't listed). If Xcode says the bundle identifier is taken, change `com.pranaybop.log` to something unique, such as `com.yourname.log`.
 3. Plug in the iPhone, choose it as the run destination at the top of the window, and press Run (⌘R).
@@ -129,10 +126,10 @@ Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** an
 | Path | Purpose |
 | --- | --- |
 | `capacitor.config.json` | App id and name, native HTTP on (the copy the app reads is `ios/App/App/capacitor.config.json`) |
-| `www/` | The app: HTML, scripts, styles and icons |
-| `sync-web.sh` | Copies `www/` into `ios/App/App/public`, which is what gets built into the app |
+| `www/` | Browser-test target (`tests/lib.js`) and the fallback web view |
+| `sync-web.sh` | Copies `www/` into `ios/App/App/public` |
 | `VERSION` | The app version; the build number comes from the workflow run |
-| `ios/App` | The Xcode project: icon, launch screen, iPhone-only, portrait-only |
+| `ios/App` | The Xcode project: SwiftUI screens in `LogNative`, icon, launch screen, iPhone-only, portrait-only |
 
 ## Apple Health sync
 

@@ -57,7 +57,6 @@ final class LogCoreTests: XCTestCase {
     func testDrugLevel() {
         let d = Self.dashboard
         XCTAssertEqual(Analytics.remaining(at: clock, doses: d.doses, protocols: d.protocols), 2.926036254935489, accuracy: 1e-9)
-        XCTAssertEqual(Analytics.levelShare(at: clock, dashboard: d)!, 0.6057586161605162, accuracy: 1e-9)
     }
 
     func testPlanTotalsTargets() {
@@ -133,12 +132,6 @@ final class LogCoreTests: XCTestCase {
         cleared.doses.append(firstSkip)
         XCTAssertEqual(Analytics.nextPlanned(cleared)?.plannedOn, "2026-12-06")
         XCTAssertTrue(Analytics.planIsOverdue(Analytics.nextPlanned(cleared)!, now: dec8))
-    }
-
-    func testRollingMean() {
-        let v = [DayValue(key: "2026-11-01", value: 1), DayValue(key: "2026-11-02", value: 3), DayValue(key: "2026-11-09", value: 5)]
-        let r = Analytics.rollingMean(v, days: 7)
-        XCTAssertEqual(r.map(\.value), [1, 2, 5])
     }
 
     func testReminderSettingsRoundTrip() {

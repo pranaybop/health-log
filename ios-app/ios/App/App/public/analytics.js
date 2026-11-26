@@ -45,28 +45,6 @@ function plannedDoses(doses, protocol) {
   return { list, next, withNext: list.concat(planned) };
 }
 
-function levelSeries(doses, protocol, withPlanned) {
-  const real = (doses || []).filter((d) => !d.skipped && parseTs(d.taken_at) && num(d.dose_mg) != null);
-  if (!real.length) return null;
-  const start = parseTs(real[0].taken_at);
-  const end = new Date(RETA_START.getTime() + 14 * 86400000);
-  const source = withPlanned ? plannedDoses(doses, protocol).withNext : real;
-  const points = [];
-  const plannedPts = [];
-  const labels = [];
-  const marks = [];
-  for (let t = new Date(start); t <= end; t = new Date(t.getTime() + 86400000)) {
-    const noon = new Date(t);
-    points.push(remainingAt(noon, real, protocol));
-    plannedPts.push(remainingAt(noon, source, protocol));
-    const key = dateKeyCT(noon);
-    const markDates = ["2026-11-02", "2026-11-08", "2026-11-15", "2026-11-22", "2026-11-29", "2026-12-06"];
-    labels.push(markDates.includes(key) ? fmtDateCT(noon, false) : "");
-    if (key === "2026-12-06") marks.push({ i: points.length - 1, text: "Reta" });
-  }
-  return { points, plannedPts, labels, marks };
-}
-
 function parseWeights(weights) {
   return (weights || [])
     .map((w) => ({ at: parseTs(w.measured_at), lb: num(w.weight_lb), notes: w.notes, day: parseTs(w.measured_at) && dateKeyCT(parseTs(w.measured_at)) }))
@@ -81,19 +59,6 @@ function dailyWeight(parsed) {
     else byDay.set(w.day, w); // latest that day
   }
   return [...byDay.values()].sort((a, b) => a.at - b.at);
-}
-
-function ema(values, span) {
-  if (!values.length) return [];
-  const alpha = 2 / (span + 1);
-  const out = [];
-  let prev = null;
-  for (const v of values) {
-    if (v == null) { out.push(prev); continue; }
-    prev = prev == null ? v : alpha * v + (1 - alpha) * prev;
-    out.push(prev);
-  }
-  return out;
 }
 
 /* Time-aware exponential smoothing for irregular weigh-ins: each reading pulls the
@@ -229,7 +194,6 @@ function verdictCard(data) {
   receipts.push(`${doses.length} dose${doses.length === 1 ? "" : "s"} logged.`);
 
   const daysOn = (Date.now() - TIRZ_START.getTime()) / 86400000;
-  const recent = parseWeights(data.weights).filter((w) => w.at >= TIRZ_START);
   const stall = stallCheck(data);
   if (daysOn < 10 && j.changeStart > -2) {
     label = "Building";
@@ -498,36 +462,14 @@ function titrationHistory(doses) {
   return steps;
 }
 
-function weightProjection(data, daysForward) {
+function weightProjection(data) {
   const daily = dailyWeight(parseWeights(data.weights).filter((w) => w.at >= TIRZ_START));
   if (daily.length < 4) return { ready: false, need: 4 - daily.length };
   const t0 = daily[0].at.getTime();
   const fit = linearFit(daily.map((w) => ({ x: (w.at - t0) / 86400000, y: w.lb })));
   if (!fit) return { ready: false, need: 1 };
   const last = daily[daily.length - 1];
-  const lastX = (last.at - t0) / 86400000;
-  const horizon = daysForward || 42;
-  const future = [];
-  const labels = [];
-  const historical = daily.map((w) => w.lb);
-  // Build a combined series from first point through horizon
-  const points = [];
-  const actual = [];
-  const projected = [];
-  const labs = [];
-  const start = daily[0].at;
-  const end = new Date(last.at.getTime() + horizon * 86400000);
-  for (let t = new Date(start); t <= end; t = new Date(t.getTime() + 86400000)) {
-    const x = (t - t0) / 86400000;
-    const key = dateKeyCT(t);
-    const hit = daily.find((w) => w.day === key);
-    actual.push(hit ? hit.lb : null);
-    const y = fit.intercept + fit.slope * x;
-    projected.push(t >= last.at ? y : (hit ? hit.lb : y));
-    const mark = key.endsWith("-01") || key === dateKeyCT(last.at) || key === dateKeyCT(end) || key === "2027-01-01";
-    labs.push(mark ? fmtDateCT(t, false) : "");
-  }
-  return { ready: true, fit, actual, projected, labels: labs, weekly: fit.slope * 7, last };
+  return { ready: true, fit, weekly: fit.slope * 7, last };
 }
 
 function metricCatalog(data) {
@@ -572,15 +514,9 @@ function alignedPair(mapA, mapB) {
 function earnDays(data, weeks) {
   const n = (weeks || 8) * 7;
   const today = todayKey();
-  const end = Date.parse(today + "T12:00:00Z");
-  const start = end - (n - 1) * 86400000;
   const byDay = new Map((data.checkins || []).map((c) => [c.day, c]));
   const cells = [];
   for (let i = 0; i < n; i++) {
-    const d = new Date(start + i * 86400000);
-    // dateKey via UTC noon surrogate
-    const iso = new Date(start + i * 86400000).toISOString().slice(0, 10);
-    // The start was computed from todayKey as UTC date, which matches YYYY-MM-DD of CT dates we store
     const day = shiftDay(today, -(n - 1 - i));
     const row = byDay.get(day);
     cells.push({ day, earned: row && row.earned != null ? !!row.earned : null, has: !!row, today: day === today });
@@ -593,11 +529,6 @@ function shiftDay(yyyyMmDd, delta) {
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + delta);
   return dt.toISOString().slice(0, 10);
-}
-
-function nextSiteAfter(site) {
-  if (!SITES.includes(site)) return SITES[0];
-  return SITES[(SITES.indexOf(site) + 1) % SITES.length];
 }
 
 /* Trailing average over `days` calendar days (inclusive) for points sorted by `key` (YYYY-MM-DD),

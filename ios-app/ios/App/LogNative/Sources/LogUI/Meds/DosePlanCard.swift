@@ -111,7 +111,7 @@ struct MLDosePlanCard: View {
 
     private func when(_ key: String) -> String {
         let d = LogTime.noon(key)
-        return "\(MLFmt.day(d)), \(MLFmt.daysWord(MLFmt.days(until: d, now: now)))"
+        return "\(MLFmt.day(d)), \(TodayText.daysWord(MLFmt.days(until: d, now: now)))"
     }
 
     private func stepsTable(_ steps: [PlanStep], current: Int?, today: String) -> some View {
