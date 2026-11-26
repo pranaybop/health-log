@@ -165,6 +165,16 @@ Deno.serve(async (req: Request) => {
       if (!REDIRECT_RE.test(redirect) || !/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) {
         return json(400, { ok: false, error: "invalid_request" });
       }
+      // Say so in the app if Google isn't turned on in Supabase Auth yet, instead of a raw error page.
+      try {
+        const res = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: anon } });
+        const settings = await res.json() as { external?: Record<string, boolean> };
+        if (res.ok && settings.external && settings.external.google !== true) {
+          return json(400, { ok: false, error: "google_not_enabled", message: "Google sign-in isn’t set up yet. Use email for now." });
+        }
+      } catch {
+        // Can't tell: let the sign-in page try.
+      }
       const q = new URLSearchParams({
         provider: "google",
         redirect_to: redirect,
