@@ -28,13 +28,6 @@ enum MLFmt {
     }
     /// "3 vials", "1 vial"
     static func count(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
-    /// The web's daysWord: "today", "tomorrow", "in 3 days", "1 day ago", "3 days ago"
-    static func daysWord(_ n: Int) -> String {
-        if n == 0 { return "today" }
-        if n == 1 { return "tomorrow" }
-        if n < 0 { return "\(-n) day\(n == -1 ? "" : "s") ago" }
-        return "in \(n) days"
-    }
     static func days(until d: Date, now: Date = Date()) -> Int { LogTime.daysUntil(d, now: now) }
     /// Site key to words: "Love R" -> "Right love handle"
     static func site(_ s: String?) -> String {
