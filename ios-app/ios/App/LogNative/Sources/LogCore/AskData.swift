@@ -1,8 +1,7 @@
 import Foundation
-import Security
 
-// "Ask your data": a plain-text snapshot of the log for a language model, the key store for
-// people who bring their own API key, and the two cloud calls (Claude and Grok). The free,
+// "Ask your data": a plain-text snapshot of the log for a language model, and the call that
+// sends it with the AI key saved under Account (OpenAI, Anthropic, Google or xAI). The free,
 // no-key path is Apple Intelligence on the phone (LogUI/Shared/AskScreen.swift); its context is
 // small, so it gets the `.compact` snapshot.
 
@@ -22,7 +21,7 @@ public enum DataDigest {
         let today = LogTime.today(now)
         let from = LogTime.shift(today, -(days - 1))
         var out: [String] = []
-        out.append("Health log snapshot. Today is \(today) (America/Chicago). Units: lb, kcal, g, minutes, bpm, ms.")
+        out.append("Health log snapshot. Today is \(today) (\(LogTime.calendar.timeZone.identifier)). Units: lb, kcal, g, minutes, bpm, ms.")
 
         if let p = d.profile {
             out.append("Profile: start \(f(p.startWeightLb, 1)) lb, goal \(f(p.goalWeightLb, 1)) lb, height \(f(p.heightIn)) in.")
@@ -136,8 +135,8 @@ public enum DataDigest {
 
     /// What the model is told before the snapshot.
     public static let instructions = """
-    You answer questions about the user's own health log: weight, food, GLP-1 medication \
-    (tirzepatide, retatrutide), Apple Health activity, sleep and heart data, and daily check-ins. \
+    You answer questions about the user's own health log: weight, food, medication (GLP-1s \
+    and peptides), Apple Health activity, sleep and heart data, and daily check-ins. \
     Use only the snapshot below; if it doesn't hold the answer, say what's missing. Quote the \
     actual numbers and dates you used, look for patterns across days, and keep answers short and \
     plain. Weight changes should use the trend, not single weigh-ins. You are not a doctor: for \
@@ -145,71 +144,7 @@ public enum DataDigest {
     """
 }
 
-// MARK: - Bring your own key
-
-public enum AskProvider: String, CaseIterable, Identifiable, Sendable {
-    case onDevice, claude, grok
-    public var id: String { rawValue }
-
-    public var label: String {
-        switch self {
-        case .onDevice: return "On this iPhone"
-        case .claude: return "Claude"
-        case .grok: return "Grok"
-        }
-    }
-
-    public var defaultModel: String {
-        switch self {
-        case .onDevice: return ""
-        case .claude: return "claude-opus-5-5"
-        case .grok: return "grok-4"
-        }
-    }
-
-    public var keyHint: String {
-        switch self {
-        case .onDevice: return ""
-        case .claude: return "Anthropic API key (console.anthropic.com)"
-        case .grok: return "xAI API key (console.x.ai)"
-        }
-    }
-}
-
-/// API keys in the Keychain, this device only. Never logged, never sent to the log's server.
-public enum AskKeyStore {
-    private static let service = "com.pranaybop.log.ask"
-
-    private static func query(_ p: AskProvider) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: service,
-         kSecAttrAccount as String: p.rawValue]
-    }
-
-    public static func read(_ p: AskProvider) -> String? {
-        var q = query(p)
-        q[kSecReturnData as String] = true
-        q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess,
-              let data = out as? Data, let text = String(data: data, encoding: .utf8), !text.isEmpty else { return nil }
-        return text
-    }
-
-    public static func write(_ p: AskProvider, _ key: String) {
-        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { clear(p); return }
-        let attrs: [String: Any] = [kSecValueData as String: Data(key.utf8),
-                                    kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
-        if SecItemUpdate(query(p) as CFDictionary, attrs as CFDictionary) == errSecItemNotFound {
-            var add = query(p)
-            add.merge(attrs) { $1 }
-            SecItemAdd(add as CFDictionary, nil)
-        }
-    }
-
-    public static func clear(_ p: AskProvider) { SecItemDelete(query(p) as CFDictionary) }
-}
+// MARK: - With the person's own AI key
 
 public struct AskTurn: Hashable, Sendable, Identifiable {
     public enum Role: String, Sendable { case user, assistant }
@@ -219,7 +154,8 @@ public struct AskTurn: Hashable, Sendable, Identifiable {
     public init(role: Role, text: String) { self.role = role; self.text = text }
 }
 
-/// The cloud calls, straight from the phone to the provider with the user's own key.
+/// Ask with the AI key saved under Account (the same one meal logging uses), straight from the
+/// phone to that company. Nothing goes through the log's server.
 public enum AskCloud {
     static let session: URLSession = {
         let c = URLSessionConfiguration.default
@@ -227,68 +163,60 @@ public enum AskCloud {
         return URLSession(configuration: c)
     }()
 
-    public static func send(_ provider: AskProvider, key: String, model: String, system: String, turns: [AskTurn]) async throws -> String {
-        switch provider {
-        case .claude: return try await claude(key: key, model: model, system: system, turns: turns)
-        case .grok: return try await grok(key: key, model: model, system: system, turns: turns)
-        case .onDevice: throw LogError.server("On-device answers don't use the network.")
-        }
-    }
-
-    static func claude(key: String, model: String, system: String, turns: [AskTurn]) async throws -> String {
-        var req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "content-type")
-        req.setValue(key, forHTTPHeaderField: "x-api-key")
-        req.setValue("2026-10-21", forHTTPHeaderField: "anthropic-version")
-        // If a safety check declines on the chosen model, the API retries on a fallback model.
-        req.setValue("server-side-fallback-2026-07-01", forHTTPHeaderField: "anthropic-beta")
-        let body: [String: Any] = [
-            "model": model,
-            "max_tokens": 16000,
-            "system": system,
-            "output_config": ["effort": "low"],
-            "fallbacks": "default",
-            "messages": turns.map { ["role": $0.role.rawValue, "content": $0.text] },
-        ]
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let json = try await post(req, who: "Claude")
-        if (json["stop_reason"] as? String) == "refusal" {
-            return "Claude declined to answer that one. Try rephrasing the question."
-        }
-        let blocks = json["content"] as? [[String: Any]] ?? []
-        let text = blocks.filter { ($0["type"] as? String) == "text" }.compactMap { $0["text"] as? String }.joined()
-        guard !text.isEmpty else { throw LogError.server("Claude sent back an empty answer.") }
-        return text
-    }
-
-    static func grok(key: String, model: String, system: String, turns: [AskTurn]) async throws -> String {
-        var req = URLRequest(url: URL(string: "https://api.x.ai/v1/chat/completions")!)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        var messages: [[String: String]] = [["role": "system", "content": system]]
-        messages += turns.map { ["role": $0.role.rawValue, "content": $0.text] }
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["model": model, "messages": messages])
-        let json = try await post(req, who: "Grok")
-        let choices = json["choices"] as? [[String: Any]] ?? []
-        let text = (choices.first?["message"] as? [String: Any])?["content"] as? String ?? ""
-        guard !text.isEmpty else { throw LogError.server("Grok sent back an empty answer.") }
-        return text
-    }
-
-    static func post(_ req: URLRequest, who: String) async throws -> [String: Any] {
+    public static func send(_ config: MealAIConfig, system: String, turns: [AskTurn]) async throws -> String {
+        let req = try request(config, system: system, turns: turns)
+        let name = config.provider.name
         let data: Data, response: URLResponse
         do { (data, response) = try await session.data(for: req) }
-        catch { throw LogError.network("Couldn’t reach \(who). Check your connection.") }
-        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
-        guard let http = response as? HTTPURLResponse else { throw LogError.network("No response from \(who).") }
+        catch { throw LogError.network("Couldn’t reach \(name). Check your connection.") }
+        guard let http = response as? HTTPURLResponse else { throw LogError.network("No response from \(name).") }
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 || http.statusCode == 403 { throw LogError.server("\(who) rejected the API key.") }
-            let err = json["error"]
-            let msg = (err as? [String: Any])?["message"] as? String ?? (err as? String) ?? "\(who) returned \(http.statusCode)."
-            throw LogError.server(msg)
+            if http.statusCode == 401 || http.statusCode == 403 { throw LogError.server("\(name) didn’t accept the key. Check it in Account.") }
+            if http.statusCode == 404 { throw LogError.server("\(name) doesn’t know the model “\(config.model)”. Change it in Account.") }
+            if http.statusCode == 429 { throw LogError.server("\(name) says the key is out of quota or rate-limited.") }
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let msg = (json?["error"] as? [String: Any])?["message"] as? String
+            throw LogError.server(msg ?? "\(name) returned \(http.statusCode).")
         }
-        return json
+        if config.provider == .anthropic,
+           let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           json["stop_reason"] as? String == "refusal" {
+            return "Claude declined to answer that one. Try rephrasing the question."
+        }
+        guard let text = MealAI.replyText(data, provider: config.provider)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { throw LogError.server("Couldn’t read \(name)’s answer.") }
+        return text
+    }
+
+    static func request(_ config: MealAIConfig, system: String, turns: [AskTurn]) throws -> URLRequest {
+        let model = config.model.trimmingCharacters(in: .whitespaces).isEmpty ? config.provider.defaultModel : config.model
+        var req: URLRequest
+        var body: [String: Any]
+        switch config.provider {
+        case .openai, .xai:
+            let base = config.provider == .openai ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions"
+            req = URLRequest(url: URL(string: base)!)
+            req.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+            var messages: [[String: String]] = [["role": "system", "content": system]]
+            messages += turns.map { ["role": $0.role.rawValue, "content": $0.text] }
+            body = ["model": model, "messages": messages]
+        case .anthropic:
+            req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
+            req.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
+            req.setValue("2026-10-21", forHTTPHeaderField: "anthropic-version")
+            body = ["model": model, "max_tokens": 16000, "system": system,
+                    "messages": turns.map { ["role": $0.role.rawValue, "content": $0.text] }]
+        case .google:
+            let escaped = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
+            req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(escaped):generateContent")!)
+            req.setValue(config.apiKey, forHTTPHeaderField: "x-goog-api-key")
+            body = ["systemInstruction": ["parts": [["text": system]]],
+                    "contents": turns.map { ["role": $0.role == .user ? "user" : "model", "parts": [["text": $0.text]]] }]
+        }
+        req.httpMethod = "POST"
+        req.timeoutInterval = 120
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return req
     }
 }

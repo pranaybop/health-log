@@ -31,12 +31,12 @@ Trends → Body opens with a 0–10 readiness score (`LogCore/Readiness.swift`),
 
 ## Ask your data
 
-Trends → **Ask** answers questions about the log inside the app. Three choices:
+Trends → **Ask** answers questions about the log inside the app. Two choices:
 
-- **On this iPhone** (default): Apple Intelligence's on-device model (`FoundationModels`, iOS 26, an Apple Intelligence iPhone with it turned on). Free, no key, nothing leaves the phone. Its context is small, so it sees the last two weeks.
-- **Claude** or **Grok**: the person's own API key from console.anthropic.com or console.x.ai, kept in the Keychain (this device only) and sent only to that provider. About 90 days of the log goes with each question. A Claude or SuperGrok subscription doesn't include API access, so a subscription can't be used here; usage is billed per question to the API account.
+- **On this iPhone** (default where it's available): Apple Intelligence's on-device model (`FoundationModels`, iOS 26, an Apple Intelligence iPhone with it turned on). Free, no key, nothing leaves the phone. Its context is small, so it sees the last two weeks.
+- **Your AI key**: the key saved under Account › AI (the same one meal logging uses: OpenAI, Anthropic, Google or xAI), called straight from the phone. About 90 days of the log goes with each question. A ChatGPT, Claude or SuperGrok subscription doesn't include API access, so this is a key from the company's developer console, billed per question.
 
-The snapshot sent to the model is built by `DataDigest` in `LogCore/AskData.swift`. Nothing about Ask touches Supabase.
+The snapshot sent to the model is built by `DataDigest` in `LogCore/AskData.swift`. Nothing about Ask goes through Supabase.
 
 ## Making changes
 

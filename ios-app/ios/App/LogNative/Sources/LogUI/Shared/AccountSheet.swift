@@ -69,9 +69,9 @@ struct AccountSheet: View {
                         }
                     }
                 } header: {
-                    Text("Meal logging")
+                    Text("AI: meal logging and Ask")
                 } footer: {
-                    Text("Your key stays in this iPhone's Keychain and goes straight to the AI company when you estimate a meal. It's never sent to the log.")
+                    Text("Your key stays in this iPhone's Keychain and goes straight to the AI company when you estimate a meal or ask about your data on Trends › Ask. It's never sent to the log.")
                 }
 
                 Section {
