@@ -1,23 +1,54 @@
 # Log for iPhone
 
-The Log app (Capacitor 8). Since Nov 25, 2026 the app's files are built into the app itself, from `www/`, and new work ships only here; the website is frozen.
+Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today, Meds, Trends and Log are SwiftUI (`ios/App/LogNative`), Apple Health sync is native Swift, and the tab bar is a native `UITabBarController` (Liquid Glass on iOS 26). `www/` is only the browser-test target and fallback. Nothing in this folder holds a passcode, token or key. Keep it that way.
 
-- The app opens from its own files, so it starts offline and doesn't depend on the website.
-- API calls go through the app's native HTTP (`CapacitorHttp`), so the Edge Functions' CORS rules don't apply to it and didn't need changing.
-- The passcode is entered once on the app's lock screen and kept in the app's own storage. The first version with built-in files (1.1) starts with fresh storage: enter the passcode again, and the Apple Health history backfill runs once more (it only fills in what's missing).
+## Features
 
-Nothing in this folder holds a passcode, token or key. Keep it that way.
+### Accounts and setup
+- **Sign in** with a free email account, or Google once it's turned on in Supabase Auth (until then the app says so); the original passcode still works. Each account's rows are its own (`user_id` on every `log` table, enforced by the Edge Functions). Signing in on a phone that has the passcode links the original log to the account.
+- **First run** for new accounts: about you, medications (tirzepatide, semaglutide, retatrutide, tesamorelin), optional Apple Health, food logging, daily calorie and protein targets.
+- **Account sheet:** sign in or out, link the log, and the AI key used for meal logging and Ask.
+- **Face ID** when you come back to the app; days follow your own time zone.
+- **Offline:** the last data opens without a connection, and simple logs queue until you're back online.
 
-## The native shell (1.2)
+### Today
+- One day at a time: swipe, use the week strip or month picker to move between days.
+- **Weight hero:** current weight and trend, change since start, pace as lb a week and % of body weight.
+- **Food:** a calorie and protein ring against your targets, **Log a meal** (describe it, your AI key estimates the macros, review, save), then the day's meals and macros.
+- **Under-eating** card in the evening when the day is far below target.
+- **Thinking about food?** one tap logs a passing thought, strong pull or craving; can start the hunger Live Activity.
+- **Side effects** in one tap with severity.
+- **Medication:** estimated drug level now, last dose, next dose from the plan (overdue when missed), next injection site.
+- **Daily peptides** (tesamorelin): tonight's shot with one-tap logging on a rotating belly site.
+- **Retatrutide switch** card around the switch date.
+- **Off your normal:** flags a day when two or more recovery signals (resting HR, HRV, breathing rate, wrist temperature) are off your own 30-day normal.
+- **Sleep** and **Body** (Apple Health) cards, the evening **check-in**, a **progress-photo prompt** after a new weigh-in ("New low" when it's the lowest yet), and a **Verdict** on how it's going.
 
-The app is going native in stages. Stage 1 (version 1.2) wraps the screens in native iOS:
+### Meds
+- **Next-dose card** at the top with one-tap logging when it's due.
+- **Drug level** chart from a half-life model (tirzepatide 5 days, retatrutide 6), with the next planned shot drawn ahead.
+- **Dose plan** from the titration sheet: next dose, vial to draw from, weeks at each step; a shot up to 3 days early counts for that week.
+- **Injection sites** map with rotation, **titration** and **dosing history**, **protocol**, **vials** with supply runway, and daily **peptide regimens**.
 
-- **Tab bar:** a native `UITabBarController` (`ios/App/App/LogShell.swift`). Built with the iOS 26 SDK it is Liquid Glass on iOS 26 (and shrinks while you scroll down); older iOS gets the standard bar. The screens are still the web code in `www/`, in one web view that moves between the tabs, so nothing reloads.
-- **Passcode:** kept in the iPhone Keychain (this device only, readable after first unlock), not in the web view's storage. 1.1's stored passcode moves over on first launch.
-- **How the page and the shell talk:** `window.LOG_NATIVE` (set before the page's scripts run) tells the page it's inside the shell; the page posts `tab`, `locked`, `getPasscode`, `setPasscode` and `clearPasscode` to `window.webkit.messageHandlers.logShell`; the shell calls `window.logShellSelectTab(id)`.
-- **Simulator check:** the workflow's `simulator` job runs a debug build in the iPhone simulator with made-up data (`-demo <tab>`, debug builds only) and prints screenshots into its log.
+### Trends
+- **Summary:** tiles for weight, food, maintenance, medication and recovery that open their section.
+- **Ask your data:** chat with your log in the app (details below).
+- **Weight:** smoothed trend line over weigh-ins, ranges 1M / 3M / 1Y / All / Since GLP-1, swipe back through history with the scale refitting to what's on screen, compare-with overlays (calories, steps, sleep, resting HR, HRV, food thoughts, food noise), a straight-line projection, goal line and dose markers. **Progress:** % of the way to goal, lost and to go, pace, predicted goal date, 5 lb milestones with the date each was reached or is expected, today's trend change, lowest trend, change over 1 week to all time. **Stall check**, **body composition** (BMI, body fat, lean mass, share of loss that was lean) and **progress photos**.
+- **Food:** daily calories and protein against targets, **maintenance calories** (from food logs and weight trend, and from the Apple Watch), **protein target** hit rate, **food thoughts** by day and time.
+- **Meds:** wear-off, the week after a shot, appetite by drug level, retatrutide vs tirzepatide, cycle recaps, feel report, side effects.
+- **Body:** **Readiness** score (below), off your normal history, heart, everything else from Apple Health, measurements.
+- **Training:** steps and workouts.
+- **More:** weekly summary, pattern explorer, Earn It wall, prescriber export (CSV, print views and a 4-week coach pack).
 
-Next stages move screens to SwiftUI one at a time (Trends first), then Apple Health sync to native Swift with background refresh.
+### Log
+- Apple Health sync status and backfill, today's check-in (ate / moved vs usual, how the dose feels, mood, food noise, energy, sleep), weigh-in with an optional progress photo, Earn It, reminders.
+- More to log: dose (with site), side effect, measurement, vial, and a reconstitution calculator.
+
+### Around the app
+- **Hunger Live Activity** on the Lock Screen and Dynamic Island: today's food thoughts on a timeline, calories left and drug level, with Passing / Strong / Craving buttons that log without opening the app.
+- **Reminders** for shots, check-ins and weigh-ins, scheduled a day at a time and skipped once done.
+- **Siri and Shortcuts:** "Log my weight in Log", "I'm thinking about food in Log".
+- **Pull to refresh** on every tab (syncs the last 2 days from Apple Health first) and a background refresh.
 
 ## Progress photos
 
