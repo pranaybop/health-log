@@ -33,7 +33,7 @@ Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today
 
 ### Trends
 - **Summary:** tiles for weight, food, maintenance, medication and recovery that open their section.
-- **Ask your data:** chat with your log in the app (details below).
+- **Ask your data:** chat with your log in the app, answered by Bonsai 2 running on the phone, Apple Intelligence, or your own AI key (details below).
 - **Weight:** smoothed trend line over weigh-ins, ranges 1M / 3M / 1Y / All / Since GLP-1, swipe back through history with the scale refitting to what's on screen, compare-with overlays (calories, steps, sleep, resting HR, HRV, food thoughts, food noise), a straight-line projection, goal line and dose markers. **Progress** (counted from your first GLP-1 shot, so years-old Apple Health weigh-ins don't count): % of the way to goal, lost and to go, pace, predicted goal date, 5 lb milestones with the date each was reached or is expected, today's trend change, lowest trend, change over 1 week to all time. **Stall check**, **body composition** (BMI, body fat, lean mass, share of loss that was lean) and **progress photos**.
 - **Food:** daily calories and protein against targets, **maintenance calories** (from food logs and weight trend, and from the Apple Watch), **protein target** hit rate, **food thoughts** by day and time.
 - **Meds:** wear-off, the week after a shot, appetite by drug level, retatrutide vs tirzepatide, cycle recaps, feel report, side effects.
@@ -63,10 +63,16 @@ Trends → Body opens with a 0–10 readiness score (`LogCore/Readiness.swift`),
 
 ## Ask your data
 
-Trends → **Ask** answers questions about the log inside the app. Two choices:
+Trends → **Ask** answers questions about the log inside the app. Three choices:
 
-- **On this iPhone** (default where it's available): Apple Intelligence's on-device model (`FoundationModels`, iOS 26, an Apple Intelligence iPhone with it turned on). Free, no key, nothing leaves the phone. Its context is small, so it sees the last two weeks.
-- **Your AI key**: the key saved under Account › AI (the same one meal logging uses: OpenAI, Anthropic, Google or xAI), called straight from the phone. About 90 days of the log goes with each question. A ChatGPT, Claude or SuperGrok subscription doesn't include API access, so this is a key from the company's developer console, billed per question.
+- **Local model** (default once one is downloaded): an open model run on the phone's GPU with [MLX Swift](https://github.com/ml-explore/mlx-swift-lm) (`LogLocalAI`). Free, private, works offline; it sees the last 30 days. Download it once from Hugging Face into Application Support/Models (not backed up); delete it from the same panel.
+  - **Bonsai 2 9B** (PrismML, `prism-ml/Ternary-Bonsai-2-9B-mlx-2bit`, 3.6 GB): the default on iPhones with 8 GB (iPhone 15 Pro and later). A 9B Qwen 3.5–based model with ternary weights, the strongest that fits an 8 GB phone.
+  - **Bonsai 2 4B** (`prism-ml/Ternary-Bonsai-2-4B-mlx-2bit`, 1.9 GB): faster and lighter; the default on phones with less memory.
+  - **Qwen 3.5 4B** (`mlx-community/Qwen3.5-4B-4bit`, 3.1 GB).
+
+  These are the models from the Locally AI app's list that MLX Swift loads as-is. Thinking is off for quick answers (PrismML's non-thinking sampler). Before loading, the app checks there's enough free memory and suggests the 4B model if not; a memory warning unloads it.
+- **Apple AI**: Apple Intelligence's on-device model (`FoundationModels`, iOS 26, with Apple Intelligence turned on). Free and private, but its context is small, so it sees two weeks.
+- **Your key**: the key saved under Account › AI (the same one meal logging uses: OpenAI, Anthropic, Google or xAI), called straight from the phone. About 90 days go with each question. A ChatGPT, Claude or SuperGrok subscription doesn't include API access, so this is a key from the company's developer console, billed per question.
 
 The snapshot sent to the model is built by `DataDigest` in `LogCore/AskData.swift`. Nothing about Ask goes through Supabase.
 

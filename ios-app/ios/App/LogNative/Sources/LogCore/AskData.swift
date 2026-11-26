@@ -6,7 +6,9 @@ import Foundation
 // small, so it gets the `.compact` snapshot.
 
 public enum DataDigest {
-    public enum Size: Sendable { case compact, full }
+    /// compact: 2 weeks (Apple Intelligence's small context); medium: 30 days (a model on the
+    /// phone, where a longer prompt means a longer wait); full: 90 days with meals (cloud).
+    public enum Size: Sendable { case compact, medium, full }
 
     static func f(_ v: Double?, _ digits: Int = 0) -> String {
         guard let v, v.isFinite else { return "" }
@@ -16,8 +18,8 @@ public enum DataDigest {
     /// The log as compact text, newest first. `compact` fits Apple Intelligence's small context
     /// (about 2 weeks); `full` is ~90 days for Claude or Grok.
     public static func make(_ d: Dashboard, now: Date = Date(), size: Size = .full) -> String {
-        let full = size == .full
-        let days = full ? 90 : 14
+        let full = size != .compact
+        let days = size == .full ? 90 : size == .medium ? 30 : 14
         let today = LogTime.today(now)
         let from = LogTime.shift(today, -(days - 1))
         var out: [String] = []
@@ -119,7 +121,7 @@ public enum DataDigest {
             }
             let mealFrom = LogTime.shift(today, -2)
             let meals = d.meals.filter { $0.eatenDate.map { LogTime.dayKey($0) >= mealFrom } ?? false }
-            if !meals.isEmpty {
+            if size == .full && !meals.isEmpty {
                 out.append("Meals, last 3 days (time|item|kcal|protein):")
                 for m in meals.sorted(by: { ($0.eatenAt ?? "") > ($1.eatenAt ?? "") }).prefix(40) {
                     out.append("\(m.eatenAt ?? "")|\(m.item ?? "")|\(f(m.calories))|\(f(m.proteinG))")
