@@ -1,6 +1,6 @@
 # Checks the iPhone app on a Mac runner, on made-up data only (tests/fixture.js).
-# runs_on is a JSON string (default "macos-15"). Callers pass the mac-mini labels when
-# that runner is online for a trusted ref; see pick-runner.yml.
+# runs_on is a JSON string (default "macos-15"). Callers pass the mac-mini labels for a
+# trusted ref unless repository variable IOS_RUNNER is hosted; see pick-runner.yml.
 #   1. the LogNative package's own tests (ios-app/ios/App/LogNative, in an iOS simulator)
 #   2. a debug build of the whole app for the simulator
 #   3. screenshots: the app opens on each tab with -demo <tab>, from every list in
@@ -30,6 +30,7 @@ permissions:
 jobs:
   simulator:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # Applies on the mini and on macos-15, so a stuck simulator job cannot run forever.
     timeout-minutes: 50
     concurrency:
       group: ${{ (contains(inputs.runs_on, 'mac-mini') && 'mac-mini-ios') || format('hosted-{0}-simulator', github.run_id) }}
