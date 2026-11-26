@@ -3,7 +3,7 @@ import HealthKit
 import LogCore
 
 /// The HealthKit side of the sync: one read request for every type, and the reads health.js made
-/// through the Capacitor Health plugin, turned into HealthSample values in the plugin's units.
+/// through the Capacitor Health plugin in the old web app, turned into HealthSample values in the plugin's units.
 /// Like the web sync, a read that fails (a type you didn't allow, nothing recorded) is just empty.
 final class HealthKitReader: @unchecked Sendable {
     let store = HKHealthStore()

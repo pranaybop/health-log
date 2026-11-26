@@ -1,6 +1,5 @@
 import UIKit
 import AppIntents
-import Capacitor
 import LogCore
 import LogHealth
 import LogUI

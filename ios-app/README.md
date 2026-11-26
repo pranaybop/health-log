@@ -1,6 +1,6 @@
 # Log for iPhone
 
-Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today, Meds, Trends and Log are SwiftUI (`ios/App/LogNative`), Apple Health sync is native Swift, and the tab bar is a native `UITabBarController` (Liquid Glass on iOS 26). `www/` is only the browser-test target and fallback. Nothing in this folder holds a passcode, token or key. Keep it that way.
+Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today, Meds, Trends and Log are SwiftUI (`ios/App/LogNative`), Apple Health sync is native Swift, and the tab bar is a native `UITabBarController` (Liquid Glass on iOS 26). There's no web code or Capacitor left in the app (the old web app was removed Nov 26, 2026). Nothing in this folder holds a passcode, token or key. Keep it that way.
 
 ## Features
 
@@ -80,7 +80,7 @@ The snapshot sent to the model is built by `DataDigest` in `LogCore/AskData.swif
 
 ## Making changes
 
-Edit the screen in `ios/App/LogNative`. For a `www/` change, run `cd ../tests && npm test` and `sh sync-web.sh` (the workflow copies `www/` into `ios/App/App/public` itself; that copy is committed, and the tests check the two match). Bump `VERSION` for a release you want to tell apart. The build number goes up by one on every build.
+Edit the screen in `ios/App/LogNative`; `swift test` there (or the workflow) runs the package tests. The simulator screenshots run on made-up data in `ios/screenshots/demo.json` (never real data: this repo is public). Bump `VERSION` for a release you want to tell apart. The build number goes up by one on every build.
 
 ## Versions
 
@@ -88,7 +88,7 @@ Each build is **version** (from `VERSION`) plus **build** (the workflow's run nu
 
 ## Get an .ipa without Xcode
 
-Every push that changes `ios-app/` runs the **iPhone app (.ipa)** workflow (or run it by hand from the Actions tab). It runs the tests, then builds on GitHub's Mac runners an unsigned `Log-<version>-<build>.ipa` and keeps it for 30 days under the run's **Artifacts** (sign in to GitHub to download; it arrives zipped).
+Every push that changes `ios-app/` runs the **iPhone app (.ipa)** workflow (or run it by hand from the Actions tab). It builds on your Mac mini (or GitHub's Mac runners) an unsigned `Log-<version>-<build>.ipa` and keeps it for 30 days under the run's **Artifacts** (sign in to GitHub to download; it arrives zipped).
 
 To put it on your iPhone, use a sideloading tool on a Mac or PC, which signs it with your Apple ID:
 
@@ -101,13 +101,13 @@ Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** an
 
 ## What you need
 
-- A Mac with Xcode installed (from the App Store) and Node.js.
+- A Mac with Xcode 26 or later installed (from the App Store). The first build may ask to download the Metal toolchain (Xcode › Settings › Components) for the on-device model.
 - Your iPhone and a USB-C cable (or the same Wi-Fi network after the first run).
 - An Apple ID. A free one works; see "How long it lasts" below.
 
 ## Build and install
 
-1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`) and open `ios-app/ios/App/App.xcodeproj` in Xcode. No npm step is needed: Capacitor comes in through Swift Package Manager. A build from Xcode shows as "development copy" on the Log tab; set the version under the App target's **General** tab if you want one. Run `sh ios-app/sync-web.sh` only after changing `www/`, and `npm install && npx cap sync ios` only after changing native plugins.
+1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`) and open `ios-app/ios/App/App.xcodeproj` in Xcode. Swift Package Manager fetches the dependencies (MLX and the Hugging Face loaders for Ask's on-device model). A build from Xcode shows as "development copy" on the Log tab; set the version under the App target's **General** tab if you want one.
 
 2. In Xcode, select the **App** target, open **Signing & Capabilities**, and pick your Apple ID under **Team** (add it in Xcode Settings > Accounts if it isn't listed). If Xcode says the bundle identifier is taken, change `com.pranaybop.log` to something unique, such as `com.yourname.log`.
 3. Plug in the iPhone, choose it as the run destination at the top of the window, and press Run (⌘R).
@@ -125,18 +125,16 @@ Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** an
 
 | Path | Purpose |
 | --- | --- |
-| `capacitor.config.json` | App id and name, native HTTP on (the copy the app reads is `ios/App/App/capacitor.config.json`) |
-| `www/` | Browser-test target (`tests/lib.js`) and the fallback web view |
-| `sync-web.sh` | Copies `www/` into `ios/App/App/public` |
 | `VERSION` | The app version; the build number comes from the workflow run |
-| `ios/App` | The Xcode project: SwiftUI screens in `LogNative`, icon, launch screen, iPhone-only, portrait-only |
+| `ios/App` | The Xcode project: SwiftUI screens in `LogNative`, the widgets in `LogWidgets`, icon, launch screen, iPhone-only, portrait-only |
+| `ios/screenshots` | The CI simulator screenshot lists and their made-up data (`demo.json`) |
 
 ## Apple Health sync
 
-The app reads everything [`@capgo/capacitor-health`](https://github.com/Cap-go/capacitor-health) supports on iPhone (pulled in by Swift Package Manager from its `8.13.0` tag): steps, distance, active and resting energy, exercise minutes, stand hours, flights, cycling, resting and all-day heart rate, HRV, VO2 max, breathing rate, blood oxygen, blood pressure, glucose, body, basal and sleeping wrist temperature, sleep and sleep stages, mindful minutes, State of Mind, water, dietary energy, height, weigh-ins, body fat and workouts.
+The app reads, with HealthKit directly (`LogHealth`): steps, distance, active and resting energy, exercise minutes, stand hours, flights, cycling, resting and all-day heart rate, HRV, VO2 max, breathing rate, blood oxygen, blood pressure, glucose, body, basal and sleeping wrist temperature, sleep and sleep stages, mindful minutes, State of Mind, water, dietary energy, height, weigh-ins, body fat and workouts.
 
 - Daily totals go to `health_sync` (`log.daily_health`), weigh-ins, body fat (with lean mass worked out from the weigh-in taken with it) and workouts too. Everything else goes to `health_metrics` (`log.health_metrics`) and shows on Trends under **More from Apple Health**.
-- The plugin can only aggregate steps, distance, active energy, water, dietary energy, heart rate and resting heart rate. Everything else is read as samples; for things both the iPhone and the Watch count (flights, exercise minutes, resting energy), a day's total is the larger of the two, never the sum. Sleep is credited to the morning you woke up and comes from the source with the most sleep that night.
+- Steps, distance, active energy, water, dietary energy, heart rate and resting heart rate are read as daily totals. Everything else is read as samples; for things both the iPhone and the Watch count (flights, exercise minutes, resting energy), a day's total is the larger of the two, never the sum. Sleep is credited to the morning you woke up and comes from the source with the most sleep that night.
 - iOS asks for permission the first time; change it later in **Settings > Health > Data Access & Devices > Log**.
 - When the app opens it catches up on the last 3 days (at most every 30 minutes; 30 days the first time), then keeps backfilling history from yesterday back to 2015 or until a year turns up nothing. Backfill sends metrics, weigh-ins, body fat and workouts only; older daily totals came from the Health export and aren't touched. Its place is saved on the phone (`log.healthBackfill`), so it carries on next launch. **Backfill again** on the Log tab's Apple Health card starts over.
 - **Sync Apple Health** on Today's Body card pulls 7 days; the Apple Health card on the Log tab pulls 30. Pulling down from the top of any tab syncs the last 2 days and refreshes.

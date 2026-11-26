@@ -1,4 +1,4 @@
-# Checks the iPhone app on a Mac runner, on made-up data only (tests/fixture.js).
+# Checks the iPhone app on a Mac runner, on made-up data only (ios-app/ios/screenshots/demo.json).
 # runs_on is a JSON string (default "macos-15"). Callers pass the mac-mini labels for a
 # trusted ref unless repository variable IOS_RUNNER is hosted; see pick-runner.yml.
 #   1. the LogNative package's own tests (ios-app/ios/App/LogNative, in an iOS simulator)
@@ -112,16 +112,10 @@ jobs:
           grep -E "error:|Test Case .* (passed|failed)|XCTAssert|Executed|\*\* TEST" "$RUNNER_TEMP/pkg.log" | sort -u | tail -300 || true
           exit $rc
 
-      - name: Node for the demo fixture
-        if: runner.environment == 'self-hosted'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Bundle the app files and the demo data
+      # Debug builds with -demo read made-up data from public/demo.json (ios/screenshots/demo.json).
+      - name: Demo data
         run: |
-          sh ios-app/sync-web.sh
-          node -e 'process.stdout.write(JSON.stringify(require("./tests/fixture").makeFixture()))' > ios-app/ios/App/App/public/demo.json
+          cp ios-app/ios/screenshots/demo.json ios-app/ios/App/App/public/demo.json
           ls -la ios-app/ios/App/App/public/demo.json
 
       - name: Build for the simulator (Debug)

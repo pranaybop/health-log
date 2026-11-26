@@ -1,6 +1,6 @@
 import Foundation
 
-// Core calculations shared by every screen, ported from ios-app/www/analytics.js (and a few helpers
+// Core calculations shared by every screen, ported from the original web app's analytics.js (and a few helpers
 // from app.js / signals.js). Screen-specific calculations live with their screens. Keep results
 // identical to the web app: tests in LogCoreTests check them against the made-up fixture.
 

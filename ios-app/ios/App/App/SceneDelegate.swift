@@ -1,5 +1,4 @@
 import UIKit
-import Capacitor
 import LogHealth
 import LogUI
 
@@ -14,7 +13,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = ShellTabBarController()
         window?.makeKeyAndVisible()
 
-        SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
         // Opened from a widget.
         if let url = connectionOptions.urlContexts.first?.url, DeepLink.handles(url) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { DeepLink.open(url) }
@@ -29,12 +27,6 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         if let url = URLContexts.first?.url, DeepLink.handles(url) {
             DeepLink.open(url)
-            return
         }
-        SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
-    }
-
-    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        SceneDelegateProxy.shared.scene(scene, continue: userActivity)
     }
 }

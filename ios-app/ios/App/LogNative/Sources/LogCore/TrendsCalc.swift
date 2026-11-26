@@ -1,6 +1,6 @@
 import Foundation
 
-// Trends tab calculations, ported from ios-app/www (app.js, signals.js, insights.js, focus.js,
+// Trends tab calculations, ported from the original web app (removed Nov 2026) (app.js, signals.js, insights.js, focus.js,
 // analytics.js, export.js). Pure functions of the dashboard payload and a clock (`now`), so the
 // tests can pin the time. Text that carries numbers is built here too, word for word as the web
 // app writes it. Namespaced under Analytics.Trends so it can't collide with other screens' helpers.

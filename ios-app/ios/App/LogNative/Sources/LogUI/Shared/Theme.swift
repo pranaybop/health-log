@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Colors from ios-app/www/styles.css, light and dark. Use these, not raw colors, so the native
+/// Colors (first taken from the web app's styles.css), light and dark. Use these, not raw colors, so the native
 /// screens match the rest of the app. Series colors s1-s4 are the chart palette (validated for
 /// color-blind separation); status colors are only for good / watch / bad states, with a label.
 public enum LogColor {

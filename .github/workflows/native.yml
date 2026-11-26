@@ -1,11 +1,10 @@
-# Work branches for the native screens (native/**): the same checks as a main build (browser
-# tests, LogNative package tests, simulator build and screenshots), in soft mode. The summary says
-# NATIVE-CHECK: PASS or FAIL and WEB-TESTS: success or failure, but these runs never fail, so work
-# in progress sends no failure emails. No .ipa is built here; that happens on main.
+# Work branches for the native screens (native/**): the same checks as a main build (LogNative
+# package tests, simulator build and screenshots), in soft mode. The summary says NATIVE-CHECK:
+# PASS or FAIL, but these runs never fail, so work in progress sends no failure emails. No .ipa is built here; that happens on main.
 # iOS jobs use the same runner choice as the .ipa workflow (mac-mini, unless IOS_RUNNER=hosted).
 name: Native work branches
 
-# native/** pushes now run the full iPhone app workflow (ios-ipa.yml: tests, simulator check
+# native/** pushes now run the full iPhone app workflow (ios-ipa.yml: simulator check
 # and an .ipa), so this soft check only runs when started by hand.
 on:
   workflow_dispatch:
@@ -18,11 +17,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  web:
-    uses: ./.github/workflows/tests.yml
-    with:
-      soft: true
-
   pick-runner:
     name: Pick runner
     uses: ./.github/workflows/pick-runner.yml
