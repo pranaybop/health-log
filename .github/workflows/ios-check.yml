@@ -23,6 +23,11 @@ on:
       runs_on:
         type: string
         default: '"macos-15"'
+      # "all": every list in ios-app/ios/screenshots (about 75 shots, ~20 min).
+      # "quick": only base.txt (one shot per tab), for routine .ipa builds.
+      shots:
+        type: string
+        default: all
 
 permissions:
   contents: read
@@ -156,7 +161,10 @@ jobs:
           }
           # Warm up once: the first launch on a fresh simulator is slow.
           xcrun simctl launch "$UDID" com.pranaybop.log -demo today >/dev/null < /dev/null; sleep 25; xcrun simctl terminate "$UDID" com.pranaybop.log || true
-          for f in ios-app/ios/screenshots/*.txt; do
+          LISTS="ios-app/ios/screenshots/*.txt"
+          if [ "${{ inputs.shots }}" = "quick" ]; then LISTS="ios-app/ios/screenshots/base.txt"; fi
+          # shellcheck disable=SC2086
+          for f in $LISTS; do
             while read -r name tab look rest <&3; do
               case "$name" in ""|\#*) continue ;; esac
               # shellcheck disable=SC2086

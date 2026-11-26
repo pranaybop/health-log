@@ -30,7 +30,8 @@ jobs:
       ios_runner: ${{ vars.IOS_RUNNER }}
 
   build:
-    needs: [test, pick-runner]
+    # Doesn't wait for the browser tests (they run alongside on Linux), so the .ipa is ready sooner.
+    needs: [pick-runner]
     runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs_on) }}
     # Applies on the mini and on macos-15, so a stuck device build cannot run forever.
     timeout-minutes: 30
@@ -131,3 +132,5 @@ jobs:
     uses: ./.github/workflows/ios-check.yml
     with:
       runs_on: ${{ needs.pick-runner.outputs.runs_on }}
+      # Every screenshot list when started by hand (Run workflow); one shot per tab on pushes.
+      shots: ${{ github.event_name == 'workflow_dispatch' && 'all' || 'quick' }}
