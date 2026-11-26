@@ -155,7 +155,7 @@ public enum HealthText {
         if let e = error as? HealthSyncError { return e.text }
         if error is CancellationError { return "Couldn’t sync: it was stopped before it finished." }
         if let e = error as? LogError {
-            if e == .unauthorized { return "Passcode was rejected. Lock and unlock again." }
+            if e == .unauthorized { return "Your sign-in ran out. Sign in again." }
             return "Couldn’t sync: \(e.message)"
         }
         return "Couldn’t sync: \(error.localizedDescription)"

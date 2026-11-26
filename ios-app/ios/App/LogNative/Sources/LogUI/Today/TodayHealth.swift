@@ -157,16 +157,19 @@ struct TodayMacros: View {
     }
 }
 
-/// "Log a meal": opens Log in Grok Bot. Sits in the Food today card, right under today's calories.
-/// openURL calls UIApplication.open and says whether it was accepted, so this doesn't use
+/// "Log a meal". Sits in the Food today card, right under today's calories. For the original log
+/// it opens Log in Grok Bot (unless Account says otherwise); everyone else describes the meal in
+/// the app. openURL calls UIApplication.open and says whether it was accepted, so this doesn't use
 /// canOpenURL and doesn't need LSApplicationQueriesSchemes.
 struct LogMealButton: View {
     @Environment(\.openURL) private var openURL
+    @Environment(LogStore.self) private var store
     @State private var unavailable = false
+    @State private var showSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button(action: openLogBot) {
+            Button(action: logMeal) {
                 Label("Log a meal", systemImage: "fork.knife")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
@@ -175,15 +178,21 @@ struct LogMealButton: View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
             .tint(LogColor.accent)
-            .accessibilityHint("Opens Log in Grok Bot")
+            .accessibilityHint(store.mealLoggingInApp ? "Describe a meal to log it" : "Opens Log in Grok Bot")
+            .sheet(isPresented: $showSheet) { MealSheet().environment(store) }
             if unavailable {
                 Text(LogBot.unavailableMessage)
                     .font(.footnote)
                     .foregroundStyle(LogColor.ink2)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                Button("Log it here instead") { showSheet = true }.font(.footnote.weight(.semibold))
             }
         }
+    }
+
+    private func logMeal() {
+        if store.mealLoggingInApp { showSheet = true } else { openLogBot() }
     }
 
     private func openLogBot() {

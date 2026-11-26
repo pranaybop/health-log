@@ -90,7 +90,7 @@ public enum HungerActivity {
             return
         }
         let s = state(d, now: now)
-        let stale = Calendar.current.date(byAdding: .hour, value: 3, to: now)
+        let stale = staleDate(now)
         if let a = running, a.content.state.day == s.day, a.activityState == .active {
             await a.update(ActivityContent(state: s, staleDate: stale))
             return
@@ -103,6 +103,14 @@ public enum HungerActivity {
         }
     }
 
+    /// Three hours from now, but never past midnight: a new day shows as stale (and the buttons
+    /// start it fresh) instead of yesterday's timeline.
+    static func staleDate(_ now: Date) -> Date {
+        let threeHours = now.addingTimeInterval(3 * 3600)
+        let midnight = LogTime.startOfDay(LogTime.shift(LogTime.today(now), 1))
+        return min(threeHours, midnight)
+    }
+
     public static func endAll() async {
         for a in Activity<HungerAttributes>.activities {
             await a.end(nil, dismissalPolicy: .immediate)
@@ -113,10 +121,17 @@ public enum HungerActivity {
     public static func appendNow(strength: Int, now: Date = Date()) async {
         guard let a = running else { return }
         var s = a.content.state
+        let today = LogTime.today(now)
+        if s.day != today {
+            // First thought after midnight: start today's timeline (calories reset until the app refreshes).
+            s.day = today
+            s.thoughts = []
+            s.caloriesEaten = 0
+        }
         let start = LogTime.startOfDay(s.day)
         s.thoughts.append(.init(minute: max(0, Int(now.timeIntervalSince(start) / 60)), strength: strength))
         s.lastLine = "\(HungerWords.strength(strength)) at \(LogTime.time(now))"
         s.updated = now
-        await a.update(ActivityContent(state: s, staleDate: Calendar.current.date(byAdding: .hour, value: 3, to: now)))
+        await a.update(ActivityContent(state: s, staleDate: staleDate(now)))
     }
 }

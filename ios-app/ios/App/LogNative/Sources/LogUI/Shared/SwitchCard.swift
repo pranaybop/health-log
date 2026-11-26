@@ -14,6 +14,7 @@ public struct SwitchCard: View {
 
     /// Whether the card shows for this data.
     static func shows(_ d: Dashboard, now: Date = Date()) -> Bool {
+        guard LogTime.hasSwitch else { return false }
         guard let first = Analytics.firstRetaDose(d), let t = first.takenDate else { return true }
         return LogTime.daysUntil(t, now: now) >= -14
     }

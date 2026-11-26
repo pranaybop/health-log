@@ -50,12 +50,14 @@ struct MLLevelCard: View {
                     .annotation(position: .top, alignment: .center, spacing: 2) {
                         Text("Now").font(.caption2.weight(.semibold)).foregroundStyle(LogColor.ink2)
                     }
-                RuleMark(x: .value("Retatrutide", LogTime.retaStart))
-                    .foregroundStyle(LogColor.axis)
-                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-                    .annotation(position: .top, alignment: .center, spacing: 2) {
-                        Text("Retatrutide").font(.caption2.weight(.semibold)).foregroundStyle(LogColor.ink2)
-                    }
+                if let switchAt = LogTime.switchStart {
+                    RuleMark(x: .value(LogTime.switchName, switchAt))
+                        .foregroundStyle(LogColor.axis)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                        .annotation(position: .top, alignment: .center, spacing: 2) {
+                            Text(LogTime.switchName).font(.caption2.weight(.semibold)).foregroundStyle(LogColor.ink2)
+                        }
+                }
                 if let pick {
                     RuleMark(x: .value("Selected", pick.t))
                         .foregroundStyle(LogColor.ink2.opacity(0.5))

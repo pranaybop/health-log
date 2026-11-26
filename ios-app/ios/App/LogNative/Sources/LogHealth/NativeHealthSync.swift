@@ -56,7 +56,7 @@ public final class NativeHealthSync: @unchecked Sendable {
 
     /// Call when the app goes to the background: ask iOS for a catch-up in about an hour.
     public static func scheduleBackgroundRefresh() {
-        guard isReady, !isDemoLaunch, PasscodeStore.read() != nil else { return }
+        guard isReady, !isDemoLaunch, PasscodeStore.read() != nil || SessionStore.read() != nil else { return }
         let request = BGAppRefreshTaskRequest(identifier: backgroundTaskId)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)
         try? BGTaskScheduler.shared.submit(request)
@@ -75,8 +75,10 @@ public final class NativeHealthSync: @unchecked Sendable {
         Self.scheduleBackgroundRefresh()
         let work = Task {
             let r = await self.run(days: 2, mode: .background)
-            if r.error == nil, r.stored > 0, !Task.isCancelled {
-                // Open with fresh numbers next time.
+            if !Task.isCancelled {
+                // Fresh numbers for next time, and a fresh look at the log: the reminders and the
+                // hunger Live Activity follow the store, so a dose logged elsewhere (the bot)
+                // cancels its "overdue" reminder and a new day starts a new timeline.
                 await LogStore.shared.refresh()
             }
             task.setTaskCompleted(success: r.error == nil && !Task.isCancelled)
@@ -144,10 +146,10 @@ public final class NativeHealthSync: @unchecked Sendable {
 
     /// Checks before reading: not demo, unlocked, Health on this device and readable, access asked.
     /// The permission sheet is only shown in the foreground (never from the background task).
-    private func prepare(mode: Mode) async throws -> String {
-        let (demo, passcode) = await MainActor.run { (LogStore.shared.isDemo, LogStore.shared.passcode) }
+    private func prepare(mode: Mode) async throws -> LogCredential {
+        let demo = await MainActor.run { LogStore.shared.isDemo }
         if demo { throw HealthSyncError.demo }
-        guard let code = passcode else { throw HealthSyncError.locked }
+        guard let code = await LogCredentials.shared.current() else { throw HealthSyncError.locked }
         guard HealthKitReader.isAvailable else { throw HealthSyncError.unavailable }
         let readable = await MainActor.run { UIApplication.shared.isProtectedDataAvailable }
         guard readable else { throw HealthSyncError.deviceLocked }
@@ -172,11 +174,11 @@ public final class NativeHealthSync: @unchecked Sendable {
     }
 
     /// health.js sendHealth: the window in small requests; what the log stored.
-    private func send(_ batch: HealthBatch, passcode: String) async throws -> HealthSyncResult {
+    private func send(_ batch: HealthBatch, passcode: LogCredential) async throws -> HealthSyncResult {
         var totals = HealthSyncResult()
         for request in HealthPayload.requests(for: batch) {
             try Task.checkCancellation()
-            let r = try await LogAPI.write(request.action, payload: request.payload, passcode: passcode)
+            let r = try await LogAPI.write(request.action, payload: request.payload, credential: passcode)
             totals.add(response: r)
         }
         return totals

@@ -214,6 +214,65 @@ public struct Profile: Codable, Hashable, Sendable {
     @Flex public var goalWeightLb: Double?
     @Flex public var heightIn: Double?
     public var notes: String?
+    /// IANA time zone for this person's days ("America/Chicago").
+    public var timeZone: String?
+    public var displayName: String?
+    /// Set when first-run setup finished. Nil for a new account.
+    public var onboardedAt: String?
+    public var settings: ProfileSettings?
+
+    enum CodingKeys: String, CodingKey {
+        case startWeightLb, goalWeightLb, heightIn, notes, timeZone, displayName, onboardedAt, settings
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        _startWeightLb = (try? c.decode(Flex.self, forKey: .startWeightLb)) ?? Flex()
+        _goalWeightLb = (try? c.decode(Flex.self, forKey: .goalWeightLb)) ?? Flex()
+        _heightIn = (try? c.decode(Flex.self, forKey: .heightIn)) ?? Flex()
+        notes = try? c.decodeIfPresent(String.self, forKey: .notes)
+        timeZone = try? c.decodeIfPresent(String.self, forKey: .timeZone)
+        displayName = try? c.decodeIfPresent(String.self, forKey: .displayName)
+        onboardedAt = try? c.decodeIfPresent(String.self, forKey: .onboardedAt)
+        settings = try? c.decodeIfPresent(ProfileSettings.self, forKey: .settings)
+    }
+}
+
+/// Per-person settings kept in the profile (profile.settings). Every field is optional; the app
+/// falls back to what the data shows.
+public struct ProfileSettings: Codable, Hashable, Sendable {
+    /// "yyyy-MM-dd": the first GLP-1 shot (else the first logged shot).
+    public var journeyStart: String?
+    /// "yyyy-MM-dd": a planned switch to another GLP-1, if any.
+    public var switchOn: String?
+    /// The compound switched to on switchOn ("retatrutide").
+    public var switchCompound: String?
+    /// "bot" (the Grok Log bot) or "app" (describe a meal in the app with your own AI key).
+    public var mealLogging: String?
+
+    public init(journeyStart: String? = nil, switchOn: String? = nil, switchCompound: String? = nil, mealLogging: String? = nil) {
+        self.journeyStart = journeyStart
+        self.switchOn = switchOn
+        self.switchCompound = switchCompound
+        self.mealLogging = mealLogging
+    }
+
+    enum CodingKeys: String, CodingKey { case journeyStart, switchOn, switchCompound, mealLogging }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        journeyStart = try? c.decodeIfPresent(String.self, forKey: .journeyStart)
+        switchOn = try? c.decodeIfPresent(String.self, forKey: .switchOn)
+        switchCompound = try? c.decodeIfPresent(String.self, forKey: .switchCompound)
+        mealLogging = try? c.decodeIfPresent(String.self, forKey: .mealLogging)
+    }
+}
+
+/// Who the payload is for: a signed-in account, or the owner via the passcode.
+public struct Account: Codable, Hashable, Sendable {
+    public var kind: String?
+    public var email: String?
+    public var isOwnerPasscode: Bool { kind == "owner" }
 }
 
 public struct Goal: Codable, Hashable, Sendable, Identifiable {
@@ -268,12 +327,13 @@ public struct Dashboard: Codable, Sendable {
     /// Logged doses of those peptides. Kept apart from `doses`, which is GLP-1 shots only, so
     /// levels, site rotation and the weekly plan never count a daily peptide as a GLP-1 shot.
     public var peptideDoses: [Dose]
+    public var account: Account?
 
     enum CodingKeys: String, CodingKey {
         case asOf, meals, weights, doses, dailyTotals, weeklySummary, dailyHealth, healthMetrics, workouts
         case workoutCount, healthSpan, checkins, sideEffects, foodThoughts
         case protocols = "protocol"
-        case dosePlan, vials, measurements, profile, goals, progressPhotos, regimens, peptideDoses
+        case dosePlan, vials, measurements, profile, goals, progressPhotos, regimens, peptideDoses, account
     }
 
     public init(from decoder: Decoder) throws {
@@ -303,6 +363,7 @@ public struct Dashboard: Codable, Sendable {
         goals = list(.goals)
         progressPhotos = list(.progressPhotos)
         regimens = list(.regimens)
+        account = try? c.decodeIfPresent(Account.self, forKey: .account)
     }
 
     public var asOfDate: Date? { LogTime.parse(asOf) }

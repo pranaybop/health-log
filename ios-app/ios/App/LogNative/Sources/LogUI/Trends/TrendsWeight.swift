@@ -133,7 +133,7 @@ struct TrWeightCard: View {
             refs.append(TrRef(value: goal, label: "Goal \(TrendsCalc.num(goal))", inDomain: r.id != "all" ? abs(goal - last.trend) < 30 : true))
         }
         var marks: [TrMark] = []
-        if m.glp1 >= startT { marks.append(TrMark(at: m.glp1, label: "Tirzepatide")) }
+        if m.glp1 >= startT { marks.append(TrMark(at: m.glp1, label: LogTime.journeyName)) }
         if m.reta >= startT && m.reta <= t1 { marks.append(TrMark(at: m.reta, label: "Reta")) }
 
         let byTime = m.byTime

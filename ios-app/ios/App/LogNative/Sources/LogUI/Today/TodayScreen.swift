@@ -90,6 +90,9 @@ public struct TodayScreen: View {
             }
             TodayFoodCard(m: m, editing: $editTargets, message: $targetsMessage, save: { c, p in await saveTargets(c, p) })
                 .id("food")
+            if m.isToday, let low = UnderEating.check(m.d, now: m.now) {
+                UnderEatingCard(low: low).id("undereating")
+            }
             if m.isToday {
                 ForEach(Analytics.regimenStatuses(m.d, now: m.now).filter { $0.dueToday && !$0.loggedToday }, id: \.self) { s in
                     RegimenCard(status: s, compact: true).id("regimen")

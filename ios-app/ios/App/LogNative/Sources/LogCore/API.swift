@@ -8,7 +8,7 @@ public enum LogError: Error, Equatable, Sendable {
 
     public var message: String {
         switch self {
-        case .unauthorized: return "Passcode was rejected."
+        case .unauthorized: return "Sign in again."
         case .server(let m): return m
         case .network(let m): return m
         case .decoding(let m): return "Couldn’t read the log: \(m)"
@@ -16,8 +16,9 @@ public enum LogError: Error, Equatable, Sendable {
     }
 }
 
-/// The two Edge Functions. Auth is the x-log-passcode header; nothing else is sent.
-/// Writes are the log-write actions documented in the root README (insert-only rules apply).
+/// The two Edge Functions. Auth is a signed-in session (Authorization: Bearer) or the owner's
+/// passcode (x-log-passcode); nothing else is sent. Writes are the log-write actions documented
+/// in the root README (insert-only rules apply).
 public enum LogAPI {
     public static let dashboardURL = URL(string: "https://qnbshmenmurdaogslmrj.supabase.co/functions/v1/log-dashboard")!
     public static let writeURL = URL(string: "https://qnbshmenmurdaogslmrj.supabase.co/functions/v1/log-write")!
@@ -31,12 +32,35 @@ public enum LogAPI {
 
     /// The dashboard payload, and its raw JSON (kept as the on-device cache).
     public static func fetchDashboard(passcode: String) async throws -> (Dashboard, Data) {
-        var req = URLRequest(url: dashboardURL)
-        req.setValue(passcode, forHTTPHeaderField: "x-log-passcode")
-        let (data, response) = try await send(req)
-        try check(response, data)
+        try await fetchDashboard(.passcode(passcode))
+    }
+
+    public static func fetchDashboard(_ credential: LogCredential) async throws -> (Dashboard, Data) {
+        let data = try await withRetry(credential) { cred in
+            var req = URLRequest(url: dashboardURL)
+            authorize(&req, cred)
+            let (data, response) = try await send(req)
+            try check(response, data)
+            return data
+        }
         do { return (try Dashboard.decode(data), data) }
         catch { throw LogError.decoding(String(describing: error)) }
+    }
+
+    static func authorize(_ req: inout URLRequest, _ credential: LogCredential) {
+        switch credential {
+        case .session(let token): req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        case .passcode(let code): req.setValue(code, forHTTPHeaderField: "x-log-passcode")
+        }
+    }
+
+    /// A session that comes back 401 gets one refresh and one more try.
+    private static func withRetry<T>(_ credential: LogCredential, _ run: (LogCredential) async throws -> T) async throws -> T {
+        do { return try await run(credential) }
+        catch LogError.unauthorized {
+            guard case .session = credential, let fresh = await LogCredentials.shared.forceRefresh() else { throw LogError.unauthorized }
+            return try await run(fresh)
+        }
     }
 
     /// PUT bytes to a signed Storage URL. The URL already carries its own token.
@@ -59,13 +83,22 @@ public enum LogAPI {
     /// POST {action, payload} to log-write. Returns the response JSON (counts, ok, etc.).
     @discardableResult
     public static func write(_ action: String, payload: [String: Any], passcode: String) async throws -> [String: Any] {
-        var req = URLRequest(url: writeURL)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue(passcode, forHTTPHeaderField: "x-log-passcode")
-        req.httpBody = try JSONSerialization.data(withJSONObject: ["action": action, "payload": payload])
-        let (data, response) = try await send(req)
-        try check(response, data)
+        try await write(action, payload: payload, credential: .passcode(passcode))
+    }
+
+    @discardableResult
+    public static func write(_ action: String, payload: [String: Any], credential: LogCredential) async throws -> [String: Any] {
+        let body = try JSONSerialization.data(withJSONObject: ["action": action, "payload": payload])
+        let data = try await withRetry(credential) { cred in
+            var req = URLRequest(url: writeURL)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            authorize(&req, cred)
+            req.httpBody = body
+            let (data, response) = try await send(req)
+            try check(response, data)
+            return data
+        }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
     }
 

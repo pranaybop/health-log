@@ -162,6 +162,7 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
             store.healthSync = { days in _ = await NativeHealthSync.shared.sync(days: days) }
         }
         store.onLockChange = { [weak self] locked in self?.nativeLockChanged(locked) }
+        store.onDataChange = { [weak self] in self?.gateChanged() }
         ReminderScheduler.shared.bind()
 
         var start = 0
@@ -193,10 +194,26 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
     }
 
     private var refreshTimer: Timer?
+    private var leftAt: Date?
+    private weak var appLock: UIViewController?
 
     @objc private func appWillEnterForeground() {
         Task { await store.refresh(syncHealth: true) }
         ReminderScheduler.shared.reschedule(store.dashboard)
+        // Face ID after a minute away (Account > Require Face ID).
+        if AppLock.enabled, !store.isLocked, !store.isDemo, let left = leftAt, Date().timeIntervalSince(left) > 60 {
+            presentAppLock()
+        }
+    }
+
+    private func presentAppLock() {
+        guard appLock == nil else { return }
+        let cover = NativeScreens.makeAppLock { [weak self] in
+            self?.appLock?.dismiss(animated: true)
+            self?.appLock = nil
+        }
+        appLock = cover
+        (presentedViewController ?? self).present(cover, animated: false)
     }
 
     @objc private func appDidBecomeActive() {
@@ -209,11 +226,18 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
     @objc private func appWillResignActive() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+        leftAt = Date()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        if nativeLock && store.isLocked { presentLock() }
+        if nativeLock && (store.isLocked || store.needsOnboarding) { presentLock() }
+    }
+
+    /// New data: a new account shows first-run setup until it's done.
+    private func gateChanged() {
+        guard nativeLock else { return }
+        if store.isLocked || store.needsOnboarding { presentLock() } else { dismissLock() }
     }
 
     private func webBridge() -> LogBridgeViewController {
@@ -301,7 +325,7 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
     }
 
     private func dismissLock() {
-        guard let lock = lockScreen else { return }
+        guard let lock = lockScreen, !store.needsOnboarding, !store.isLocked else { return }
         lock.dismiss(animated: true)
         lockScreen = nil
     }

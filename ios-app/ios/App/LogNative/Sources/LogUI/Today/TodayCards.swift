@@ -322,11 +322,12 @@ struct TodayCountdowns: View {
         let next = Analytics.plannedNextDose(m.d)
         let switchAt = Analytics.retaSwitchAt(m.d)
         var out: [Count] = []
+        let hasSwitch = LogTime.hasSwitch && switchAt != .distantFuture
         if let next {
             out.append(Count(label: "Next dose", date: next))
-            if LogTime.daysUntil(LogTime.retaStart, now: m.now) >= 0 { out.append(Count(label: "Retatrutide", date: switchAt)) }
-        } else if LogTime.daysUntil(switchAt, now: m.now) >= 0 {
-            out.append(Count(label: "Retatrutide", date: switchAt))
+            if hasSwitch && LogTime.daysUntil(LogTime.retaStart, now: m.now) >= 0 { out.append(Count(label: LogTime.switchName, date: switchAt)) }
+        } else if hasSwitch && LogTime.daysUntil(switchAt, now: m.now) >= 0 {
+            out.append(Count(label: LogTime.switchName, date: switchAt))
         }
         return out
     }
@@ -469,7 +470,8 @@ struct TodayMedSummary: View {
         if let next = Analytics.plannedNextDose(m.d) {
             return "\(LogTime.weekdayDate(next)), \(TodayText.daysWord(LogTime.daysUntil(next, now: m.now)))"
         }
-        return "Retatrutide starts \(LogTime.weekdayDate(LogTime.retaStart))"
+        if let switchAt = LogTime.switchStart { return "\(LogTime.switchName) starts \(LogTime.weekdayDate(switchAt))" }
+        return "Add your schedule in Meds"
     }
 }
 

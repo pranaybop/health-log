@@ -93,9 +93,10 @@ public struct EmptyNote: View {
 }
 
 /// The frame every native tab uses: large title, scrolling cards on the grouped background,
-/// pull to refresh (which also syncs Apple Health), and a Lock button.
+/// pull to refresh (which also syncs Apple Health), and an Account button.
 public struct ScreenScaffold<Content: View>: View {
     @Environment(LogStore.self) private var store
+    @State private var showAccount = false
     let title: String
     let subtitle: String?
     let content: Content
@@ -124,13 +125,20 @@ public struct ScreenScaffold<Content: View>: View {
         .refreshable { await store.refresh(syncHealth: true) }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { store.lock() } label: { Image(systemName: "lock") }
-                    .accessibilityLabel("Lock")
+                Button { showAccount = true } label: { Image(systemName: "person.crop.circle") }
+                    .accessibilityLabel("Account")
             }
         }
+        .sheet(isPresented: $showAccount) { AccountSheet().environment(store) }
     }
 
     private var statusLine: String? {
+        guard let line = baseStatus else { return nil }
+        let n = store.pendingCount
+        return n > 0 ? "\(line) \(n == 1 ? "1 log is" : "\(n) logs are") waiting for a connection." : line
+    }
+
+    private var baseStatus: String? {
         guard let t = store.dataTime else { return nil }
         if store.refreshFailed { return "Couldn’t refresh. Showing data from \(LogTime.time(t))." }
         if store.fromCache && store.isRefreshing { return "Saved data from \(LogTime.time(t)), refreshing…" }

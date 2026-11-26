@@ -141,21 +141,27 @@ struct MLDoseForm: View {
 
     static let compounds = [MLOption(value: "tirzepatide", label: "Tirzepatide"), MLOption(value: "retatrutide", label: "Retatrutide")]
     static let tesa = MLOption(value: "tesamorelin", label: "Tesamorelin")
+    static let sema = MLOption(value: "semaglutide", label: "Semaglutide")
     static let belly = ["Abd UR", "Abd LR", "Abd LL", "Abd UL"]
 
     private var active: ProtocolRow? { store.dashboard?.protocols.first { $0.status == "active" } }
     private var rot: SiteRotation? { store.dashboard.map { Analytics.siteRotation($0) } }
     private var defaultCompound: String {
-        let c = active?.compound ?? "tirzepatide"
-        return Self.compounds.contains { $0.value == c } ? c : "tirzepatide"
+        let fallback = store.dashboard?.regimens.first(where: { Dose.isGLP1($0.compound) })?.compound
+            ?? store.dashboard?.doses.last?.compound ?? "tirzepatide"
+        let c = active?.compound ?? fallback
+        return compoundOptions.contains { $0.value == c } ? c : (compoundOptions.first?.value ?? "tirzepatide")
     }
     private var compoundValue: String { compound ?? defaultCompound }
     /// Daily peptides (tesamorelin) once a regimen for one exists.
     private var regimen: Regimen? { store.dashboard?.regimens.first { ($0.compound ?? "") == compoundValue } }
     private var isPeptide: Bool { !Dose.isGLP1(compoundValue) }
     private var compoundOptions: [MLOption] {
-        let hasTesa = store.dashboard?.regimens.contains { $0.compound == "tesamorelin" } ?? false
-        return hasTesa ? Self.compounds + [Self.tesa] : Self.compounds
+        let d = store.dashboard
+        let hasTesa = d?.regimens.contains { $0.compound == "tesamorelin" } ?? false
+        let hasSema = (d?.regimens.contains { $0.compound == "semaglutide" } ?? false)
+            || (d?.doses.contains { $0.compound == "semaglutide" } ?? false)
+        return Self.compounds + (hasSema ? [Self.sema] : []) + (hasTesa ? [Self.tesa] : [])
     }
     private var mgValue: String {
         if let mgText { return mgText }

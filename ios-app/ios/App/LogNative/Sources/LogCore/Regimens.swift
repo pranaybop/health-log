@@ -5,7 +5,7 @@ extension Dose {
     /// such as daily tesamorelin, is a peptide dose and stays out of the GLP-1 math.
     public static func isGLP1(_ compound: String?) -> Bool {
         guard let c = compound?.lowercased(), !c.isEmpty else { return true }
-        return c == "tirzepatide" || c == "retatrutide"
+        return c == "tirzepatide" || c == "retatrutide" || c == "semaglutide"
     }
 }
 

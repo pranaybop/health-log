@@ -120,10 +120,10 @@ struct TrHeartCard: View {
 
     func panel(_ p: TrendsCalc.HeartPanel, color: Color) -> some View {
         let unit = p.unit
-        var marks = [TrMark(at: LogTime.tirzStart, label: "Tirzepatide")]
-        if LogTime.retaStart <= now { marks.append(TrMark(at: LogTime.retaStart, label: "Retatrutide")) }
+        var marks = [TrMark(at: LogTime.tirzStart, label: LogTime.journeyName)]
+        if let switchAt = LogTime.switchStart, switchAt <= now { marks.append(TrMark(at: switchAt, label: LogTime.switchName)) }
         let readout: TrScrub = p.recent.map { r in
-            ("\(TrendsCalc.num(r)) \(unit)", "7-day average\(p.base.map { ". Before tirzepatide: \(TrendsCalc.num($0))" } ?? "")")
+            ("\(TrendsCalc.num(r)) \(unit)", "7-day average\(p.base.map { ". Before \(LogTime.journeyName.lowercased()): \(TrendsCalc.num($0))" } ?? "")")
         } ?? ("—", "")
         var tone = TrTone.steady
         if let delta = p.delta, abs(delta) >= 2 { tone = (delta > 0) == p.higherIsBetter ? .good : .watch }

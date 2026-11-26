@@ -371,7 +371,7 @@ final class LogHealthTests: XCTestCase {
     }
 
     func testErrorWords() {
-        XCTAssertEqual(HealthText.error(LogError.unauthorized), "Passcode was rejected. Lock and unlock again.")
+        XCTAssertEqual(HealthText.error(LogError.unauthorized), "Your sign-in ran out. Sign in again.")
         XCTAssertEqual(HealthText.error(LogError.server("invalid_entry")), "Couldn’t sync: invalid_entry")
         XCTAssertEqual(HealthText.error(HealthSyncError.unavailable), "Apple Health isn't available on this device.")
     }

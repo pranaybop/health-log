@@ -41,6 +41,7 @@ public enum Analytics {
         if let p = protocols.first(where: { ($0.compound ?? "").lowercased() == c }), let h = p.halfLifeHours, h > 0 {
             return h / 24
         }
+        if c == "semaglutide" { return 7 }
         return c == "retatrutide" ? 6 : 5
     }
 
