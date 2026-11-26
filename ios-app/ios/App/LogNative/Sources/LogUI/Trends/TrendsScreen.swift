@@ -158,3 +158,26 @@ enum TrendsRouter {
         }
     }
 }
+
+/// Links from the Home and Lock Screen widgets: pranaybop-log://today, pranaybop-log://trends/<section>.
+public enum DeepLink {
+    public static let scheme = "pranaybop-log"
+
+    public static func handles(_ url: URL) -> Bool { url.scheme?.lowercased() == scheme }
+
+    @MainActor
+    public static func open(_ url: URL) {
+        guard handles(url) else { return }
+        switch url.host?.lowercased() {
+        case "trends":
+            let section = url.pathComponents.dropFirst().first ?? "summary"
+            TrendsRouter.open(section, card: section == "body" ? "readiness" : nil)
+        case "meds":
+            TodayTabs.select(1)
+        case "log":
+            TodayTabs.select(3)
+        default:
+            TodayTabs.select(0)
+        }
+    }
+}

@@ -8,6 +8,9 @@ import LogActivity
 struct LogWidgetsBundle: WidgetBundle {
     var body: some Widget {
         HungerLiveActivity()
+        WeightWidget()
+        ReadinessWidget()
+        FoodWidget()
     }
 }
 

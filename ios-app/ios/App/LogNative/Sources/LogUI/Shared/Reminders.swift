@@ -16,6 +16,10 @@ enum ReminderRouter {
 
     @MainActor
     static func open(_ route: String) {
+        if route == "progress" {
+            TrendsRouter.open("weight", card: "progress")
+            return
+        }
         pending = route
         switch route {
         case "checkin": TodayTabs.select(0)
@@ -49,6 +53,10 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
     @MainActor
     public func bind() {
         reschedule(LogStore.shared.dashboard)
+        if let d = LogStore.shared.dashboard, !LogStore.shared.isDemo {
+            HomeWidgets.publish(d)
+            ProgressNotifier.check(d)
+        }
         guard !observing else { return }
         observing = true
         observe()
@@ -134,6 +142,9 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
                 // The hunger Live Activity follows the same data.
                 if let d = LogStore.shared.dashboard, !LogStore.shared.isDemo {
                     await HungerActivity.sync(d)
+                    // Home and Lock Screen widgets read a snapshot from the shared app group.
+                    HomeWidgets.publish(d)
+                    ProgressNotifier.check(d)
                 }
                 self.observe()
             }
@@ -254,7 +265,7 @@ struct ReminderSettingsCard: View {
 
     var body: some View {
         LogCard("Reminders") {
-            Caption("Shot day, an evening check-in, and a morning weigh-in. They stay on this phone.")
+            Caption("Shot day, an evening check-in, a morning weigh-in, and progress alerts. They stay on this phone.")
             row("Shot day", "The planned dose, including one you missed",
                 on: model.settings.shot, time: model.settings.shotHour, minute: model.settings.shotMinute,
                 toggle: { await model.setShot($0) }, clock: { model.setShotClock($0) })
@@ -266,6 +277,8 @@ struct ReminderSettingsCard: View {
             row("Morning weigh-in", "Log your weight",
                 on: model.settings.weighIn, time: model.settings.weighHour, minute: model.settings.weighMinute,
                 toggle: { await model.setWeigh($0) }, clock: { model.setWeighClock($0) })
+            MLHairline()
+            ProgressAlertsRow()
             if model.allowed == false {
                 Text("Notifications are off for Log. Turn them on in iOS Settings to use these.")
                     .font(.footnote).foregroundStyle(LogColor.ink2).fixedSize(horizontal: false, vertical: true)
@@ -310,5 +323,23 @@ struct ReminderSettingsCard: View {
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+    }
+}
+
+/// Log › Reminders: milestone alerts and the Sunday recap (ProgressNotifier).
+struct ProgressAlertsRow: View {
+    @State private var on = ProgressNotifier.enabled
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { on }, set: { value in
+            Task { @MainActor in on = await ProgressNotifier.setEnabled(value) }
+        })) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Milestones and weekly recap").foregroundStyle(LogColor.ink)
+                Text("When a weigh-in passes the next 5 lb mark, and Sunday at 6 PM with your trend, pace and goal date")
+                    .font(.footnote).foregroundStyle(LogColor.ink2).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .tint(LogColor.good)
     }
 }

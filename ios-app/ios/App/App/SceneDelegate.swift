@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 import LogHealth
+import LogUI
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -14,6 +15,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.makeKeyAndVisible()
 
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+        // Opened from a widget.
+        if let url = connectionOptions.urlContexts.first?.url, DeepLink.handles(url) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { DeepLink.open(url) }
+        }
     }
 
     // Leaving the app: ask iOS for the next background Apple Health catch-up.
@@ -22,6 +27,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        if let url = URLContexts.first?.url, DeepLink.handles(url) {
+            DeepLink.open(url)
+            return
+        }
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 

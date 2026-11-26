@@ -46,6 +46,8 @@ Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today
 - More to log: dose (with site), side effect, measurement, vial, and a reconstitution calculator.
 
 ### Around the app
+- **Widgets** (long-press the Home Screen › +, or the Lock Screen › Customize): **Weight trend** (trend, change since start, progress to goal; the medium size adds a 30-day sparkline, pace and goal date), **Readiness** (today's score as a gauge) and **Food today** (calories left and protein), each in Home Screen and Lock Screen sizes. Tapping one opens that screen. The app writes a small snapshot to the `group.com.pranaybop.log` app group whenever the data changes; the widgets only read it, so they show "Open the app" until it has run once. If your signing tool drops app groups, the widgets can't see the snapshot.
+- **Milestones and weekly recap** (Log › Reminders): a notification when a weigh-in passes the next 5 lb mark or the goal, and Sunday at 6 PM with the week's trend change, pace and goal date.
 - **Hunger Live Activity** on the Lock Screen and Dynamic Island: today's food thoughts on a timeline, calories left and drug level, with Passing / Strong / Craving buttons that log without opening the app.
 - **Reminders** for shots, check-ins and weigh-ins, scheduled a day at a time and skipped once done.
 - **Siri and Shortcuts:** "Log my weight in Log", "I'm thinking about food in Log".

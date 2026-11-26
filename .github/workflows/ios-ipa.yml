@@ -112,6 +112,9 @@ jobs:
           fi
           if brew install ldid >/dev/null 2>&1; then
             ldid -S"ios-app/ios/App/App/App.entitlements" "$RUNNER_TEMP/ipa/Payload/App.app/App" && echo "entitlements embedded"
+            # The widget extension shares the app group (the widgets read a snapshot the app writes).
+            W="$RUNNER_TEMP/ipa/Payload/App.app/PlugIns/LogWidgets.appex/LogWidgets"
+            if [ -f "$W" ]; then ldid -S"ios-app/ios/App/LogWidgets/LogWidgets.entitlements" "$W" && echo "widget entitlements embedded"; fi
           else
             echo "ldid unavailable; entitlements not embedded"
           fi
