@@ -1,16 +1,16 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import type { Admin } from "./auth.ts";
 
 // Private progress photos. The bucket is not public. anon and authenticated are
 // blocked by restrictive RLS. This module runs with the service role (it bypasses
-// RLS) after the Edge Function has checked the passcode, and it only ever returns
-// a short-lived signed URL to the client.
+// RLS) after the Edge Function has checked who is calling, and it only ever returns
+// a short-lived signed URL to the client. `user` is the signed-in account id, or null
+// for the owner (passcode or bot token); the SQL functions only touch that user's rows.
 
 export const PROGRESS_BUCKET = "progress-photos";
 const SIGNED_SECONDS = 60 * 60 * 12;
 const PATH_RE =
   /^[0-9]{4}\/[0-9]{2}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$/;
 
-type Admin = ReturnType<typeof createClient>;
 
 export function isProgressPhotoAction(action: string): boolean {
   return action === "progress_photo_sign" ||
@@ -18,9 +18,9 @@ export function isProgressPhotoAction(action: string): boolean {
     action === "progress_photo_delete";
 }
 
-function chicagoDay(d: Date): string {
+function localDay(d: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Chicago",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -65,12 +65,15 @@ export async function handleProgressPhoto(
   action: string,
   payload: Record<string, unknown>,
   supabaseUrl: string,
+  user: string | null,
+  timeZone = "America/Chicago",
 ): Promise<Record<string, unknown>> {
   if (action === "progress_photo_sign") {
     const takenRaw = typeof payload.taken_at === "string" ? payload.taken_at : "";
     const taken = takenRaw ? new Date(takenRaw) : new Date();
     const when = Number.isNaN(taken.getTime()) ? new Date() : taken;
-    const day = chicagoDay(when);
+    let day: string;
+    try { day = localDay(when, timeZone); } catch { day = localDay(when, "America/Chicago"); }
     const [year, month] = day.split("-");
     const path = `${year}/${month}/${crypto.randomUUID()}.jpg`;
     const { data, error } = await admin.storage
@@ -97,7 +100,8 @@ export async function handleProgressPhoto(
     if (!await objectReady(admin, path)) {
       return { ok: false, error: "upload_missing", field: "path" };
     }
-    const { data, error } = await admin.rpc("log_progress_photo_save", {
+    const { data, error } = await admin.rpc("log_progress_photo_save_for", {
+      p_user: user,
       p_payload: payload,
     });
     if (error) {
@@ -107,7 +111,8 @@ export async function handleProgressPhoto(
     return (data ?? { ok: false, error: "empty_result" }) as Record<string, unknown>;
   }
 
-  const { data, error } = await admin.rpc("log_progress_photo_delete", {
+  const { data, error } = await admin.rpc("log_progress_photo_delete_for", {
+    p_user: user,
     p_payload: payload,
   });
   if (error) {
@@ -126,10 +131,10 @@ export async function handleProgressPhoto(
 
 // Adds progress_photos with a signed url on each row. Leaves the payload alone
 // when the SQL function is not deployed yet, so the rest of the dashboard still loads.
-export async function attachProgressPhotos(admin: Admin, payload: unknown): Promise<void> {
+export async function attachProgressPhotos(admin: Admin, payload: unknown, user: string | null): Promise<void> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
   const body = payload as Record<string, unknown>;
-  const { data, error } = await admin.rpc("log_progress_photos");
+  const { data, error } = await admin.rpc("log_progress_photos_for", { p_user: user });
   if (error) {
     console.error("log_progress_photos", error.message);
     return;
