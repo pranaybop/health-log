@@ -147,17 +147,6 @@ public enum LogTime {
         dayDiff(dayKey(date), dayKey(now))
     }
 
-    /// "today", "tomorrow", "in 3 days", "yesterday", "3 days ago"
-    public static func daysWord(_ n: Int) -> String {
-        switch n {
-        case 0: return "today"
-        case 1: return "tomorrow"
-        case -1: return "yesterday"
-        case let x where x > 1: return "in \(x) days"
-        default: return "\(-n) days ago"
-        }
-    }
-
     // MARK: Fixed dates in the plan
 
     /// First tirzepatide dose.
