@@ -57,3 +57,26 @@ final class DataDigestTests: XCTestCase {
         XCTAssertLessThan(compact.count, full.count)
     }
 }
+
+final class ReadinessTests: XCTestCase {
+    func testRobustZ() throws {
+        let base = Array(repeating: 50.0, count: 10) + [48, 52, 49, 51]
+        let r = try XCTUnwrap(Readiness.robustZ(56, base: base, higherIsBetter: true, minSpread: 3))
+        XCTAssertEqual(r.median, 50, accuracy: 1e-9)
+        XCTAssertEqual(r.z, 2, accuracy: 1e-9) // spread floors at 3
+        let low = try XCTUnwrap(Readiness.robustZ(56, base: base, higherIsBetter: false, minSpread: 3))
+        XCTAssertEqual(low.z, -2, accuracy: 1e-9)
+        XCTAssertNil(Readiness.robustZ(1, base: [1, 2, 3], higherIsBetter: true, minSpread: 1))
+    }
+
+    func testHistoryFromFixture() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "demo", withExtension: "json", subdirectory: "Fixtures"))
+        let d = try Dashboard.decode(Data(contentsOf: url))
+        let days = Readiness.history(d, now: LogTime.parse("2026-11-24T23:20:00-06:00")!)
+        for day in days {
+            XCTAssertTrue((0...10).contains(day.score))
+            XCTAssertTrue(day.parts.contains { $0.id == "hrv" || $0.id == "rhr" })
+        }
+        XCTAssertEqual(days.map(\.key), days.map(\.key).sorted())
+    }
+}
