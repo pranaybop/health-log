@@ -140,6 +140,8 @@ struct MLDoseForm: View {
     @State private var message: MLMessage?
 
     static let compounds = [MLOption(value: "tirzepatide", label: "Tirzepatide"), MLOption(value: "retatrutide", label: "Retatrutide")]
+    static let tesa = MLOption(value: "tesamorelin", label: "Tesamorelin")
+    static let belly = ["Abd UR", "Abd LR", "Abd LL", "Abd UL"]
 
     private var active: ProtocolRow? { store.dashboard?.protocols.first { $0.status == "active" } }
     private var rot: SiteRotation? { store.dashboard.map { Analytics.siteRotation($0) } }
@@ -148,17 +150,37 @@ struct MLDoseForm: View {
         return Self.compounds.contains { $0.value == c } ? c : "tirzepatide"
     }
     private var compoundValue: String { compound ?? defaultCompound }
-    private var mgValue: String { mgText ?? MLNum.plain(active?.typicalDoseMg ?? 3) }
-    private var unitsValue: String { unitsText ?? MLNum.plain(active?.units) }
-    private var siteValue: String { site ?? rot?.next ?? rot?.lastSite ?? "" }
+    /// Daily peptides (tesamorelin) once a regimen for one exists.
+    private var regimen: Regimen? { store.dashboard?.regimens.first { ($0.compound ?? "") == compoundValue } }
+    private var isPeptide: Bool { !Dose.isGLP1(compoundValue) }
+    private var compoundOptions: [MLOption] {
+        let hasTesa = store.dashboard?.regimens.contains { $0.compound == "tesamorelin" } ?? false
+        return hasTesa ? Self.compounds + [Self.tesa] : Self.compounds
+    }
+    private var mgValue: String {
+        if let mgText { return mgText }
+        if isPeptide { return MLNum.plain(regimen?.doseMg) }
+        return MLNum.plain(active?.typicalDoseMg ?? 3)
+    }
+    private var unitsValue: String {
+        if let unitsText { return unitsText }
+        if isPeptide { return MLNum.plain(regimen?.drawUnits.map { $0.rounded() }) }
+        return MLNum.plain(active?.units)
+    }
+    private var siteValue: String {
+        if let site { return site }
+        if isPeptide, let d = store.dashboard { return Analytics.nextBellySite(d, compound: compoundValue) }
+        return rot?.next ?? rot?.lastSite ?? ""
+    }
+    private var siteOptions: [String] { isPeptide ? Self.belly : Sites.all }
 
     var body: some View {
         let hint = rot?.next.map { "Suggested site: \(MLFmt.site($0))" } ?? "Pick the site you used"
         MLFold("Log a dose", hint: hint, open: $open) {
             VStack(alignment: .leading, spacing: 16) {
                 MLField("Compound") {
-                    Picker("Compound", selection: Binding(get: { compoundValue }, set: { compound = $0 })) {
-                        ForEach(Self.compounds, id: \.self) { o in Text(o.label).tag(o.value) }
+                    Picker("Compound", selection: Binding(get: { compoundValue }, set: { compound = $0; mgText = nil; unitsText = nil; site = nil })) {
+                        ForEach(compoundOptions, id: \.self) { o in Text(o.label).tag(o.value) }
                     }
                     .pickerStyle(.segmented)
                 }
@@ -167,7 +189,7 @@ struct MLDoseForm: View {
                     MLInput(label: "Units (optional)", text: Binding(get: { unitsValue }, set: { unitsText = $0 }), keyboard: .numberPad)
                 }
                 MLField("Injection site") {
-                    MLChips(options: Sites.all.map { MLOption(value: $0, label: MLFmt.site($0)) },
+                    MLChips(options: siteOptions.map { MLOption(value: $0, label: MLFmt.site($0)) },
                             value: Binding(get: { siteValue }, set: { site = $0 }), grid: true)
                 }
                 timeRow

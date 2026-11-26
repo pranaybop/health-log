@@ -263,12 +263,17 @@ public struct Dashboard: Codable, Sendable {
     public var profile: Profile?
     public var goals: [Goal]
     public var progressPhotos: [ProgressPhoto]
+    /// Daily (and other non-weekly) peptide schedules, such as tesamorelin (log.regimen).
+    public var regimens: [Regimen]
+    /// Logged doses of those peptides. Kept apart from `doses`, which is GLP-1 shots only, so
+    /// levels, site rotation and the weekly plan never count a daily peptide as a GLP-1 shot.
+    public var peptideDoses: [Dose]
 
     enum CodingKeys: String, CodingKey {
         case asOf, meals, weights, doses, dailyTotals, weeklySummary, dailyHealth, healthMetrics, workouts
         case workoutCount, healthSpan, checkins, sideEffects, foodThoughts
         case protocols = "protocol"
-        case dosePlan, vials, measurements, profile, goals, progressPhotos
+        case dosePlan, vials, measurements, profile, goals, progressPhotos, regimens, peptideDoses
     }
 
     public init(from decoder: Decoder) throws {
@@ -277,7 +282,9 @@ public struct Dashboard: Codable, Sendable {
         asOf = try? c.decodeIfPresent(String.self, forKey: .asOf)
         meals = list(.meals)
         weights = list(.weights)
-        doses = list(.doses)
+        let allDoses: [Dose] = list(.doses)
+        doses = allDoses.filter { Dose.isGLP1($0.compound) }
+        peptideDoses = allDoses.filter { !Dose.isGLP1($0.compound) } + (list(.peptideDoses) as [Dose])
         dailyTotals = list(.dailyTotals)
         weeklySummary = list(.weeklySummary)
         dailyHealth = list(.dailyHealth)
@@ -295,6 +302,7 @@ public struct Dashboard: Codable, Sendable {
         profile = try? c.decodeIfPresent(Profile.self, forKey: .profile)
         goals = list(.goals)
         progressPhotos = list(.progressPhotos)
+        regimens = list(.regimens)
     }
 
     public var asOfDate: Date? { LogTime.parse(asOf) }

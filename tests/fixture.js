@@ -285,6 +285,10 @@ function makeFixture() {
     side_effects,
     protocol,
     dose_plan,
+    // A made-up daily peptide schedule (log.regimen), so the app can show and log it.
+    regimens: [{ id: "r-test-1", compound: "tesamorelin", display_name: "Tesamorelin", dose_mg: 1.4, units: 14, every_days: 1,
+      days_on: null, days_off: null, time_of_day: "night", start_on: "2026-12-20", end_on: "2027-02-28",
+      concentration_mg_per_ml: 10, sites: "belly", status: "planned", notes: "Made-up test schedule." }],
     vials,
     measurements,
     profile: { start_weight_lb: 248, goal_weight_lb: 215, height_in: 70, notes: null },

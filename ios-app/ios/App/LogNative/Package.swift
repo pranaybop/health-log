@@ -8,15 +8,19 @@ import PackageDescription
 //   LogCore    data models, Supabase calls, Central-time dates, core calculations, the shared store
 //   LogUI      SwiftUI screens (Shared/, Today/, Meds/, Log/, Trends/); places LogHealth's HealthSyncPanel
 //   LogHealth  Apple Health sync in Swift, with background refresh, and its status panel
+//   LogActivity  the hunger Live Activity's shared types and its log buttons (also linked by the
+//              LogWidgets extension, which draws it on the Lock Screen and in the Dynamic Island)
 let package = Package(
     name: "LogNative",
     platforms: [.iOS(.v17)],
     products: [
-        .library(name: "LogNative", targets: ["LogCore", "LogUI", "LogHealth"])
+        .library(name: "LogNative", targets: ["LogCore", "LogUI", "LogHealth", "LogActivity"]),
+        .library(name: "LogActivity", targets: ["LogActivity", "LogCore"]),
     ],
     targets: [
         .target(name: "LogCore"),
-        .target(name: "LogUI", dependencies: ["LogCore", "LogHealth"], linkerSettings: [.linkedFramework("UserNotifications")]),
+        .target(name: "LogUI", dependencies: ["LogCore", "LogHealth", "LogActivity"], linkerSettings: [.linkedFramework("UserNotifications")]),
+        .target(name: "LogActivity", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("ActivityKit"), .linkedFramework("AppIntents")]),
         .target(name: "LogHealth", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("HealthKit")]),
         .testTarget(name: "LogCoreTests", dependencies: ["LogCore"], resources: [.copy("Fixtures")]),
         .testTarget(name: "LogHealthTests", dependencies: ["LogHealth", "LogCore"]),

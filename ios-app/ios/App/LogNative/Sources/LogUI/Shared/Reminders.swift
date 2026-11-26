@@ -3,6 +3,7 @@ import UIKit
 import UserNotifications
 import Observation
 import LogCore
+import LogActivity
 
 // Local notifications only. The app is sideloaded with a free Apple ID, so there is no push,
 // no APNs, and no paid entitlement. Scheduling is decided by ReminderPlanner; this file asks
@@ -130,6 +131,10 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
             Task { @MainActor in
                 guard let self else { return }
                 self.reschedule(LogStore.shared.dashboard)
+                // The hunger Live Activity follows the same data.
+                if let d = LogStore.shared.dashboard, !LogStore.shared.isDemo {
+                    await HungerActivity.sync(d)
+                }
                 self.observe()
             }
         }

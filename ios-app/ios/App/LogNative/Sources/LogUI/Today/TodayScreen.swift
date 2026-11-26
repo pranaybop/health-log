@@ -85,8 +85,16 @@ public struct TodayScreen: View {
     private func dayBody(_ m: TodayModel) -> some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TodayHero(m: m).id("hero")
+            if m.isToday {
+                TodayPhotoPrompt(d: m.d, now: m.now).id("photo")
+            }
             TodayFoodCard(m: m, editing: $editTargets, message: $targetsMessage, save: { c, p in await saveTargets(c, p) })
                 .id("food")
+            if m.isToday {
+                ForEach(Analytics.regimenStatuses(m.d, now: m.now).filter { $0.dueToday && !$0.loggedToday }, id: \.self) { s in
+                    RegimenCard(status: s, compact: true).id("regimen")
+                }
+            }
             if TodayCheckinNudge.shows(m) {
                 TodayCheckinNudge(m: m) { checkinDay = CheckinDay(key: m.key, isToday: m.isToday) }.id("checkin")
             }

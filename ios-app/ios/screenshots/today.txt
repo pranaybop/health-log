@@ -14,3 +14,4 @@ today-checkin today dark -now 2026-11-24T23:20:00-06:00 -todayOpen checkin
 today-past today light -now 2026-11-24T23:20:00-06:00 -dayOffset -1
 today-past-lower today light -now 2026-11-24T23:20:00-06:00 -dayOffset -1 -scrollTo meds
 today-old-dark today dark -now 2026-11-24T23:20:00-06:00 -dayOffset -30
+today-photo today light -now 2026-11-24T23:20:00-06:00 -scrollTo photo

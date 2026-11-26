@@ -1,5 +1,6 @@
 import SwiftUI
 import LogCore
+import LogActivity
 
 // MARK: Check-in prompt
 
@@ -113,6 +114,7 @@ struct TodayFeelNow: View {
                     }
                 }
                 TodayCaption(m.thoughts.isEmpty ? "None yet today." : "\(m.thoughts.count) today, last at \(lastAt.map(LogTime.time) ?? "—").")
+                HungerActivityToggle(d: m.d)
                 if effectOpen {
                     QuickEffect(busy: busy, send: send, done: { effectOpen = false })
                 }
@@ -518,5 +520,47 @@ private struct MedLevel: View {
             Text(detail).font(.footnote).foregroundStyle(LogColor.ink2)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+
+/// "Track on Lock Screen": starts or ends the hunger Live Activity (today's food thoughts, with
+/// buttons to log one from the Lock Screen or Dynamic Island).
+struct HungerActivityToggle: View {
+    @Environment(LogStore.self) private var store
+    let d: Dashboard
+    @State private var on = HungerActivity.isOn
+    @State private var note: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: Binding(get: { on }, set: { change($0) })) {
+                Label("Track on Lock Screen", systemImage: "lock.rectangle.on.rectangle")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(LogColor.ink)
+            }
+            .tint(LogColor.accent)
+            if let note {
+                Text(note).font(.footnote).foregroundStyle(LogColor.warnInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func change(_ value: Bool) {
+        on = value
+        HungerActivity.isOn = value
+        note = nil
+        if value && !HungerActivity.available {
+            note = "Live Activities are off for Log. Turn them on in Settings > Log."
+        }
+        Task {
+            if value {
+                if !store.isDemo { await HungerActivity.sync(d) }
+            } else {
+                await HungerActivity.endAll()
+            }
+        }
     }
 }
