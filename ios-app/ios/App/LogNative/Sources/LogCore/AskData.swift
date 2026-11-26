@@ -215,8 +215,9 @@ public enum AskCloud {
                     messages.append(content)
                     messages.append(["role": "user", "parts": calls.map { c -> [String: Any] in
                         let fname = c["name"] as? String ?? ""
-                        return ["functionResponse": ["name": fname,
-                                                     "response": ["result": AskTools.run(fname, arguments: c["args"] as? [String: Any] ?? [:], d: d, now: now)]]]
+                        let result = AskTools.run(fname, arguments: c["args"] as? [String: Any] ?? [:], d: d, now: now)
+                        let response: [String: Any] = ["name": fname, "response": ["result": result]]
+                        return ["functionResponse": response]
                     }])
                     continue
                 }
@@ -266,7 +267,8 @@ public enum AskCloud {
             let base = config.provider == .openai ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions"
             req = URLRequest(url: URL(string: base)!)
             req.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-            body = ["model": model, "messages": [["role": "system", "content": system]] + messages]
+            let systemMessage: [String: Any] = ["role": "system", "content": system]
+            body = ["model": model, "messages": [systemMessage] + messages]
             if tools { body["tools"] = AskTools.functionSchemas }
         case .anthropic:
             req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
