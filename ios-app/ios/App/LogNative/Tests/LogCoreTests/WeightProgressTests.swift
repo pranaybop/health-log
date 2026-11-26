@@ -44,7 +44,7 @@ final class WeightProgressTests: XCTestCase {
         XCTAssertEqual(s.startDate, LogTime.noon("2026-09-01"))
         // A weigh-in a few days before the first shot is the run's start.
         let before = WeightPoint(at: LogTime.noon("2026-08-29"), lb: 271, trend: 271)
-        XCTAssertEqual(WeightProgress.run([old, before] + points(), since: since).first, before)
+        XCTAssertEqual(WeightProgress.run([old, before] + points(), since: LogTime.noon("2026-08-31")).first, before)
     }
 
     func testNoGoalNoMilestones() throws {
