@@ -42,12 +42,14 @@ struct HungerLiveActivity: Widget {
                         Text("Hunger today").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                         Text("\(s.count)").font(.system(.title2, design: .rounded).weight(.bold)).monospacedDigit()
                     }
+                    .padding(.leading, 8)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text("Calories left").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
                         Text(s.caloriesLeft.map { "\($0)" } ?? "—").font(.system(.title2, design: .rounded).weight(.bold)).monospacedDigit()
                     }
+                    .padding(.trailing, 8)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(spacing: 8) {
@@ -99,25 +101,29 @@ private struct LockScreenHunger: View {
     }
 }
 
-/// A 6 AM–midnight track with a dot per food thought (bigger and warmer for stronger pulls).
+/// A track from 6 AM (earlier if a thought came before then) to midnight, with a dot per food
+/// thought: bigger and warmer for stronger pulls. Dots stay inside the track's ends.
 private struct HungerTimeline: View {
     let thoughts: [HungerAttributes.Thought]
     let height: CGFloat
 
     var body: some View {
         GeometryReader { geo in
-            let start = 6 * 60.0, end = 24 * 60.0
+            let first = Double(thoughts.map(\.minute).min() ?? 360)
+            let start = min(360.0, (first / 60).rounded(.down) * 60), end = 24 * 60.0
+            let pad: CGFloat = 8
+            let span = max(1, geo.size.width - pad * 2)
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.white.opacity(0.18)).frame(height: 4)
                 ForEach([12, 18], id: \.self) { h in
                     Rectangle().fill(Color.white.opacity(0.3)).frame(width: 1, height: height * 0.6)
-                        .offset(x: geo.size.width * (Double(h * 60) - start) / (end - start))
+                        .offset(x: pad + span * (Double(h * 60) - start) / (end - start))
                 }
                 ForEach(Array(thoughts.enumerated()), id: \.offset) { _, t in
                     let x = max(0, min(1, (Double(t.minute) - start) / (end - start)))
                     let d = CGFloat(6 + t.strength * 3)
                     Circle().fill(HColor.strength(t.strength)).frame(width: d, height: d)
-                        .offset(x: geo.size.width * x - d / 2)
+                        .offset(x: pad + span * x - d / 2)
                 }
             }
             .frame(height: height)
