@@ -27,7 +27,7 @@ public enum DataDigest {
         if let p = d.profile {
             out.append("Profile: start \(f(p.startWeightLb, 1)) lb, goal \(f(p.goalWeightLb, 1)) lb, height \(f(p.heightIn)) in.")
         }
-        let t = TrendsCalc.targets(d)
+        let t = Analytics.Trends.targets(d)
         out.append("Daily targets: calories \(f(t.calories)), protein \(f(t.protein)) g.")
 
         let sm = Analytics.smoothWeights(d)
