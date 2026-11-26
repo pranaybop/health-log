@@ -149,8 +149,8 @@ final class ShellTabBarController: UITabBarController, UITabBarControllerDelegat
         setViewControllers(hosts, animated: false)
         tabBar.tintColor = UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.42, green: 0.67, blue: 0.95, alpha: 1)
-                : UIColor(red: 0.11, green: 0.39, blue: 0.75, alpha: 1)
+                ? UIColor(red: 0.36, green: 0.83, blue: 0.72, alpha: 1)
+                : UIColor(red: 0.06, green: 0.48, blue: 0.41, alpha: 1)
         }
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {

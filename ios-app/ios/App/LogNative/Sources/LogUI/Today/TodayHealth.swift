@@ -138,8 +138,9 @@ struct TodayMacros: View {
     var body: some View {
         let rows: [(String, Double?, Bool)] = [("Protein", totals.proteinG, true), ("Carbs", totals.carbsG, false), ("Fat", totals.fatG, false), ("Fiber", totals.fiberG, false)]
         let top = max(1, rows.map { $0.1 ?? 0 }.max() ?? 1)
-        LogCard("Macros") {
-            VStack(spacing: 12) {
+        VStack(spacing: 10) {
+            Rectangle().fill(LogColor.hairline).frame(height: 1)
+            VStack(spacing: 10) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                     HStack(spacing: 10) {
                         Text(r.0).font(.subheadline).foregroundStyle(LogColor.ink2).frame(width: 64, alignment: .leading)
@@ -198,23 +199,21 @@ struct LogMealButton: View {
     }
 }
 
-/// The day's meals (web renderMeals). Logging one is in the Food today card.
+/// The day's meals (web renderMeals), listed inside the Food card right under "Log a meal".
 struct TodayMeals: View {
     let meals: [Meal]
     let past: Bool
 
     var body: some View {
-        LogCard("Meals") {
-            VStack(alignment: .leading, spacing: 12) {
-                if meals.isEmpty {
-                    EmptyNote(past ? "No meals logged this day." : "No meals yet today.")
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(meals.enumerated()), id: \.offset) { i, meal in
-                            if i > 0 { Rectangle().fill(LogColor.hairline).frame(height: 1) }
-                            row(meal)
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle().fill(LogColor.hairline).frame(height: 1)
+            if meals.isEmpty {
+                EmptyNote(past ? "No meals logged this day." : "No meals yet today.")
+                    .padding(.top, 12)
+            } else {
+                ForEach(Array(meals.enumerated()), id: \.offset) { i, meal in
+                    if i > 0 { Rectangle().fill(LogColor.hairline).frame(height: 1) }
+                    row(meal)
                 }
             }
         }

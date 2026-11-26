@@ -108,10 +108,6 @@ public struct TodayScreen: View {
             Group {
                 TodaySleepCard(m: m).id("sleep")
                 TodayBodyCard(m: m).id("body")
-                if let totals = m.totals {
-                    TodayMacros(totals: totals).id("macros")
-                }
-                TodayMeals(meals: m.meals, past: !m.isToday).id("meals")
                 if m.isToday {
                     updatedLine(m).id("updated")
                 }
