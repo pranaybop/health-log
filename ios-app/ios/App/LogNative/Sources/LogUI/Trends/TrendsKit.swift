@@ -4,7 +4,7 @@ import LogCore
 
 // Shared pieces for the Trends tab: the readout line above each chart, time / column / scatter
 // charts with tap-and-drag selection, sparklines, legends, tables and small labels. Chart rules
-// follow ios-app/www/charts.js: nice y ticks with 8% padding, calendar-aligned date ticks, dashed
+// follow the original web charts: nice y ticks with 8% padding, calendar-aligned date ticks, dashed
 // reference lines, thin vertical markers, one y-axis per chart.
 
 typealias TrendsCalc = Analytics.Trends

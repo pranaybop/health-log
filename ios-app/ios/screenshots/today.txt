@@ -1,4 +1,4 @@
-# Native Today tab. -now pins the clock to the made-up data's day (tests/fixture.js, Nov 24 2026, 11:20 PM CT).
+# Native Today tab. -now pins the clock to the made-up data's day (screenshots/demo.json, Nov 24 2026, 11:20 PM CT).
 today-fix-light today light -now 2026-11-24T23:20:00-06:00
 today-fix-dark today dark -now 2026-11-24T23:20:00-06:00
 today-feel today light -now 2026-11-24T23:20:00-06:00 -scrollTo checkin

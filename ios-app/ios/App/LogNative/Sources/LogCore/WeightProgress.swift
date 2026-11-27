@@ -55,6 +55,18 @@ public enum WeightProgress {
         return sm.filter { $0.at > since }
     }
 
+    /// Where the current stretch of weigh-ins starts: the first one after the last gap of
+    /// `gapDays` or more. Apple Health can hold weigh-ins from years back (a different scale,
+    /// a different time of life); nil when there's no such gap.
+    public static func recentStart(_ sm: [WeightPoint], gapDays: Double = 180) -> Date? {
+        guard sm.count >= 2 else { return nil }
+        var start: Date?
+        for i in 1..<sm.count where sm[i].at.timeIntervalSince(sm[i - 1].at) >= gapDays * 86400 {
+            start = sm[i].at
+        }
+        return start
+    }
+
     /// `startLb` is the profile's starting weight (falls back to the first trend). `since` is when
     /// this run started (the first GLP-1 shot); older weigh-ins are left out.
     public static func make(_ all: [WeightPoint], startLb: Double?, goalLb: Double?, since: Date? = nil, now: Date, step: Double = 5) -> Summary? {

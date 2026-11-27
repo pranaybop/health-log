@@ -1,6 +1,6 @@
 import Foundation
 
-// Core calculations shared by every screen, ported from ios-app/www/analytics.js (and a few helpers
+// Core calculations shared by every screen, ported from the original web app's analytics.js (and a few helpers
 // from app.js / signals.js). Screen-specific calculations live with their screens. Keep results
 // identical to the web app: tests in LogCoreTests check them against the made-up fixture.
 
@@ -159,30 +159,9 @@ public enum Analytics {
 
     // MARK: Series helpers
 
-    /// Trailing average over `days` calendar days (inclusive), for values sorted by key.
-    public static func rollingMean(_ values: [DayValue], days: Int = 7) -> [DayValue] {
-        var out: [DayValue] = []
-        var lo = 0
-        var sum = 0.0
-        for i in values.indices {
-            sum += values[i].value
-            while LogTime.dayDiff(values[i].key, values[lo].key) > days - 1 {
-                sum -= values[lo].value
-                lo += 1
-            }
-            out.append(DayValue(key: values[i].key, value: sum / Double(i - lo + 1)))
-        }
-        return out
-    }
-
     /// A log.health_metrics series, sorted, finite values only.
     public static func metric(_ d: Dashboard, _ id: String) -> [DayValue] {
         (d.healthMetrics[id] ?? []).filter { $0.value.isFinite }.map { DayValue(key: $0.day, value: $0.value) }.sorted { $0.key < $1.key }
-    }
-
-    /// A log.daily_health field as a series, e.g. \.restingHr.
-    public static func daily(_ d: Dashboard, _ field: KeyPath<DailyHealth, Double?>) -> [DayValue] {
-        d.dailyHealth.compactMap { r in r[keyPath: field].map { DayValue(key: r.day, value: $0) } }.sorted { $0.key < $1.key }
     }
 
     public static func median(_ values: [Double]) -> Double? {

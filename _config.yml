@@ -1,6 +1,0 @@
-# GitHub Pages: the website is only the files at the repo root. The iPhone app's own copy
-# (ios-app/), the tests and the database files are not published.
-exclude:
-  - ios-app
-  - tests
-  - supabase

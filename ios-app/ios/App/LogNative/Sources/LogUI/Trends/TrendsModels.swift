@@ -52,6 +52,8 @@ struct TrWeightModel {
     var overlays: [String: [String: Double]]
     var recent: [[String]]
     var progress: WeightProgress.Summary?
+    /// First weigh-in after a long gap, when Apple Health brought in years-old history.
+    var recentStart: Date?
 
     init(_ d: Dashboard, now: Date) {
         self.now = now
@@ -68,6 +70,7 @@ struct TrWeightModel {
         var ov: [String: [String: Double]] = [:]
         for o in TrOverlay.all where o.id != "none" { ov[o.id] = TrendsCalc.overlayDaily(d, o.id, now: now) }
         overlays = ov
+        recentStart = WeightProgress.recentStart(sm)
         progress = WeightProgress.make(sm, startLb: d.profile?.startWeightLb, goalLb: d.profile?.goalWeightLb, since: glp1, now: now)
         recent = sm.reversed().prefix(30).map { w in
             ["\(LogTime.weekdayDate(w.at)), \(LogTime.calendar.component(.year, from: w.at))", TrendsCalc.num(w.lb, 1), TrendsCalc.num(w.trend, 1)]

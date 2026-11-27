@@ -6,9 +6,6 @@ import LogHealth
 /// Earn It, then the dose, side effect, measurement and vial forms, the reconstitution calculator
 /// and the app version.
 public struct LogScreen: View {
-    /// Flip to true when this screen covers everything the web version does.
-    public static let isReady = true
-
     @Environment(LogStore.self) private var store
     @State private var open: [String: Bool] = LogScreen.initialOpen
 
@@ -29,13 +26,11 @@ public struct LogScreen: View {
     public var body: some View {
         ScrollViewReader { proxy in
             ScreenScaffold("Log") {
-                if NativeHealthSync.isReady {
-                    LogCard("Apple Health") {
-                        Caption("Activity, sleep stages, heart rate, breathing, blood oxygen, blood pressure, glucose, temperature, energy, water, weigh-ins, body fat and workouts. When the app opens it catches up on recent days and keeps backfilling your history.")
-                        HealthSyncPanel()
-                    }
-                    .id("health")
+                LogCard("Apple Health") {
+                    Caption("Activity, sleep stages, heart rate, breathing, blood oxygen, blood pressure, glucose, temperature, energy, water, weigh-ins, body fat and workouts. When the app opens it catches up on recent days and keeps backfilling your history.")
+                    HealthSyncPanel()
                 }
+                .id("health")
                 LogCard("Today’s check-in") {
                     Caption("How the day went. Everything is optional, and saving again updates today’s answers.")
                     CheckinForm(day: MLDebug.arg("-checkinDay") ?? LogTime.today())

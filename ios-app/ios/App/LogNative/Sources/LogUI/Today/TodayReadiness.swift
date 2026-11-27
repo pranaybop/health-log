@@ -1,6 +1,34 @@
 import SwiftUI
 import LogCore
 
+/// Readiness for the last 60 days, worked out once per payload rather than on every redraw
+/// (Today rebuilds its model whenever it renders, and swiping days asks for other keys).
+@MainActor
+enum ReadinessCache {
+    private static var stamp = ""
+    private static var byKey: [String: Readiness.Day] = [:]
+
+    private static func fill(_ d: Dashboard) {
+        let today = LogTime.today()
+        let s = "\(d.asOf ?? "")|\(d.dailyHealth.count)|\(d.workouts.count)|\(d.weights.count)|\(d.doses.count)|\(today)"
+        guard s != stamp else { return }
+        stamp = s
+        byKey = [:]
+        for day in Readiness.history(d, now: LogTime.noon(today), days: 90) { byKey[day.key] = day }
+    }
+
+    static func day(_ key: String, in d: Dashboard) -> Readiness.Day? {
+        fill(d)
+        return byKey[key]
+    }
+
+    /// The 7 days ending on `key` that have a score.
+    static func week(ending key: String, in d: Dashboard) -> [Readiness.Day] {
+        fill(d)
+        return (0..<7).reversed().compactMap { byKey[LogTime.shift(key, -$0)] }
+    }
+}
+
 /// Today's readiness (Readiness in LogCore): a gauge with the 0–10 score, a small meter per
 /// signal showing better or worse than your normal, and the last 7 days. The full breakdown and
 /// history are on Trends › Body.
@@ -41,7 +69,17 @@ struct TodayReadiness: View {
     }
 
     var body: some View {
-        LogCard(isToday ? "Readiness" : "Readiness that day") {
+        Button { TrendsRouter.open("body", card: "readiness") } label: { card }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens readiness on Trends")
+    }
+
+    private var card: some View {
+        LogCard(isToday ? "Readiness" : "Readiness that day", accessory: {
+            Image(systemName: "chevron.right")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(LogColor.ink2)
+        }) {
             HStack(alignment: .center, spacing: 18) {
                 ReadinessGauge(score: day.score, color: Self.tone(day.score))
                 VStack(alignment: .leading, spacing: 10) {

@@ -67,6 +67,14 @@ final class WeightProgressTests: XCTestCase {
         XCTAssertEqual(s.lowest?.trend ?? 0, 255.25, accuracy: 1e-9)
     }
 
+    func testRecentStartSkipsOldHistory() {
+        let old = [WeightPoint(at: LogTime.noon("2019-07-26"), lb: 190, trend: 190),
+                   WeightPoint(at: LogTime.noon("2019-08-02"), lb: 189, trend: 189.5)]
+        let sm = old + points()
+        XCTAssertEqual(WeightProgress.recentStart(sm), LogTime.noon("2026-09-01"))
+        XCTAssertNil(WeightProgress.recentStart(points()))
+    }
+
     func testNoGoalNoMilestones() throws {
         let s = try XCTUnwrap(WeightProgress.make(points(), startLb: nil, goalLb: nil, now: Date()))
         XCTAssertTrue(s.milestones.isEmpty)
@@ -112,5 +120,34 @@ final class ReadinessTests: XCTestCase {
             XCTAssertTrue(day.parts.contains { $0.id == "hrv" || $0.id == "rhr" })
         }
         XCTAssertEqual(days.map(\.key), days.map(\.key).sorted())
+    }
+}
+
+final class AskToolsTests: XCTestCase {
+    static var d: Dashboard = {
+        let url = Bundle.module.url(forResource: "demo", withExtension: "json", subdirectory: "Fixtures")!
+        return try! Dashboard.decode(Data(contentsOf: url))
+    }()
+    let now = LogTime.parse("2026-11-24T23:20:00-06:00")!
+
+    func testDaysTable() {
+        let out = AskTools.run("get_days", arguments: ["start": "2026-11-20", "end": "2026-11-24"], d: Self.d, now: now)
+        XCTAssertTrue(out.hasPrefix("day|weight|trend|kcal"), out)
+        XCTAssertTrue(out.contains("\n2026-11-24|"))
+        XCTAssertFalse(out.contains("2026-11-19|"))
+    }
+
+    func testArgumentsAreChecked() {
+        XCTAssertEqual(AskTools.run("get_days", arguments: ["start": "last week"], d: Self.d, now: now), "Give start and end as YYYY-MM-DD.")
+        XCTAssertEqual(AskTools.run("nope", arguments: ["start": "2026-11-01", "end": "2026-11-02"], d: Self.d, now: now), "There's no tool called nope.")
+        // Reversed dates and dates past today still work.
+        let out = AskTools.run("get_doses", arguments: ["start": "2026-12-31", "end": "2026-11-01"], d: Self.d, now: now)
+        XCTAssertFalse(out.isEmpty)
+    }
+
+    func testSchemasNameEveryTool() {
+        XCTAssertEqual(AskTools.functionSchemas.count, AskTools.specs.count)
+        XCTAssertEqual(AskTools.anthropicSchemas.compactMap { $0["name"] as? String }, AskTools.specs.map(\.name))
+        XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: AskTools.googleSchemas))
     }
 }

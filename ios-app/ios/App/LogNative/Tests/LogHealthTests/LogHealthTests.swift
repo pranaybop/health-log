@@ -4,7 +4,7 @@ import HealthKit
 import LogCore
 
 /// The Apple Health sync's pure parts against health.js on the same made-up samples (no real
-/// health data). Expected values came from running ios-app/www/health.js collectWindow on these
+/// health data). Expected values came from running the old web app's health.js collectWindow on these
 /// samples with a stand-in plugin.
 final class LogHealthTests: XCTestCase {
     let a = "2026-11-23"

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Meal logging opens the Log bot in the Grok Bot app. There is no in-app model.
-/// The address lives here only. Keep it the same as LOG_BOT_URL in ios-app/www/app.js.
+/// The address lives here only.
 enum LogBot {
     static let urlString = "grokbot://app/v1/agent?id=81acb34c-2ba4-4bde-aa1b-98e865272965"
 

@@ -70,6 +70,8 @@ struct TrWeightCard: View {
     var m: TrWeightModel
     @State var rangeID: String = "3m"
     @AppStorage("log.overlay") var overlayID: String = "none"
+    /// Show weigh-ins from before the last long gap (years-old Apple Health history).
+    @AppStorage("log.weightShowOld") var showOld = false
 
     var ranges: [TrRange] { TrRange.all }
     var range: TrRange { ranges.first { $0.id == rangeID } ?? ranges.first { $0.id == "3m" } ?? ranges[0] }
@@ -77,7 +79,7 @@ struct TrWeightCard: View {
 
     var body: some View {
         if let last = m.sm.last, let first = m.sm.first {
-            card(last: last, earliest: first.at)
+            card(last: last, earliest: showOld ? first.at : (m.recentStart ?? first.at))
         } else {
             LogCard("Weight") { EmptyNote("No weigh-ins yet. Log one on the Log tab.") }
         }
@@ -95,7 +97,7 @@ struct TrWeightCard: View {
         let r = range
         let end = max(m.now, last.at)
         let startT = start(r, end: end, earliest: earliest)
-        let inRange = m.sm.filter { $0.at >= startT }
+        let inRange = m.sm.filter { $0.at >= max(startT, earliest) }
         let first = inRange.first ?? m.sm[0]
         let change = last.trend - first.trend
         let lows = inRange.map(\.lb).min()
@@ -104,7 +106,7 @@ struct TrWeightCard: View {
         // 1M / 3M / 1Y scroll back through every weigh-in; All and Since GLP-1 fit on screen.
         let scrolls = r.days != nil && earliest < startT
         let chartFrom = scrolls ? earliest : startT
-        let drawn = scrolls ? m.sm : inRange
+        let drawn = scrolls ? m.sm.filter { $0.at >= earliest } : inRange
 
         // Straight-line projection from the post-dose trend, on the short ranges only.
         let proj = (r.id == "1m" || r.id == "3m") ? m.proj : nil
@@ -242,6 +244,18 @@ struct TrWeightCard: View {
                             text: "That’s above 1% a week over the last 4 weeks. Faster loss tends to take more muscle with it, so protein and strength work matter more right now.")
             }
             Caption(caption)
+            if let rs = m.recentStart, let oldest = m.sm.first {
+                let y0 = LogTime.calendar.component(.year, from: oldest.at)
+                Button {
+                    showOld.toggle()
+                } label: {
+                    Text(showOld ? "Hide weigh-ins from before \(LogTime.shortDate(rs)), \(LogTime.calendar.component(.year, from: rs))"
+                                 : "Show older weigh-ins (Apple Health history from \(y0))")
+                        .font(.footnote.weight(.semibold))
+                }
+                .tint(LogColor.link)
+                .accessibilityHint("The chart starts after a long gap in weigh-ins")
+            }
             TrDisclosure(title: "Recent weigh-ins", headers: ["Date", "Weight", "Trend"], rows: m.recent)
         }
     }

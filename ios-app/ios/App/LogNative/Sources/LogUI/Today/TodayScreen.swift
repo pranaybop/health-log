@@ -6,9 +6,6 @@ import LogHealth
 /// day's weight, food, check-in, food thoughts, recovery signals, and medication cards,
 /// sleep, Apple Health, macros and meals. Past days show that day's data; future days are disabled.
 public struct TodayScreen: View {
-    /// Flip to true when this screen covers everything the web version does.
-    public static let isReady = true
-
     @Environment(LogStore.self) private var store
 
     @State private var dayOffset = TodayDebug.dayOffset
@@ -85,8 +82,8 @@ public struct TodayScreen: View {
     private func dayBody(_ m: TodayModel) -> some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TodayHero(m: m).id("hero")
-            if let r = Readiness.day(m.key, d: m.d, trend: m.points) {
-                TodayReadiness(day: r, week: Readiness.history(m.d, now: LogTime.noon(m.key), days: 7), isToday: m.isToday)
+            if let r = ReadinessCache.day(m.key, in: m.d) {
+                TodayReadiness(day: r, week: ReadinessCache.week(ending: m.key, in: m.d), isToday: m.isToday)
                     .id("readiness")
             }
             if m.isToday {

@@ -53,9 +53,9 @@ struct MLNextDoseHero: View {
     }
 
     private func whenLine(_ days: Int) -> String {
-        if days < 0 { return "Overdue · planned \(MLFmt.daysWord(days))" }
+        if days < 0 { return "Overdue · planned \(TodayText.daysWord(days))" }
         if days == 0 { return "Next dose · today" }
-        return "Next dose · \(MLFmt.daysWord(days))"
+        return "Next dose · \(TodayText.daysWord(days))"
     }
 
     /// "Sun, Nov 29 · 25 units · Right love handle · Crush 2.5 mg (25 u)"

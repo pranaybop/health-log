@@ -157,7 +157,8 @@ public struct AskTurn: Hashable, Sendable, Identifiable {
 }
 
 /// Ask with the AI key saved under Account (the same one meal logging uses), straight from the
-/// phone to that company. Nothing goes through the log's server.
+/// phone to that company. Nothing goes through the log's server. With a dashboard, the model can
+/// call AskTools to look up any date range; each call runs here on the phone.
 public enum AskCloud {
     static let session: URLSession = {
         let c = URLSessionConfiguration.default
@@ -165,32 +166,99 @@ public enum AskCloud {
         return URLSession(configuration: c)
     }()
 
-    public static func send(_ config: MealAIConfig, system: String, turns: [AskTurn]) async throws -> String {
-        let req = try request(config, system: system, turns: turns)
+    /// Rounds of tool calls before giving up (each round can call several tools).
+    static let maxRounds = 6
+
+    public static func send(_ config: MealAIConfig, system: String, turns: [AskTurn], dashboard: Dashboard? = nil,
+                            now: Date = Date()) async throws -> String {
         let name = config.provider.name
+        var messages = initialMessages(config.provider, turns: turns)
+        for _ in 0..<maxRounds {
+            let req = try request(config, system: system, messages: messages, tools: dashboard != nil)
+            let json = try await post(req, name: name, model: config.model)
+            switch config.provider {
+            case .anthropic:
+                if json["stop_reason"] as? String == "refusal" {
+                    return "Claude declined to answer that one. Try rephrasing the question."
+                }
+                let content = json["content"] as? [[String: Any]] ?? []
+                let calls = content.filter { $0["type"] as? String == "tool_use" }
+                if let d = dashboard, !calls.isEmpty {
+                    messages.append(["role": "assistant", "content": content])
+                    messages.append(["role": "user", "content": calls.map { c -> [String: Any] in
+                        ["type": "tool_result", "tool_use_id": c["id"] as? String ?? "",
+                         "content": AskTools.run(c["name"] as? String ?? "", arguments: c["input"] as? [String: Any] ?? [:], d: d, now: now)]
+                    }])
+                    continue
+                }
+                return try text(content.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(), name)
+            case .openai, .xai:
+                let message = ((json["choices"] as? [[String: Any]])?.first?["message"] as? [String: Any]) ?? [:]
+                let calls = message["tool_calls"] as? [[String: Any]] ?? []
+                if let d = dashboard, !calls.isEmpty {
+                    messages.append(message)
+                    for c in calls {
+                        let fn = c["function"] as? [String: Any] ?? [:]
+                        let argText = fn["arguments"] as? String ?? "{}"
+                        let args = (try? JSONSerialization.jsonObject(with: Data(argText.utf8))) as? [String: Any] ?? [:]
+                        messages.append(["role": "tool", "tool_call_id": c["id"] as? String ?? "",
+                                         "content": AskTools.run(fn["name"] as? String ?? "", arguments: args, d: d, now: now)])
+                    }
+                    continue
+                }
+                return try text(message["content"] as? String ?? "", name)
+            case .google:
+                let content = ((json["candidates"] as? [[String: Any]])?.first?["content"] as? [String: Any]) ?? [:]
+                let parts = content["parts"] as? [[String: Any]] ?? []
+                let calls = parts.compactMap { $0["functionCall"] as? [String: Any] }
+                if let d = dashboard, !calls.isEmpty {
+                    messages.append(content)
+                    messages.append(["role": "user", "parts": calls.map { c -> [String: Any] in
+                        let fname = c["name"] as? String ?? ""
+                        let result = AskTools.run(fname, arguments: c["args"] as? [String: Any] ?? [:], d: d, now: now)
+                        let response: [String: Any] = ["name": fname, "response": ["result": result]]
+                        return ["functionResponse": response]
+                    }])
+                    continue
+                }
+                return try text(parts.compactMap { $0["text"] as? String }.joined(), name)
+            }
+        }
+        throw LogError.server("\(name) kept looking things up without answering. Try a narrower question.")
+    }
+
+    static func text(_ s: String, _ name: String) throws -> String {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { throw LogError.server("Couldn’t read \(name)’s answer.") }
+        return t
+    }
+
+    static func initialMessages(_ provider: MealAIProvider, turns: [AskTurn]) -> [[String: Any]] {
+        switch provider {
+        case .google:
+            return turns.map { ["role": $0.role == .user ? "user" : "model", "parts": [["text": $0.text]]] }
+        default:
+            return turns.map { ["role": $0.role.rawValue, "content": $0.text] }
+        }
+    }
+
+    static func post(_ req: URLRequest, name: String, model: String) async throws -> [String: Any] {
         let data: Data, response: URLResponse
         do { (data, response) = try await session.data(for: req) }
         catch { throw LogError.network("Couldn’t reach \(name). Check your connection.") }
         guard let http = response as? HTTPURLResponse else { throw LogError.network("No response from \(name).") }
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 || http.statusCode == 403 { throw LogError.server("\(name) didn’t accept the key. Check it in Account.") }
-            if http.statusCode == 404 { throw LogError.server("\(name) doesn’t know the model “\(config.model)”. Change it in Account.") }
+            if http.statusCode == 404 { throw LogError.server("\(name) doesn’t know the model “\(model)”. Change it in Account.") }
             if http.statusCode == 429 { throw LogError.server("\(name) says the key is out of quota or rate-limited.") }
-            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            let msg = (json?["error"] as? [String: Any])?["message"] as? String
+            let msg = (json["error"] as? [String: Any])?["message"] as? String
             throw LogError.server(msg ?? "\(name) returned \(http.statusCode).")
         }
-        if config.provider == .anthropic,
-           let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-           json["stop_reason"] as? String == "refusal" {
-            return "Claude declined to answer that one. Try rephrasing the question."
-        }
-        guard let text = MealAI.replyText(data, provider: config.provider)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !text.isEmpty else { throw LogError.server("Couldn’t read \(name)’s answer.") }
-        return text
+        return json
     }
 
-    static func request(_ config: MealAIConfig, system: String, turns: [AskTurn]) throws -> URLRequest {
+    static func request(_ config: MealAIConfig, system: String, messages: [[String: Any]], tools: Bool) throws -> URLRequest {
         let model = config.model.trimmingCharacters(in: .whitespaces).isEmpty ? config.provider.defaultModel : config.model
         var req: URLRequest
         var body: [String: Any]
@@ -199,21 +267,21 @@ public enum AskCloud {
             let base = config.provider == .openai ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions"
             req = URLRequest(url: URL(string: base)!)
             req.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
-            var messages: [[String: String]] = [["role": "system", "content": system]]
-            messages += turns.map { ["role": $0.role.rawValue, "content": $0.text] }
-            body = ["model": model, "messages": messages]
+            let systemMessage: [String: Any] = ["role": "system", "content": system]
+            body = ["model": model, "messages": [systemMessage] + messages]
+            if tools { body["tools"] = AskTools.functionSchemas }
         case .anthropic:
             req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
             req.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
             req.setValue("2026-10-21", forHTTPHeaderField: "anthropic-version")
-            body = ["model": model, "max_tokens": 16000, "system": system,
-                    "messages": turns.map { ["role": $0.role.rawValue, "content": $0.text] }]
+            body = ["model": model, "max_tokens": 16000, "system": system, "messages": messages]
+            if tools { body["tools"] = AskTools.anthropicSchemas }
         case .google:
             let escaped = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
             req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(escaped):generateContent")!)
             req.setValue(config.apiKey, forHTTPHeaderField: "x-goog-api-key")
-            body = ["systemInstruction": ["parts": [["text": system]]],
-                    "contents": turns.map { ["role": $0.role == .user ? "user" : "model", "parts": [["text": $0.text]]] }]
+            body = ["systemInstruction": ["parts": [["text": system]]], "contents": messages]
+            if tools { body["tools"] = AskTools.googleSchemas }
         }
         req.httpMethod = "POST"
         req.timeoutInterval = 120

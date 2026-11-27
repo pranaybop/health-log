@@ -4,9 +4,8 @@ import HealthKit
 import UIKit
 import LogCore
 
-/// Apple Health sync in Swift (stage 3). Replaces ios-app/www/health.js: it reads the same
-/// HealthKit types with the same rules (HealthAggregate) and sends the same payloads to the same
-/// log-write actions (`health_sync`, `health_metrics`) with the Keychain passcode.
+/// Apple Health sync in Swift. HealthKit reads (HealthAggregate) go to the `health_sync` and
+/// `health_metrics` log-write actions with the Keychain passcode.
 ///
 /// - sync(days:): the recent catch-up. The app calls it with 2 at launch, on pull to refresh and
 ///   on coming back to the app (the first one on this phone takes 30 days, like the web's).
@@ -17,8 +16,6 @@ import LogCore
 /// Never runs in demo mode, never asks for Health access in the background, never logs values.
 public final class NativeHealthSync: @unchecked Sendable {
     public static let shared = NativeHealthSync()
-    /// True: the app turns the web sync off and calls this one.
-    public static let isReady = true
     public static let backgroundTaskId = "com.pranaybop.log.healthsync"
 
     enum Mode: Sendable, Equatable {
@@ -41,7 +38,6 @@ public final class NativeHealthSync: @unchecked Sendable {
 
     /// Call from application(_:didFinishLaunchingWithOptions:), before it returns.
     public static func registerBackgroundTasks() {
-        guard isReady else { return }
         registration.lock()
         defer { registration.unlock() }
         guard !registered else { return }
@@ -56,7 +52,7 @@ public final class NativeHealthSync: @unchecked Sendable {
 
     /// Call when the app goes to the background: ask iOS for a catch-up in about an hour.
     public static func scheduleBackgroundRefresh() {
-        guard isReady, !isDemoLaunch, PasscodeStore.read() != nil || SessionStore.read() != nil else { return }
+        guard !isDemoLaunch, PasscodeStore.read() != nil || SessionStore.read() != nil else { return }
         let request = BGAppRefreshTaskRequest(identifier: backgroundTaskId)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 3600)
         try? BGTaskScheduler.shared.submit(request)

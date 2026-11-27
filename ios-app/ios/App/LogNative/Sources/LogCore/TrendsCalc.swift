@@ -1,6 +1,6 @@
 import Foundation
 
-// Trends tab calculations, ported from ios-app/www (app.js, signals.js, insights.js, focus.js,
+// Trends tab calculations, ported from the original web app (removed Nov 2026) (app.js, signals.js, insights.js, focus.js,
 // analytics.js, export.js). Pure functions of the dashboard payload and a clock (`now`), so the
 // tests can pin the time. Text that carries numbers is built here too, word for word as the web
 // app writes it. Namespaced under Analytics.Trends so it can't collide with other screens' helpers.
@@ -160,13 +160,6 @@ extension Analytics.Trends {
     static func metricMap(_ d: Dashboard, _ id: String) -> [String: Double] {
         var m: [String: Double] = [:]
         for p in d.healthMetrics[id] ?? [] where p.value.isFinite && m[p.day] == nil { m[p.day] = p.value }
-        return m
-    }
-
-    /// A daily_health field by day (the first row for a day wins, like the web's find()).
-    static func healthMap(_ d: Dashboard, _ field: KeyPath<DailyHealth, Double?>) -> [String: Double] {
-        var m: [String: Double] = [:]
-        for r in d.dailyHealth { if let v = r[keyPath: field], m[r.day] == nil { m[r.day] = v } }
         return m
     }
 

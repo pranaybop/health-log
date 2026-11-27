@@ -1,7 +1,7 @@
 import XCTest
 @testable import LogCore
 
-/// Today-tab calculations against the web app's own functions (ios-app/www) run on the same made-up
+/// Today-tab calculations against the web app's own functions (since removed) run on the same made-up
 /// fixture at the tests' clock, Nov 24 2026, 11:20 PM CT.
 final class TodayTests: XCTestCase {
     var d: Dashboard { LogCoreTests.dashboard }

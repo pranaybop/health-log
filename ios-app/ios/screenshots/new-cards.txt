@@ -1,0 +1,9 @@
+# Cards added Nov 26 2026: Readiness (Today and Trends › Body), Progress (Trends › Weight), Ask.
+# One per line: name tab light|dark [more launch arguments]
+today-readiness today light -now 2026-11-24T23:20:00-06:00 -scrollTo readiness
+today-readiness-dark today dark -now 2026-11-24T23:20:00-06:00 -scrollTo readiness
+trends-weight-progress trends light -section weight -scrollTo progress
+trends-weight-progress-dark trends dark -section weight -scrollTo progress
+trends-body-readiness trends light -section body -scrollTo readiness
+trends-ask trends light -section ask
+trends-ask-dark trends dark -section ask

@@ -6,9 +6,6 @@ import LogCore
 /// row of chips and remembered in "log.trendsSection" like the web app's localStorage key.
 /// Each section's numbers are worked out once per payload (TrendsCache), not on every render.
 public struct TrendsScreen: View {
-    /// Flip to true when this screen covers everything the web version does.
-    public static let isReady = true
-
     @Environment(LogStore.self) var store
     @AppStorage("log.trendsSection") var savedSection: String = "summary"
     @State var picked: String? = nil
@@ -34,6 +31,16 @@ public struct TrendsScreen: View {
                 }
             }
             .task(id: store.dataTime) { await debugScroll(proxy) }
+            .onReceive(NotificationCenter.default.publisher(for: TrendsRouter.opened)) { note in
+                guard let target = note.object as? TrendsRouter.Target else { return }
+                picked = target.section
+                savedSection = target.section
+                guard let card = target.card else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 350_000_000)
+                    withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(card, anchor: .top) }
+                }
+            }
         }
     }
 
@@ -123,5 +130,51 @@ struct TrSectionPicker: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Trends sections")
+    }
+}
+
+/// Opens a Trends section (and optionally scrolls to a card) from another tab or a widget.
+enum TrendsRouter {
+    static let opened = Notification.Name("logTrendsOpened")
+
+    struct Target {
+        var section: String
+        var card: String?
+    }
+
+    @MainActor
+    static func open(_ section: String, card: String? = nil) {
+        UserDefaults.standard.set(section, forKey: "log.trendsSection")
+        TodayTabs.select(2)
+        let target = Target(section: section, card: card)
+        NotificationCenter.default.post(name: opened, object: target)
+        // The Trends screen may not exist until its tab is first shown; say it again once it does.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            NotificationCenter.default.post(name: opened, object: target)
+        }
+    }
+}
+
+/// Links from the Home and Lock Screen widgets: pranaybop-log://today, pranaybop-log://trends/<section>.
+public enum DeepLink {
+    public static let scheme = "pranaybop-log"
+
+    public static func handles(_ url: URL) -> Bool { url.scheme?.lowercased() == scheme }
+
+    @MainActor
+    public static func open(_ url: URL) {
+        guard handles(url) else { return }
+        switch url.host?.lowercased() {
+        case "trends":
+            let section = url.pathComponents.dropFirst().first ?? "summary"
+            TrendsRouter.open(section, card: section == "body" ? "readiness" : nil)
+        case "meds":
+            TodayTabs.select(1)
+        case "log":
+            TodayTabs.select(3)
+        default:
+            TodayTabs.select(0)
+        }
     }
 }

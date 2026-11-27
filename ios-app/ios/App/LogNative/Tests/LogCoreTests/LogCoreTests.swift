@@ -1,9 +1,8 @@
 import XCTest
 @testable import LogCore
 
-/// Core calculations against the web app's results on the same made-up fixture (tests/fixture.js,
-/// regenerate with: node -e 'process.stdout.write(JSON.stringify(require("./tests/fixture").makeFixture()))').
-/// Expected numbers came from running ios-app/www's own functions on that fixture.
+/// Core calculations against the original web app's results on the same made-up fixture
+/// (Fixtures/demo.json). Expected numbers came from running the web app's own functions on it.
 final class LogCoreTests: XCTestCase {
     static var dashboard: Dashboard = {
         let url = Bundle.module.url(forResource: "demo", withExtension: "json", subdirectory: "Fixtures")!
@@ -57,7 +56,6 @@ final class LogCoreTests: XCTestCase {
     func testDrugLevel() {
         let d = Self.dashboard
         XCTAssertEqual(Analytics.remaining(at: clock, doses: d.doses, protocols: d.protocols), 2.926036254935489, accuracy: 1e-9)
-        XCTAssertEqual(Analytics.levelShare(at: clock, dashboard: d)!, 0.6057586161605162, accuracy: 1e-9)
     }
 
     func testPlanTotalsTargets() {
@@ -133,12 +131,6 @@ final class LogCoreTests: XCTestCase {
         cleared.doses.append(firstSkip)
         XCTAssertEqual(Analytics.nextPlanned(cleared)?.plannedOn, "2026-12-06")
         XCTAssertTrue(Analytics.planIsOverdue(Analytics.nextPlanned(cleared)!, now: dec8))
-    }
-
-    func testRollingMean() {
-        let v = [DayValue(key: "2026-11-01", value: 1), DayValue(key: "2026-11-02", value: 3), DayValue(key: "2026-11-09", value: 5)]
-        let r = Analytics.rollingMean(v, days: 7)
-        XCTAssertEqual(r.map(\.value), [1, 2, 5])
     }
 
     func testReminderSettingsRoundTrip() {
