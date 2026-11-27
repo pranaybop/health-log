@@ -155,6 +155,9 @@ struct TrFoodModel {
     var calorieTarget: Double?
     var protein: TrendsCalc.ProteinCard?
     var thoughts: TrendsCalc.ThoughtsCard?
+    /// The average logged day, last 30 days.
+    var breakdown: CalorieBreakdown?
+    var targetDensity: Double?
 
     init(_ d: Dashboard, now: Date, targets: TrTargets) {
         trends = TrendsCalc.foodTrends(d, now: now, calorieTarget: targets.calories, proteinTarget: targets.protein)
@@ -162,6 +165,8 @@ struct TrFoodModel {
         calorieTarget = targets.calories
         protein = TrendsCalc.proteinCard(d, now: now, target: targets.protein)
         thoughts = TrendsCalc.thoughtsCard(d, now: now)
+        breakdown = CalorieBreakdown.average(d, days: 30, now: now)
+        targetDensity = CalorieBreakdown.targetDensity(protein: targets.protein, calories: targets.calories)
     }
 }
 

@@ -75,8 +75,9 @@ struct TodayFoodCard: View {
                     LogMealButton()
                 }
                 TodayMeals(meals: m.meals, past: !m.isToday)
-                if let totals = m.totals {
-                    TodayMacros(totals: totals)
+                if let b = CalorieBreakdown.make(meals: m.meals, totals: m.totals) {
+                    Rectangle().fill(LogColor.hairline).frame(height: 1)
+                    CalorieBreakdownView(b: b, targetDensity: CalorieBreakdown.targetDensity(protein: t.protein, calories: t.calories))
                 }
                 if m.isToday, let target = t.protein {
                     ProteinLine(s: Analytics.proteinStreak(m.d, target: target, now: m.now))
