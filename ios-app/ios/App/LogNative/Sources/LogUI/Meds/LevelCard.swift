@@ -85,7 +85,7 @@ struct MLLevelCard: View {
             .environment(\.timeZone, LogTime.zone)
             .frame(height: 210)
             .padding(.top, 6)
-            .accessibilityLabel("Estimated tirzepatide level over time")
+            .accessibilityLabel("Estimated drug level over time")
             .accessibilityValue("\(Fmt.num(levelNow, 2)) mg now")
             HStack(spacing: 16) {
                 MLLegendLine(color: LogColor.s3, dashed: false, label: "Logged doses")
@@ -113,6 +113,9 @@ struct MLLevelCard: View {
     private var caption: String {
         let tirz = Fmt.mg(Analytics.halfLifeDays("tirzepatide", protocols: data.protocols))
         let reta = Fmt.mg(Analytics.halfLifeDays("retatrutide", protocols: data.protocols))
-        return "Half-life model: tirzepatide \(tirz) days, retatrutide \(reta) days. The dashed line adds the next planned tirzepatide shot if it falls before the Dec 6 switch. No retatrutide mg amount is assumed. An estimate, not a lab value."
+        let dashed = LogTime.switchStart.map {
+            " The dashed line adds the next planned tirzepatide shot if it falls before the \(LogTime.switchName) switch on \(LogTime.shortDate($0))."
+        } ?? ""
+        return "Half-life model: tirzepatide \(tirz) days, retatrutide \(reta) days.\(dashed) No retatrutide mg amount is assumed. An estimate, not a lab value."
     }
 }

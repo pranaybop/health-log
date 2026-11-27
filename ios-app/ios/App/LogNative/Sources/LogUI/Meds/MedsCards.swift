@@ -182,12 +182,13 @@ struct MLVialsCard: View {
                 let shotsLeft = Int(weeks.rounded(.down))
                 let enough = shotsLeft >= shotsNeeded
                 let mgText = tirz.mg.map(MLFmt.auto) ?? "—"
-                bits.append("Tirzepatide: \(mgText) mg, about \(Fmt.num(weeks, 1)) weekly shot\(weeks == 1 ? "" : "s") at \(Fmt.num(tirz.weeklyMg, 1)) mg. The switch is in \(MLFmt.count(days, "day")) (about \(MLFmt.count(shotsNeeded, "shot"))). \(enough ? "That covers the remaining tirzepatide weeks." : "That may run short before Dec 6.")")
+                let cover = enough ? " That covers the remaining tirzepatide weeks." : (LogTime.switchStart.map { " That may run short before \(MLFmt.short($0))." } ?? "")
+                bits.append("Tirzepatide: \(mgText) mg, about \(Fmt.num(weeks, 1)) weekly shot\(weeks == 1 ? "" : "s") at \(Fmt.num(tirz.weeklyMg, 1)) mg. The switch is in \(MLFmt.count(days, "day")) (about \(MLFmt.count(shotsNeeded, "shot"))).\(cover)")
             } else {
                 bits.append("Tirzepatide: \(MLFmt.count(tirz.items.count, "vial")) on hand.")
             }
-        } else if days > 0 {
-            bits.append("No tirzepatide vials are logged, so runway before Dec 6 can’t be calculated.")
+        } else if days > 0, let switchAt = LogTime.switchStart {
+            bits.append("No tirzepatide vials are logged, so runway before \(MLFmt.short(switchAt)) can’t be calculated.")
         }
         if reta.ready {
             if let weeks = reta.weeks, let wu = reta.weeklyUnits, wu != 0 {

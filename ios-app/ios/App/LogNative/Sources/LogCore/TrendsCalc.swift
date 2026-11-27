@@ -105,15 +105,19 @@ extension Analytics.Trends {
         return dateYear(d, now: now)
     }
 
-    private static let dateTimeFormatter: DateFormatter = {
+    private static var dateTimeFormatter: DateFormatter {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US")
+        f.calendar = LogTime.calendar
         f.timeZone = LogTime.zone
         f.dateFormat = "EEE, MMM d, yyyy, h:mm a"
         return f
-    }()
+    }
 
-    public static func dateTime(_ date: Date) -> String { dateTimeFormatter.string(from: date) + " CT" }
+    /// "Tue, Nov 24, 2026, 6:30 PM" plus the active zone's abbreviation.
+    public static func dateTime(_ date: Date) -> String {
+        dateTimeFormatter.string(from: date) + " " + (LogTime.zone.abbreviation(for: date) ?? LogTime.zone.identifier)
+    }
 
     public static func dayRange(_ from: String, _ to: String) -> [String] {
         var out: [String] = []
@@ -1408,7 +1412,7 @@ extension Analytics.Trends {
           th { width: 30%; color: #555; font-weight: 600; }
         </style></head><body>
         <h1>Health log</h1>
-        <p class="muted">Prescriber report · generated \(dateTime(now)) · times in America/Chicago</p>
+        <p class="muted">Prescriber report · generated \(dateTime(now)) · times in \(LogTime.zone.identifier)</p>
         <h2>Summary</h2>
         <table>\(summary)</table>
         <h2>Doses</h2>
@@ -1469,7 +1473,7 @@ extension Analytics.Trends {
           table.kv th { width: 40%; color: #555; font-weight: 600; }
         </style></head><body>
         <h1>4-week coach pack</h1>
-        <p class="muted">\(short(fromKey)) to \(short(toKey)) · generated \(dateTime(now)) · America/Chicago</p>
+        <p class="muted">\(short(fromKey)) to \(short(toKey)) · generated \(dateTime(now)) · \(LogTime.zone.identifier)</p>
         <h2>Summary</h2>
         <table class="kv">\(summary)</table>
         <h2>Doses</h2>

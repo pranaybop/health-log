@@ -195,7 +195,7 @@ struct TrHeartCard: View {
             ForEach(0..<panels.count, id: \.self) { i in
                 panel(panels[i], color: panels[i].higherIsBetter ? LogColor.s4 : LogColor.s3)
             }
-            Caption("From Apple Health. The badge compares the last 7 days with the 30 days before tirzepatide. Watch resting heart rate after the Dec 6 switch: the retatrutide trials reported it rising.")
+            Caption("From Apple Health. The badge compares the last 7 days with the 30 days before tirzepatide.\(LogTime.switchStart.map { " Watch resting heart rate after the \(LogTime.switchName) switch on \(LogTime.shortDate($0)): the retatrutide trials reported it rising." } ?? "")")
         }
     }
 
