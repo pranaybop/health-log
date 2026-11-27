@@ -33,7 +33,7 @@ Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today
 
 ### Trends
 - **Summary:** tiles for weight, food, maintenance, medication and recovery that open their section.
-- **Ask your data:** chat with your log in the app, answered by Bonsai 2 running on the phone, Apple Intelligence, or your own AI key (details below).
+- **Ask your data:** chat with your log in the app, answered by Apple Intelligence on the phone or your own AI key (details below).
 - **Weight:** smoothed trend line over weigh-ins, ranges 1M / 3M / 1Y / All / Since GLP-1, swipe back through history with the scale refitting to what's on screen, compare-with overlays (calories, steps, sleep, resting HR, HRV, food thoughts, food noise), a straight-line projection, goal line and dose markers. **Progress** (counted from your first GLP-1 shot, so years-old Apple Health weigh-ins don't count): % of the way to goal, lost and to go, pace (the same as the Weight card's), predicted goal date, 5 lb milestones (ticked on the first weigh-in at or under each, with an expected date for the rest), today's trend change, lowest trend, change over 1 week to all time. **Stall check**, **body composition** (BMI, body fat, lean mass, share of loss that was lean) and **progress photos**.
 - **Food:** daily calories and protein against targets, the **calorie breakdown** for an average logged day in the last 30, **maintenance calories** (from food logs and weight trend, and from the Apple Watch), **protein target** hit rate, **food thoughts** by day and time.
 - **Meds:** wear-off, the week after a shot, appetite by drug level, retatrutide vs tirzepatide, cycle recaps, feel report, side effects.
@@ -65,16 +65,10 @@ Trends → Body opens with a 0–10 readiness score (`LogCore/Readiness.swift`),
 
 ## Ask your data
 
-Trends → **Ask** answers questions about the log inside the app. Three choices:
+Trends → **Ask** answers questions about the log inside the app. Two choices:
 
-- **Local model** (default once one is downloaded): an open model run on the phone's GPU with [MLX Swift](https://github.com/ml-explore/mlx-swift-lm) (`LogLocalAI`). Free, private, works offline. It starts from a two-week overview and calls lookup tools (`LogCore/AskTools.swift`: days, doses and side effects, meals, workouts, weekly averages, any Apple Health metric) for any other dates. Answers appear as they're written. When Ask opens, the downloaded model loads and reads the instructions once; every new conversation forks that session, so it doesn't read them again. Download it once from Hugging Face into Application Support/Models (not backed up); delete it from the same panel.
-  - **Bonsai 2 4B** (PrismML, `prism-ml/Ternary-Bonsai-2-4B-mlx-2bit`, 1.9 GB): the default. Quick on an iPhone 15 Pro.
-  - **Bonsai 2 9B** (`prism-ml/Ternary-Bonsai-2-9B-mlx-2bit`, 3.6 GB): a 9B Qwen 3.5–based model with ternary weights, the sharpest that fits an 8 GB phone, at about half the speed.
-  - **Qwen 3.5 4B** (`mlx-community/Qwen3.5-4B-4bit`, 3.1 GB).
-
-  These are the models from the Locally AI app's list that MLX Swift loads as-is. Thinking is off for quick answers (PrismML's non-thinking sampler). Before loading, the app checks there's enough free memory and suggests the 4B model if not; a memory warning unloads it.
 - **Apple AI**: Apple Intelligence's on-device model (`FoundationModels`, iOS 26, with Apple Intelligence turned on). Free and private, but its context is small, so it sees two weeks.
-- **Your key**: the key saved under Account › AI (the same one meal logging uses: OpenAI, Anthropic, Google or xAI), called straight from the phone. It gets the same two-week overview and the same lookup tools (each provider's own tool-calling format), so it can answer about any date. A ChatGPT, Claude or SuperGrok subscription doesn't include API access, so this is a key from the company's developer console, billed per question.
+- **Your key**: the key saved under Account › AI (the same one meal logging uses: OpenAI, Anthropic, Google or xAI), called straight from the phone. It gets a two-week overview and lookup tools (`LogCore/AskTools.swift`: days, doses and side effects, meals, workouts, weekly averages, any Apple Health metric) (each provider's own tool-calling format), so it can answer about any date. A ChatGPT, Claude or SuperGrok subscription doesn't include API access, so this is a key from the company's developer console, billed per question.
 
 The snapshot sent to the model is built by `DataDigest` in `LogCore/AskData.swift`. Nothing about Ask goes through Supabase.
 
@@ -101,13 +95,13 @@ Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** an
 
 ## What you need
 
-- A Mac with Xcode 26 or later installed (from the App Store). The first build may ask to download the Metal toolchain (Xcode › Settings › Components) for the on-device model.
+- A Mac with Xcode 26 or later installed (from the App Store).
 - Your iPhone and a USB-C cable (or the same Wi-Fi network after the first run).
 - An Apple ID. A free one works; see "How long it lasts" below.
 
 ## Build and install
 
-1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`) and open `ios-app/ios/App/App.xcodeproj` in Xcode. Swift Package Manager fetches the dependencies (MLX and the Hugging Face loaders for Ask's on-device model). A build from Xcode shows as "development copy" on the Log tab; set the version under the App target's **General** tab if you want one.
+1. On the Mac, get the repo (GitHub Desktop or `git clone https://github.com/pranaybop/health-log.git`) and open `ios-app/ios/App/App.xcodeproj` in Xcode. A build from Xcode shows as "development copy" on the Log tab; set the version under the App target's **General** tab if you want one.
 
 2. In Xcode, select the **App** target, open **Signing & Capabilities**, and pick your Apple ID under **Team** (add it in Xcode Settings > Accounts if it isn't listed). If Xcode says the bundle identifier is taken, change `com.pranaybop.log` to something unique, such as `com.yourname.log`.
 3. Plug in the iPhone, choose it as the run destination at the top of the window, and press Run (⌘R).

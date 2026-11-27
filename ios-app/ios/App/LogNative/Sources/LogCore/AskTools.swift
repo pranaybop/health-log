@@ -1,8 +1,8 @@
 import Foundation
 
 /// Tools Ask's model can call to look things up in the log, so the prompt can stay short (two
-/// weeks of overview) while questions can still reach any date. Used by the on-device MLX model
-/// and by the cloud providers. Every tool returns plain text tables, newest first.
+/// weeks of overview) while questions can still reach any date. Used with your own AI key
+/// (each provider's tool-calling format). Every tool returns plain text tables, newest first.
 public enum AskTools {
     public struct Spec: @unchecked Sendable {
         public var name: String
@@ -57,7 +57,7 @@ public enum AskTools {
 
     // MARK: Provider formats
 
-    /// OpenAI / xAI / MLX: {"type": "function", "function": {name, description, parameters}}
+    /// OpenAI / xAI: {"type": "function", "function": {name, description, parameters}}
     public static var functionSchemas: [[String: any Sendable]] {
         specs.map { s in
             ["type": "function",

@@ -50,13 +50,6 @@ jobs:
             xcodebuild -version
           fi
 
-      # MLX (the on-device model in Ask) compiles Metal shaders; Xcode 26+ ships the Metal
-      # toolchain as a separate download. It stays installed on the Mac mini after the first run.
-      - name: Metal toolchain
-        run: |
-          xcrun -f metal >/dev/null 2>&1 && xcrun metal -v >/dev/null 2>&1 && { echo "Metal toolchain present"; exit 0; }
-          xcodebuild -downloadComponent MetalToolchain
-
       # Version: ios-app/VERSION (bump it for a release you want to tell apart), build: this
       # workflow's run number, which goes up by one every build.
       - name: Version
