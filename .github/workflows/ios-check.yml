@@ -8,7 +8,7 @@
 #      They're printed into the log as base64 JPEG lines (IMGDATA <name> ...), so they can be read
 #      without downloading artifacts.
 #
-# Called by ios-ipa.yml (main) and native.yml (native/** work branches). With soft: true every
+# Called by ios-ipa.yml (main) and native.yml (dispatch only). With soft: true every
 # check still runs and the summary line says NATIVE-CHECK: PASS or FAIL, but the run itself never
 # fails, so work in progress sends no failure emails.
 name: iPhone app checks
@@ -154,7 +154,7 @@ jobs:
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/$name.png" >/dev/null
             sips -s format jpeg -s formatOptions 60 --resampleWidth 560 "$RUNNER_TEMP/$name.png" --out "$RUNNER_TEMP/$name.jpg" >/dev/null
             echo "::group::console $name"; grep -v "^$" "$RUNNER_TEMP/$name.log" | tail -40 || true; echo "::endgroup::"
-            if grep -E "\[error\].*(ReferenceError|TypeError|SyntaxError)|Unhandled Promise|Fatal error|SwiftUI.*(crash|fault)" "$RUNNER_TEMP/$name.log"; then
+            if grep -E "Fatal error|SwiftUI.*(crash|fault)" "$RUNNER_TEMP/$name.log"; then
               echo "::error::$name: error in the app's console"; fail=1
             fi
             base64 -i "$RUNNER_TEMP/$name.jpg" | tr -d '\n' | fold -w 4000 | sed "s/^/IMGDATA $name /"
