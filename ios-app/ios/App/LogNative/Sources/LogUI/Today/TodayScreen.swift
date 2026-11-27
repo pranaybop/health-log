@@ -188,32 +188,23 @@ public struct TodayScreen: View {
         }
     }
 
-    /// goal_set for each target given (web saveTargets). If the action isn't live yet, the targets
-    /// are kept on this phone instead.
+    /// goal_set for each target given (web saveTargets).
     private func saveTargets(_ calories: Int?, _ protein: Int?) async {
         targetsMessage = nil
         var jobs: [(String, Int)] = []
         if let calories { jobs.append(("calories", calories)) }
         if let protein { jobs.append(("protein", protein)) }
-        var notLive = false
         var failed: String?
         for (kind, target) in jobs {
             do {
                 let result = try await store.write("goal_set", ["kind": kind, "target": target])
                 if let ok = result["ok"] as? Bool, !ok { throw LogError.server((result["error"] as? String) ?? "write_failed") }
-            } catch LogError.server(let message) where message.hasPrefix("invalid_action") {
-                notLive = true
-                break
             } catch {
                 failed = TodayText.writeError(error)
                 break
             }
         }
-        if notLive {
-            TodayTargets.saveLocally(calories: calories, protein: protein)
-            editTargets = false
-            targetsMessage = TodayMessage(ok: true, text: "Saved on this phone for now. Saving targets to your log isn't switched on yet.")
-        } else if let failed {
+        if let failed {
             targetsMessage = TodayMessage(ok: false, text: failed)
         } else {
             editTargets = false

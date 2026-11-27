@@ -1,27 +1,14 @@
 import SwiftUI
 import LogCore
 
-/// Calorie and protein targets: an active log.goals row wins; otherwise the target saved on this
-/// phone (only used if goal_set isn't switched on, like the web app's localStorage fallback).
 struct TodayTargets: Equatable {
     var calories: Double?
     var protein: Double?
     var isEmpty: Bool { calories == nil && protein == nil }
 
-    private static let localKey = "log.native.targets"
-
     static func current(_ d: Dashboard) -> TodayTargets {
         let goals = Analytics.targets(d)
-        let local = UserDefaults.standard.dictionary(forKey: localKey) ?? [:]
-        return TodayTargets(calories: goals.calories ?? (local["calories"] as? Double),
-                            protein: goals.protein ?? (local["protein"] as? Double))
-    }
-
-    static func saveLocally(calories: Int?, protein: Int?) {
-        var local = UserDefaults.standard.dictionary(forKey: localKey) ?? [:]
-        if let calories { local["calories"] = Double(calories) }
-        if let protein { local["protein"] = Double(protein) }
-        UserDefaults.standard.set(local, forKey: localKey)
+        return TodayTargets(calories: goals.calories, protein: goals.protein)
     }
 }
 
@@ -166,57 +153,6 @@ private struct FoodStat: View {
             if !status.isEmpty {
                 Text(status).font(.footnote).foregroundStyle(LogColor.ink2)
             }
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// One gauge: label and status, the amount against the target, and a bar (web .gauge).
-private struct FoodGauge: View {
-    let label: String
-    let color: Color
-    let value: Double?
-    let target: Double?
-    let unit: String
-    let status: String
-    @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 36
-
-    init(label: String, color: Color, value: Double?, target: Double?, unit: String, status: String) {
-        self.label = label
-        self.color = color
-        self.value = value
-        self.target = target
-        self.unit = unit
-        self.status = status
-    }
-
-    var body: some View {
-        let hasTarget = (target ?? 0) > 0
-        let share = value != nil && hasTarget ? value! / target! : 0
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                HStack(spacing: 8) {
-                    Circle().fill(color).frame(width: 10, height: 10)
-                    Text(label).font(.body.weight(.semibold)).foregroundStyle(LogColor.ink)
-                }
-                Spacer(minLength: 8)
-                Text(status).font(.subheadline.weight(.medium)).foregroundStyle(LogColor.ink2)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Text(value != nil ? Fmt.num(value, 0) : "0").font(.logNumber(min(size, 52), weight: .semibold)).foregroundStyle(LogColor.ink)
-                Text(hasTarget ? " / \(Fmt.num(target, 0)) \(unit)" : " \(unit)").font(.logNumber(17, weight: .medium)).foregroundStyle(LogColor.ink2)
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .padding(.top, 2)
-            .padding(.bottom, 8)
-            ZStack(alignment: .trailing) {
-                ShareBar(share: min(1, share), color: color, height: 10)
-                if share > 1 {
-                    Rectangle().fill(LogColor.surface).frame(width: 3, height: 10)
-                }
-            }
-            .clipShape(Capsule())
         }
         .accessibilityElement(children: .combine)
     }

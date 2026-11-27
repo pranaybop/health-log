@@ -272,7 +272,6 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
 public struct Account: Codable, Hashable, Sendable {
     public var kind: String?
     public var email: String?
-    public var isOwnerPasscode: Bool { kind == "owner" }
 }
 
 public struct Goal: Codable, Hashable, Sendable, Identifiable {

@@ -70,8 +70,6 @@ public struct WidgetSnapshot: Codable, Equatable, Sendable {
 }
 
 public enum HomeWidgets {
-    public static let kinds = ["LogWeight", "LogReadiness", "LogFood"]
-
     /// Called by the app whenever the data changes. Only reloads the widgets when what they
     /// show changed.
     @MainActor
