@@ -4,25 +4,19 @@ import LogCore
 // Small helpers shared by the Meds and Log tabs and the switch card. Internal and prefixed "ML"
 // so they can't clash with the other screens' helpers in LogUI.
 
-/// Formatting the way app.js does it.
 enum MLFmt {
     /// "Tirzepatide"
     static func cap(_ s: String?) -> String {
         guard let s, let first = s.first else { return "" }
         return first.uppercased() + String(s.dropFirst())
     }
-    /// fmtDateCT(d, true): "Sun, Nov 22"
     static func day(_ d: Date) -> String { LogTime.weekdayDate(d) }
-    /// fmtDateCT(d, false): "Nov 22"
     static func short(_ d: Date) -> String { LogTime.shortDate(d) }
-    /// fmtTimeCT: "4:00 PM CT"
     static func timeCT(_ d: Date) -> String { "\(LogTime.time(d)) CT" }
-    /// fmtShortDate(key): "Nov 22", "—" for nil
     static func shortKey(_ key: String?) -> String {
         guard let key, key.count >= 10, Int(key.prefix(4)) != nil else { return "—" }
         return LogTime.shortDate(key: String(key.prefix(10)))
     }
-    /// fmtNum(v, v % 1 ? 1 : 0)
     static func auto(_ v: Double) -> String {
         Fmt.num(v, v.truncatingRemainder(dividingBy: 1) != 0 ? 1 : 0)
     }
@@ -36,7 +30,6 @@ enum MLFmt {
     }
 }
 
-/// A small status pill (the web's .badge).
 struct MLBadge: View {
     enum Tone { case good, steady, watch }
     let text: String
@@ -86,7 +79,6 @@ struct MLLegendLine: View {
     }
 }
 
-/// A label, a big value and a detail line (the web's .metric tile).
 struct MLTile: View {
     let label: String
     let value: String

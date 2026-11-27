@@ -1,9 +1,6 @@
 import Foundation
 import LogCore
 
-// Plain values for the Apple Health sync. HealthKitReader turns HealthKit samples into these, and
-// HealthAggregate turns them into the rows health.js sends, so the rules can be tested without
-// HealthKit. Values and units are the ones the Capacitor Health plugin gave the web sync.
 
 /// One reading: a quantity sample (in the plugin's default unit), a sleep segment, a stand hour
 /// (1 stood, 0 not), a mindful session (minutes), a blood pressure pair or a State of Mind valence.
@@ -33,7 +30,6 @@ public struct HealthSample: Equatable, Sendable {
     }
 }
 
-/// One Central-time day of a HealthKit statistics query (sources already merged by HealthKit).
 public struct HealthDayStat: Equatable, Sendable {
     public var sum: Double?
     public var average: Double?
@@ -74,9 +70,7 @@ public struct HealthWorkoutSample: Equatable, Sendable {
     }
 }
 
-/// Everything read from Apple Health for one window of days (health.js collectWindow's reads).
 public struct HealthWindowSamples: Sendable {
-    // Statistics per Central day (the plugin's queryAggregated).
     public var steps: [String: HealthDayStat] = [:]
     public var distance: [String: HealthDayStat] = [:]
     public var active: [String: HealthDayStat] = [:]
@@ -168,7 +162,6 @@ public struct HealthMetricRow: Equatable, Sendable {
     public var unit: String
 }
 
-/// One window's rows (health.js collectWindow's result).
 public struct HealthBatch: Equatable, Sendable {
     public var days: [HealthDayRow] = []
     public var weights: [HealthWeightRow] = []
@@ -183,7 +176,6 @@ public struct HealthBatch: Equatable, Sendable {
     /// Rows the backfill counts as "found" (it doesn't send daily totals).
     public var found: Int { metrics.count + weights.count + body.count + workouts.count }
 
-    /// The Central-time days the found rows fall on, oldest first.
     public var foundDays: [String] {
         let keys = metrics.map(\.day)
             + weights.map { LogTime.dayKey($0.at) }

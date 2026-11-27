@@ -1,14 +1,9 @@
 import SwiftUI
 import LogCore
 
-/// The daily check-in form (web: renderCheckinForm in forms.js): how you ate, moved, felt and slept
-/// for one day, saved with the same log-write action the web uses (checkin_upsert, which merges
-/// the fields sent into that day's row).
-///
 /// Today presents it in a sheet from its check-in prompt; Log shows it in its "Today's check-in"
 /// card. It starts from that day's saved answers and keeps what you type through refreshes.
 public struct CheckinForm: View {
-    /// The day it's for (yyyy-MM-dd, Central time).
     public var day: String
     /// Called after a successful save (Today closes its sheet).
     public var onSaved: (() -> Void)?

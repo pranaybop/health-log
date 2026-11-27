@@ -1,8 +1,6 @@
 import XCTest
 @testable import LogCore
 
-/// Today-tab calculations against the web app's own functions (since removed) run on the same made-up
-/// fixture at the tests' clock, Nov 24 2026, 11:20 PM CT.
 final class TodayTests: XCTestCase {
     var d: Dashboard { LogCoreTests.dashboard }
     let clock = LogTime.parse("2026-11-24T23:20:00-06:00")!

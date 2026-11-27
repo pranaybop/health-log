@@ -1,8 +1,6 @@
 import SwiftUI
 import LogCore
 
-/// The weight journey at the top of Today (web renderHero), or that day's weight on a past day
-/// (web renderDayWeight). Sits on the page background, not in a card.
 struct TodayHero: View {
     let m: TodayModel
 
@@ -145,7 +143,6 @@ private struct HeroNumber: View {
     }
 }
 
-/// Progress from start to goal with a dot at the current share (web .course).
 private struct CourseBar: View {
     let share: Double
     let label: String

@@ -1,7 +1,6 @@
 import SwiftUI
 import LogCore
 
-/// A white (graphite in dark) rounded card with an optional title row, like the web app's .card.
 public struct LogCard<Content: View, Accessory: View>: View {
     let title: String?
     let accessory: Accessory
@@ -45,7 +44,6 @@ public struct Caption: View {
     }
 }
 
-/// A label-value row, like the web app's .prop.
 public struct PropRow: View {
     let label: String
     let value: String
@@ -62,7 +60,6 @@ public struct PropRow: View {
     }
 }
 
-/// A big number with a unit and a detail line (the web app's .metric / readout).
 public struct BigNumber: View {
     let value: String
     let unit: String?

@@ -1,9 +1,6 @@
 import XCTest
 @testable import LogCore
 
-/// Trends calculations against the web app's own functions on the same made-up fixture and clock
-/// (expected values came from running the original web app's functions on Fixtures/demo.json at
-/// Nov 24 2026, 11:20 PM CT).
 final class TrendsTests: XCTestCase {
     typealias T = Analytics.Trends
     static var dashboard: Dashboard = {

@@ -24,7 +24,6 @@ struct TrMedsSectionView: View {
     }
 }
 
-/// A shaded cell of a by-day grid (the web's sw-cell).
 struct TrHeatCell: View {
     var text: String
     var alpha: Double?

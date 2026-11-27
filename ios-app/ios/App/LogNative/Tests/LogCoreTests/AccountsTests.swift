@@ -32,7 +32,6 @@ final class AccountsTests: XCTestCase {
     }
 
     func testCentralNoonIsUnchanged() {
-        // 18:00 UTC, as the web app's keyToNoon.
         XCTAssertEqual(LogTime.noon("2026-11-24").timeIntervalSince1970, 1795543200)
         XCTAssertEqual(LogTime.dayKey(LogTime.noon("2026-11-24")), "2026-11-24")
         XCTAssertEqual(LogTime.dayDiff("2026-12-01", "2026-11-24"), 7)

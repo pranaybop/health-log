@@ -17,8 +17,6 @@ struct TodayMessage: Equatable {
     var text: String
 }
 
-/// Food today (web renderFood): calorie and protein gauges against the targets, the targets
-/// editor, the protein line and how many meals are logged.
 struct TodayFoodCard: View {
     let m: TodayModel
     @Binding var editing: Bool
@@ -90,7 +88,6 @@ struct TodayFoodCard: View {
         return t.isEmpty && !editing ? "\(meals). Set daily targets to track progress toward them." : "\(meals). Macros may be estimates."
     }
 
-    /// "585 left", "88 g to go", "Hit, 1 g over", "699 over" (web gauge).
     static func status(kind: String, value: Double?, target: Double?, unit: String, past: Bool) -> String {
         guard let value, let target, target > 0 else { return "" }
         let diff = target - value
@@ -101,8 +98,6 @@ struct TodayFoodCard: View {
     }
 }
 
-/// Calories (outer ring) and protein (inner ring) against today's targets. Past 100% the ring
-/// is full and gets a small gap at the top, like the web gauge's over-target notch.
 private struct FoodRing: View {
     let calories: Double
     let protein: Double
@@ -158,7 +153,7 @@ private struct FoodStat: View {
     }
 }
 
-/// "88 g left to hit 150 g. No hit streak yet." (web renderProteinLine)
+/// "88 g left to hit 150 g. No hit streak yet."
 private struct ProteinLine: View {
     let s: ProteinStreak
 
@@ -172,7 +167,6 @@ private struct ProteinLine: View {
     }
 }
 
-/// Daily calorie and protein targets, saved with goal_set (web renderTargetsEditor).
 private struct TargetsEditor: View {
     let targets: TodayTargets
     let save: (_ calories: Int?, _ protein: Int?) async -> Void
@@ -240,7 +234,6 @@ private struct TargetsEditor: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// The web's checks: whole numbers, 800–6,000 kcal and 20–400 g; at least one box filled.
     private func submit() {
         let c = calories.trimmingCharacters(in: .whitespaces)
         let p = protein.trimmingCharacters(in: .whitespaces)

@@ -2,9 +2,6 @@ import SwiftUI
 import LogCore
 import LogHealth
 
-/// The native Today tab (web renderTodayTab in app.js): a week strip to move between days, then the
-/// day's weight, food, check-in, food thoughts, recovery signals, and medication cards,
-/// sleep, Apple Health, macros and meals. Past days show that day's data; future days are disabled.
 public struct TodayScreen: View {
     @Environment(LogStore.self) private var store
 
@@ -78,7 +75,6 @@ public struct TodayScreen: View {
         .accessibilityAction(named: "Next day") { go(to: m.offset + 1, m) }
     }
 
-    /// The cards in the web app's order.
     private func dayBody(_ m: TodayModel) -> some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TodayHero(m: m).id("hero")
@@ -159,7 +155,6 @@ public struct TodayScreen: View {
         withAnimation(.snappy(duration: 0.3)) { dayOffset = next }
     }
 
-    /// Swipe left for the next day, right for the day before (the web's thresholds).
     private func swipe(_ m: TodayModel) -> some Gesture {
         DragGesture(minimumDistance: 30)
             .onEnded { v in
@@ -172,7 +167,6 @@ public struct TodayScreen: View {
 
     // MARK: Writes
 
-    /// Send a log-write action the web app sends, then show what happened.
     private func send(_ action: String, _ payload: [String: Any], _ success: String) async -> Bool {
         busy = true
         defer { busy = false }
@@ -188,7 +182,6 @@ public struct TodayScreen: View {
         }
     }
 
-    /// goal_set for each target given (web saveTargets).
     private func saveTargets(_ calories: Int?, _ protein: Int?) async {
         targetsMessage = nil
         var jobs: [(String, Int)] = []

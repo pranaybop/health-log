@@ -1,8 +1,5 @@
 import Foundation
 
-// Core calculations shared by every screen, ported from the original web app's analytics.js (and a few helpers
-// from app.js / signals.js). Screen-specific calculations live with their screens. Keep results
-// identical to the web app: tests in LogCoreTests check them against the made-up fixture.
 
 public enum Sites {
     /// Rotation order.
@@ -111,7 +108,6 @@ public enum Analytics {
         return Sites.all[(i + 1) % Sites.all.count]
     }
 
-    /// The retatrutide protocol's start date, else Dec 6 (web retaSwitchAt).
     public static func retaSwitchAt(_ d: Dashboard) -> Date {
         if let started = d.protocols.first(where: { ($0.compound ?? "").lowercased() == "retatrutide" })?.startedOn,
            !started.isEmpty {
@@ -178,7 +174,6 @@ public enum Analytics {
 
     // MARK: Food
 
-    /// Meals eaten on a Central day.
     public static func meals(on key: String, _ d: Dashboard) -> [Meal] {
         d.meals.filter { $0.eatenDate.map(LogTime.dayKey) == key }
     }

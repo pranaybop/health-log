@@ -4,7 +4,6 @@ import LogHealth
 
 // MARK: Sleep
 
-/// Last night's sleep, its stages and the 7-night debt against 8-hour nights (web renderSleepNight).
 struct TodaySleepCard: View {
     let m: TodayModel
 
@@ -94,7 +93,6 @@ private struct StageBar: View {
 
 // MARK: Body (Apple Health)
 
-/// Steps, sleep, resting heart rate and HRV for the day, or the latest day synced (web renderSignals).
 struct TodayBodyCard: View {
     let m: TodayModel
 
@@ -181,7 +179,6 @@ struct LogMealButton: View {
     }
 }
 
-/// The day's meals (web renderMeals), listed inside the Food card right under "Log a meal".
 struct TodayMeals: View {
     let meals: [Meal]
     let past: Bool

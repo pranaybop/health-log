@@ -1,10 +1,6 @@
 import Foundation
 
-// Calculations behind the Today tab, ported from the original web app (removed Nov 2026) (analytics.js, focus.js, signals.js,
-// insights.js and app.js). Numbers only: the wording lives with the Today screen in LogUI.
-// TodayTests checks them against the web functions run on the made-up fixture.
 
-/// Straight-line pace through the last weeks of weigh-ins (web recentPace).
 public struct WeightPace: Hashable, Sendable {
     /// lb per week (negative = losing).
     public var weekly: Double
@@ -14,7 +10,6 @@ public struct WeightPace: Hashable, Sendable {
     public var count: Int
 }
 
-/// Start, goal and current weight (web journeyStats).
 public struct WeightJourney: Hashable, Sendable {
     public var current: WeightPoint
     public var startLb: Double
@@ -24,7 +19,6 @@ public struct WeightJourney: Hashable, Sendable {
     public var changeStart: Double { current.lb - startLb }
 }
 
-/// Is the weight flat over the last 3 weeks? (web stallCheck)
 public struct StallResult: Hashable, Sendable {
     public var stalled: Bool
     public var ready: Bool
@@ -43,7 +37,6 @@ public struct SleepStages: Hashable, Sendable {
     public var total: Double { (core ?? 0) + (deep ?? 0) + (rem ?? 0) + (awake ?? 0) }
 }
 
-/// A recovery signal checked against its own normal (web NORMAL_SIGNALS).
 public struct SignalSpec: Hashable, Sendable {
     public var id: String
     public var label: String
@@ -78,7 +71,6 @@ extension Analytics {
 
     // MARK: Weight
 
-    /// The latest weigh-in on each Central day, oldest first (web dailyWeight).
     public static func dailyWeight(_ points: [WeightPoint]) -> [WeightPoint] {
         var byDay: [String: WeightPoint] = [:]
         for p in points { byDay[p.day] = p }
@@ -147,8 +139,6 @@ extension Analytics {
 
     // MARK: Doses
 
-    /// A week after the last logged dose, unless that's on or after the retatrutide switch
-    /// (web plannedDoses().next).
     public static func plannedNextDose(_ d: Dashboard) -> Date? {
         let list = d.doses.filter { $0.skipped != true && $0.doseMg != nil && $0.takenDate != nil }
         guard let last = list.last?.takenDate else { return nil }
