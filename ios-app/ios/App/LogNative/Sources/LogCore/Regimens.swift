@@ -53,7 +53,7 @@ public struct Regimen: Codable, Hashable, Sendable, Identifiable {
         return nil
     }
 
-    /// Whether a shot is planned on this day (yyyy-MM-dd, Central time).
+    /// Whether a shot is planned on this day (yyyy-MM-dd, profile zone).
     public func isDoseDay(_ day: String) -> Bool {
         guard let start = startOn.map({ String($0.prefix(10)) }), day >= start else { return false }
         if let end = endOn.map({ String($0.prefix(10)) }), day > end { return false }

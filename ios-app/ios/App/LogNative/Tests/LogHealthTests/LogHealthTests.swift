@@ -3,15 +3,13 @@ import HealthKit
 @testable import LogHealth
 import LogCore
 
-/// The Apple Health sync's pure parts against health.js on the same made-up samples (no real
-/// health data). Expected values came from running the old web app's health.js collectWindow on these
-/// samples with a stand-in plugin.
+/// The Apple Health sync's pure parts on made-up samples (no real health data).
 final class LogHealthTests: XCTestCase {
     let a = "2026-11-23"
     let b = "2026-11-24"
     let old = "2026-11-10"
 
-    /// Central hour `h` on day `k` (like the web test's at(): noon CST plus h - 12 hours, whole ms).
+    /// Hour `h` on day `k`: noon plus h - 12 hours, whole milliseconds.
     func at(_ k: String, _ h: Double) -> Date {
         let ms = (LogTime.noon(k).timeIntervalSince1970 * 1000 + (h - 12) * 3_600_000).rounded(.towardZero)
         return Date(timeIntervalSince1970: ms / 1000)
@@ -67,7 +65,7 @@ final class LogHealthTests: XCTestCase {
         return w
     }
 
-    // MARK: The window, against health.js
+    // MARK: The window
 
     func testDailyTotals() {
         let batch = HealthAggregate.collect(window(), startKey: a, endKey: b, includeDays: true)
@@ -308,7 +306,7 @@ final class LogHealthTests: XCTestCase {
 
     func testHistoryAlreadyThere() {
         let today = "2026-11-25"
-        // health_span back to 2017 and metrics filling the payload's 120 days: the web backfill ran.
+        // health_span back to 2017 and metrics filling the payload's 120 days.
         XCTAssertTrue(HealthBackfillState.historyAlreadyThere(firstHealthDay: "2017-03-02", earliestMetricDay: "2026-07-28", today: today))
         // Only a catch-up's 30 days of metrics.
         XCTAssertFalse(HealthBackfillState.historyAlreadyThere(firstHealthDay: "2017-03-02", earliestMetricDay: "2026-10-27", today: today))
@@ -322,7 +320,7 @@ final class LogHealthTests: XCTestCase {
         XCTAssertEqual(HealthText.backfillButton(seeded), "Backfill again")
     }
 
-    // MARK: Words (app.js renderHealthSync, health.js backfillText)
+    // MARK: Words
 
     func testSummary() {
         var r = HealthSyncResult()

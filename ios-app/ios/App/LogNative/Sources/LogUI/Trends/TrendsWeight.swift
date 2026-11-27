@@ -1,8 +1,7 @@
 import SwiftUI
 import LogCore
 
-// Summary (renderTrendSummary + the weight card) and Weight (weight card, stall check, body
-// composition) sections.
+// Summary and Weight sections: the weight card, a stall check, and body composition.
 
 struct TrSummarySectionView: View {
     var m: TrSummaryModel

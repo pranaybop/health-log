@@ -1,9 +1,8 @@
 import Foundation
 
-// Trends tab calculations, ported from the original web app (removed Nov 2026) (app.js, signals.js, insights.js, focus.js,
-// analytics.js, export.js). Pure functions of the dashboard payload and a clock (`now`), so the
-// tests can pin the time. Text that carries numbers is built here too, word for word as the web
-// app writes it. Namespaced under Analytics.Trends so it can't collide with other screens' helpers.
+// Trends tab calculations. Pure functions of the dashboard payload and a clock (`now`), so the
+// tests can pin the time. Text that carries numbers is built here too.
+// Namespaced under Analytics.Trends so it can't collide with other screens' helpers.
 extension Analytics {
     public enum Trends {}
 }
@@ -13,7 +12,7 @@ extension Analytics {
 extension Analytics.Trends {
     public static let kcalPerLb = 3500.0
 
-    /// A value at a moment (a weigh-in, a reading) or on a day (noon Central).
+    /// A value at a moment (a weigh-in, a reading) or on a day (noon in the profile zone).
     public struct Point: Hashable, Sendable {
         public var at: Date
         public var value: Double
@@ -41,7 +40,6 @@ extension Analytics.Trends {
         }
     }
 
-    /// A label, a value and a detail line (the web app's metric tile).
     public struct Tile: Hashable, Sendable, Identifiable {
         public var label: String
         public var value: String
@@ -69,13 +67,13 @@ extension Analytics.Trends {
         return f
     }
 
-    /// fmtNum: 2,200 · 257.2 · "—" for nil.
+    /// 2,200 · 257.2 · "—" for nil.
     public static func num(_ v: Double?, _ digits: Int = 0) -> String {
         guard let v, v.isFinite else { return "—" }
         return numberFormatters[max(0, min(3, digits))].string(from: NSNumber(value: v)) ?? "—"
     }
 
-    /// signed: +1.2 · −0.4 (true minus) · 0.0
+    /// +1.2 · −0.4 (true minus) · 0.0
     public static func signed(_ v: Double?, _ digits: Int = 1) -> String {
         guard let v, v.isFinite else { return "—" }
         let s = num(abs(v), digits)
@@ -515,7 +513,7 @@ extension Analytics.Trends {
         public var protein: FoodSeries?
     }
 
-    /// renderFoodTrends: calories and protein a day over the last 30 days.
+    /// Calories and protein a day over the last 30 days.
     public static func foodTrends(_ d: Dashboard, now: Date, calorieTarget: Double?, proteinTarget: Double?) -> FoodTrends {
         var byDay: [String: DailyTotal] = [:]
         for r in d.dailyTotals { byDay[r.date] = r }
@@ -589,7 +587,7 @@ extension Analytics.Trends {
         public var tiles: [Tile]
     }
 
-    /// renderProteinCard: hit rate and averages over logged days in the last 30. nil hides the card.
+    /// Hit rate and averages over logged days in the last 30. nil hides the card.
     public static func proteinCard(_ d: Dashboard, now: Date, target: Double?) -> ProteinCard? {
         let today = LogTime.today(now)
         let rows = d.dailyTotals.filter { $0.date >= LogTime.shift(today, -29) && $0.proteinG != nil }
@@ -618,7 +616,7 @@ extension Analytics.Trends {
         public var count: Int
     }
 
-    /// renderFoodThoughtsCard. nil when nothing is logged (the card shows its empty note).
+    /// Nil when nothing is logged (the card shows its empty note).
     public static func thoughtsCard(_ d: Dashboard, now: Date) -> ThoughtsCard? {
         var all: [(at: Date, strength: Double?)] = []
         for t in d.foodThoughts { if let at = t.thoughtDate { all.append((at: at, strength: t.strength)) } }
@@ -773,7 +771,7 @@ extension Analytics.Trends {
         return (0...6).contains(n) ? n : nil
     }
 
-    /// renderShotWeek: food noise, food thoughts, side effects and energy by day since the shot.
+    /// Food noise, food thoughts, side effects and energy by day since the shot.
     /// nil hides the card (no real doses); rows with no data at all mean the empty note.
     public static func shotWeek(_ d: Dashboard, now: Date) -> [WeekRow]? {
         guard d.doses.contains(where: { $0.skipped != true }) else { return nil }
@@ -861,7 +859,7 @@ extension Analytics.Trends {
         public var reta: WindowStats?
     }
 
-    /// renderRetaVsTirz: the last 4 weeks on tirzepatide against the first 2 on retatrutide.
+    /// The last 4 weeks on tirzepatide against the first 2 on retatrutide.
     public static func retaVsTirz(_ d: Dashboard, now: Date) -> RetaVsTirz {
         let today = LogTime.today(now)
         let reta0 = firstRetaDose(d)?.takenDate.map(LogTime.dayKey)
@@ -912,7 +910,7 @@ extension Analytics.Trends {
         public var id: Int { cycle.index }
     }
 
-    /// The most common value, ties going to the one seen first (the web's stable sort).
+    /// The most common value, ties going to the one seen first.
     static func mode(_ values: [String?]) -> String? {
         var counts: [String: Int] = [:]
         var order: [String] = []
@@ -1113,7 +1111,7 @@ extension Analytics.Trends {
         public var flagged: [OffDay] { days.filter(\.flagged) }
     }
 
-    /// renderOffNormalTrends: the latest day against normal and the last 60 days. nil hides it.
+    /// The latest day against normal and the last 60 days. nil hides it.
     public static func offNormalTrends(_ d: Dashboard, now: Date) -> OffTrends? {
         let maps = signalMaps(d)
         let today = LogTime.today(now)
@@ -1150,7 +1148,7 @@ extension Analytics.Trends {
         Analytics.mean(pts.filter { $0.key >= from && $0.key <= to }.map(\.value))
     }
 
-    /// renderHeartCard panels (resting heart rate, HRV); empty when neither has 3 days.
+    /// Resting heart rate and HRV; empty when neither has 3 days.
     public static func heart(_ d: Dashboard, now: Date) -> [HeartPanel] {
         let today = LogTime.today(now)
         let tirzKey = LogTime.dayKey(LogTime.tirzStart)
@@ -1172,7 +1170,7 @@ extension Analytics.Trends {
         public var id: String { name }
     }
 
-    /// renderMeasurements: tape measurements by metric, in the order they first appear.
+    /// Tape measurements by metric, in the order they first appear.
     public static func measurements(_ d: Dashboard) -> [MeasureSeries] {
         let rows = d.measurements.filter { $0.metric != "body_fat_pct" && $0.metric != "lean_mass_lb" }
         var order: [String] = []
@@ -1193,7 +1191,7 @@ extension Analytics.Trends {
 // MARK: - Training
 
 extension Analytics.Trends {
-    /// renderStepsCard: the last 30 days; nil below 3 days with data.
+    /// The last 30 days; nil below 3 days with data.
     public static func steps(_ d: Dashboard, now: Date) -> (days: [Column], average: Double, count: Int)? {
         var byDay: [String: Double?] = [:]
         for r in d.dailyHealth { byDay[r.day] = r.steps }
@@ -1285,7 +1283,7 @@ extension Analytics.Trends {
         public var id: String { label }
     }
 
-    /// renderTrendSummary: one tile per area, each opening its section.
+    /// One tile per area, each opening its section.
     public static func summary(_ d: Dashboard, now: Date, calorieTarget: Double?, proteinTarget: Double?) -> [SummaryTile] {
         let today = LogTime.today(now)
         let t30 = now.addingTimeInterval(-30 * 86400)

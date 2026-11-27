@@ -4,7 +4,7 @@ import PackageDescription
 // The Xcode project links the "LogNative" product; every .swift file under Sources/ is compiled
 // automatically, so adding a file never touches the project file.
 //
-//   LogCore    data models, Supabase calls, Central-time dates, core calculations, the shared store
+//   LogCore    data models, Supabase calls, dates, core calculations, the shared store
 //   LogUI      SwiftUI screens (Shared/, Today/, Meds/, Log/, Trends/); places LogHealth's HealthSyncPanel
 //   LogHealth  Apple Health sync in Swift, with background refresh, and its status panel
 //   LogLocalAI  runs a downloaded open model (Bonsai 2, Qwen 3.5) on the phone with MLX, for Ask

@@ -3,15 +3,15 @@ import Charts
 import LogCore
 
 // Shared pieces for the Trends tab: the readout line above each chart, time / column / scatter
-// charts with tap-and-drag selection, sparklines, legends, tables and small labels. Chart rules
-// follow the original web charts: nice y ticks with 8% padding, calendar-aligned date ticks, dashed
+// charts with tap-and-drag selection, sparklines, legends, tables and small labels. Chart rules:
+// nice y ticks with 8% padding, calendar-aligned date ticks, dashed
 // reference lines, thin vertical markers, one y-axis per chart.
 
 typealias TrendsCalc = Analytics.Trends
 
 // MARK: - Scales
 
-/// niceTicks from charts.js: round steps (1, 2, 2.5, 5, 10 × 10^n) covering lo...hi.
+/// Round steps (1, 2, 2.5, 5, 10 × 10^n) covering lo...hi.
 struct TrNiceScale {
     var ticks: [Double]
     var lo: Double
@@ -46,7 +46,7 @@ struct TrNiceScale {
     var visibleTicks: [Double] { ticks.filter { $0 >= lo - 1e-9 && $0 <= hi + 1e-9 } }
 }
 
-/// timeTicks from charts.js: weeks start Monday, months on the 1st, years on Jan 1.
+/// Weeks start Monday, months on the 1st, years on Jan 1.
 struct TrTimeTicks {
     var dates: [Date] = []
     var labels: [Date: String] = [:]
@@ -94,7 +94,7 @@ struct TrTimeTicks {
                 y += unit.n
             }
         }
-        // Like the web chart, skip ticks that would crowd the plot's edges.
+        // Skip ticks that would crowd the plot's edges.
         let span = max(1, t1.timeIntervalSince(t0))
         for (t, label) in found {
             let f = t.timeIntervalSince(t0) / span
@@ -203,7 +203,7 @@ struct TrSeriesMarks: ChartContent {
     }
 }
 
-/// A chart on a real time axis (charts.js timeChart): dots, lines, smooth lines and areas,
+/// A chart on a real time axis: dots, lines, smooth lines and areas,
 /// reference lines (goal, target), vertical markers (dose start, switch), and a readout that
 /// follows your finger.
 struct TrTimeChart: View {
@@ -216,7 +216,7 @@ struct TrTimeChart: View {
     var yTicks: Int = 4
     var yMin: Double? = nil
     var yMax: Double? = nil
-    /// Padding never takes the low end below this (the web's rightMin for zero-based series).
+    /// Padding never takes the low end below this (zero-based series).
     var yFloor: Double? = nil
     var fmtY: (Double) -> String = { TrendsCalc.num($0) }
     var snap: String
@@ -405,7 +405,7 @@ struct TrScrollable: ViewModifier {
 
 // MARK: - Column chart
 
-/// One column per day (charts.js columnChart), a dashed target, first / middle / last labels.
+/// One column per day, a dashed target, first / middle / last labels.
 ///
 /// The x axis is dates, not day-key strings: Swift Charts draws a label for every category on a
 /// string axis whatever `AxisMarks(values:)` says, so 30 days piled up into unreadable text.
@@ -715,7 +715,7 @@ struct TrLead: View {
     }
 }
 
-/// A small heading inside a card (the web's h3 / hm-group).
+/// A small heading inside a card.
 struct TrSubHead: View {
     var text: String
     var key: TrKey? = nil
@@ -763,7 +763,7 @@ struct TrBadge: View {
     }
 }
 
-/// The amber note for something worth watching (the web's callout.watch-note).
+/// The amber note for something worth watching.
 struct TrWatchNote: View {
     var title: String
     var text: String
@@ -778,7 +778,7 @@ struct TrWatchNote: View {
     }
 }
 
-/// A grid of metric tiles (the web's .tiles of .metric).
+/// A grid of metric tiles.
 struct TrTileGrid: View {
     var tiles: [TrendsCalc.Tile]
     var columns: Int = 2
@@ -810,7 +810,7 @@ struct TrTile: View {
     }
 }
 
-/// Label-value rows with hairlines between (the web's .props).
+/// Label-value rows with hairlines between.
 struct TrProps: View {
     var rows: [(String, String)]
     var body: some View {
@@ -878,7 +878,7 @@ struct TrTable: View {
     }
 }
 
-/// The numbers behind a chart, folded away (the web's dataView).
+/// The numbers behind a chart, folded away.
 struct TrDisclosure: View {
     var title: String
     var headers: [String]
@@ -905,7 +905,7 @@ struct TrDisclosure: View {
     }
 }
 
-/// A horizontal bar with its track (the web's bar-track / bar-fill).
+/// A horizontal bar with its track.
 struct TrMeter: View {
     var fraction: Double
     var color: Color

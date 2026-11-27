@@ -2,7 +2,7 @@ import SwiftUI
 import LogCore
 import LogHealth
 
-/// The native Log tab (web: renderLogTab in forms.js): Apple Health, today's check-in, weigh-in,
+/// The Log tab: Apple Health, today's check-in, weigh-in,
 /// Earn It, then the dose, side effect, measurement and vial forms, the reconstitution calculator
 /// and the app version.
 public struct LogScreen: View {
@@ -13,7 +13,7 @@ public struct LogScreen: View {
 
     static let folds = ["dose", "side", "measure", "vial", "recon"]
 
-    /// Folds start closed, like the web; a debug `-scrollTo <fold>` opens that one for screenshots.
+    /// Folds start closed. A debug `-scrollTo <fold>` opens that one for screenshots.
     static var initialOpen: [String: Bool] {
         guard let t = MLDebug.scrollTo, folds.contains(t) else { return [:] }
         return [t: true]

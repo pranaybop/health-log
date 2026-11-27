@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 import LogCore
 
-/// The native Trends tab (web: renderTrendsTab in app.js). One section at a time, picked from a
-/// row of chips and remembered in "log.trendsSection" like the web app's localStorage key.
+/// The Trends tab. One section at a time, picked from a
+/// row of chips and remembered in "log.trendsSection".
 /// Each section's numbers are worked out once per payload (TrendsCache), not on every render.
 public struct TrendsScreen: View {
     @Environment(LogStore.self) var store

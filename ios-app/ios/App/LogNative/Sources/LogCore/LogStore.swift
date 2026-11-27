@@ -222,7 +222,6 @@ public final class LogStore {
         if changed { onLockChange?(true) }
     }
 
-    /// The shell calls this when the web view locked or unlocked on its own.
     public func syncLockFromKeychain() {
         let locked = isDemo ? false : (PasscodeStore.read() == nil && SessionStore.read() == nil)
         guard locked != isLocked else { return }

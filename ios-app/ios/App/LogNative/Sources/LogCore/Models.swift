@@ -3,7 +3,7 @@ import Foundation
 // The dashboard payload from the log-dashboard Edge Function (public.log_dashboard_payload()).
 // Keys are snake_case in JSON and camelCase here (decoded with .convertFromSnakeCase).
 // Timestamps stay strings as sent; use `LogTime.parse(_:)` (or the `...Date` helpers) for Dates.
-// Day keys ("2026-11-24") are America/Chicago calendar days.
+// Day keys ("2026-11-24") are calendar days in the profile zone (LogTime.use).
 
 public struct Meal: Codable, Hashable, Sendable, Identifiable {
     @FlexText public var id: String?

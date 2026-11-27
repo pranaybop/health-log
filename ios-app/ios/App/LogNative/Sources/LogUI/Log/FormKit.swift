@@ -4,7 +4,7 @@ import LogCore
 
 // Building blocks for the Log tab's forms and the shared check-in form. Internal, prefixed "ML".
 
-/// A save result shown under the form's button (the web's toast).
+/// A save result shown under the form's button.
 struct MLMessage: Equatable {
     var ok: Bool
     var text: String
@@ -16,7 +16,6 @@ struct MLWriteOutcome {
     var body: [String: Any]
 }
 
-/// Sends a log-write action the way forms.js handleWrite does, with its wording.
 @MainActor
 enum MLWrite {
     static func send(_ store: LogStore, _ action: String, _ payload: [String: Any], success: String) async -> MLMessage {
@@ -55,8 +54,7 @@ enum MLWrite {
     }
 }
 
-/// Number text the way a web number input reads it: trimmed, a comma read as a decimal point,
-/// and "" when it isn't a number.
+/// Number text: trimmed, a comma read as a decimal point, and "" when it isn't a number.
 enum MLNum {
     static func text(_ s: String) -> String {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
@@ -98,7 +96,6 @@ extension EnvironmentValues {
     }
 }
 
-/// A labeled field (the web's .field).
 struct MLField<Content: View>: View {
     let label: String
     let content: Content
@@ -156,8 +153,8 @@ struct MLOption: Hashable {
     let label: String
 }
 
-/// One-of-several chips (the web's .chips): equal widths in a tinted track, or a grid of 3 columns.
-/// Like the web, a choice can be changed but not cleared.
+/// One-of-several chips: equal widths in a tinted track, or a grid of 3 columns.
+/// A choice can be changed but not cleared.
 struct MLChips: View {
     let options: [MLOption]
     @Binding var value: String
@@ -200,7 +197,7 @@ struct MLChips: View {
     }
 }
 
-/// A 1-10 slider that starts unset ("—"), like the web's range fields.
+/// A 1-10 slider that starts unset ("—").
 struct MLScale: View {
     let label: String
     @Binding var value: Int?
@@ -243,7 +240,6 @@ struct MLSaveButton: View {
     }
 }
 
-/// The result of a save, in the web toast's colors.
 struct MLMessageView: View {
     let message: MLMessage?
     var body: some View {
@@ -261,7 +257,7 @@ struct MLMessageView: View {
     }
 }
 
-/// A card that folds away (the web's details.fold). The form's state lives in the view that owns
+/// A card that folds away. The form's state lives in the view that owns
 /// the fold, so closing it keeps what was typed.
 struct MLFold<Content: View>: View {
     let title: String

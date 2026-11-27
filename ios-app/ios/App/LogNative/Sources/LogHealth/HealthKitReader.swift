@@ -2,9 +2,9 @@ import Foundation
 import HealthKit
 import LogCore
 
-/// The HealthKit side of the sync: one read request for every type, and the reads health.js made
-/// through the Capacitor Health plugin in the old web app, turned into HealthSample values in the plugin's units.
-/// Like the web sync, a read that fails (a type you didn't allow, nothing recorded) is just empty.
+/// The HealthKit side of the sync: one read request for every type, turned into HealthSample
+/// values in the Capacitor Health plugin's units.
+/// A read that fails (a type you didn't allow, nothing recorded) is just empty.
 final class HealthKitReader: @unchecked Sendable {
     let store = HKHealthStore()
 
@@ -31,7 +31,7 @@ final class HealthKitReader: @unchecked Sendable {
 
     // MARK: Authorization
 
-    /// health.js HEALTH_CORE, and with `core` false everything in HEALTH_READ. Blood pressure is
+    /// `core` is the everyday set; otherwise every type this sync reads. Blood pressure is
     /// asked for as its two parts (HealthKit doesn't authorize the correlation type itself).
     static func readTypes(core: Bool) -> Set<HKObjectType> {
         var types: Set<HKObjectType> = [HKObjectType.workoutType(), HKCategoryType(.appleStandHour), HKCategoryType(.sleepAnalysis)]
@@ -82,7 +82,7 @@ final class HealthKitReader: @unchecked Sendable {
         var raw = 0
     }
 
-    /// Daily statistics over Central days (the plugin's queryAggregated with bucket "day").
+    /// Daily statistics, one bucket per profile-zone day.
     func stats(_ id: HKQuantityTypeIdentifier, _ unit: HKUnit, _ options: HKStatisticsOptions,
                _ start: Date, _ end: Date, _ startKey: String, _ endKey: String, on: Bool = true) async -> [String: HealthDayStat] {
         guard on, end > start else { return [:] }
@@ -250,7 +250,7 @@ final class HealthKitReader: @unchecked Sendable {
 
     // MARK: A window
 
-    /// health.js collectWindow: read the days [startKey, endKey] and build their rows.
+    /// Read the days [startKey, endKey] and build their rows.
     ///   includeDays  read the per-day totals for log.daily_health
     ///   weightStart  read weigh-ins and body fat from this time (a scale may only sync weekly)
     ///   skipWeights  leave weigh-ins and body fat out
@@ -337,9 +337,8 @@ final class HealthKitReader: @unchecked Sendable {
 
     // MARK: Workout names
 
-    /// The plugin's workout type names (WorkoutType.fromHKWorkoutActivityType), so workouts are
-    /// named exactly like the ones the web sync already stored ("strengthTraining" for traditional
-    /// strength training; types it didn't know, stair climbing among them, are "other").
+    /// Workout type names already stored on past rows ("strengthTraining" for traditional
+    /// strength training; types this list doesn't know, stair climbing among them, are "other").
     static func workoutName(_ t: HKWorkoutActivityType) -> String {
         switch t {
         case .running: return "running"

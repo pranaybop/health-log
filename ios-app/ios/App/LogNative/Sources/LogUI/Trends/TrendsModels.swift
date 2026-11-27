@@ -78,7 +78,7 @@ struct TrWeightModel {
     }
 }
 
-/// The compare-with series under the weight chart (web OVERLAYS).
+/// The compare-with series under the weight chart.
 struct TrOverlay: Identifiable, Hashable {
     var id: String
     var label: String
@@ -97,7 +97,6 @@ struct TrOverlay: Identifiable, Hashable {
         TrOverlay(id: "noise", label: "Noise", title: "Food noise", color: "s3", zero: false),
     ]
 
-    /// The value with its unit, as the web's fmt.
     func text(_ v: Double) -> String {
         switch id {
         case "calories": return "\(TrendsCalc.num(v)) kcal"
@@ -110,7 +109,6 @@ struct TrOverlay: Identifiable, Hashable {
         }
     }
 
-    /// Axis labels, as the web's ovFmtAxis.
     func axis(_ v: Double) -> String {
         switch id {
         case "sleep": return "\(TrendsCalc.num(v))h"
@@ -189,7 +187,7 @@ struct TrMedsModel {
 
 // MARK: - Body
 
-/// A row of "More from Apple Health" (web MORE_HEALTH).
+/// A row of "More from Apple Health".
 struct TrHealthDef: Hashable {
     enum Style { case plain, minutes, mood, height }
     var id: String

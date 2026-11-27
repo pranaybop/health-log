@@ -4,8 +4,8 @@ import CoreTransferable
 import UniformTypeIdentifiers
 import LogCore
 
-// More section: pattern explorer (renderExplorer), Earn It wall (renderEarnWall), weekly summary
-// (renderWeekly) and the prescriber export (renderExport: CSV, print views, 4-week coach pack).
+// More section: pattern explorer, Earn It wall, weekly summary,
+// and the prescriber export (CSV, print views, 4-week coach pack).
 
 struct TrMoreSectionView: View {
     var m: TrMoreModel

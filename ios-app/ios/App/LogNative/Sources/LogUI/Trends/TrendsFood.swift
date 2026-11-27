@@ -1,8 +1,7 @@
 import SwiftUI
 import LogCore
 
-// Food section: calories and protein (renderFoodTrends), maintenance calories
-// (renderMaintenance), protein target (renderProteinCard), food thoughts (renderFoodThoughtsCard).
+// Food section: calories and protein, maintenance calories, protein target, food thoughts.
 
 struct TrFoodSectionView: View {
     var m: TrFoodModel

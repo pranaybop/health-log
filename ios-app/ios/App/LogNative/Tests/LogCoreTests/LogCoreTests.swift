@@ -1,8 +1,7 @@
 import XCTest
 @testable import LogCore
 
-/// Core calculations against the original web app's results on the same made-up fixture
-/// (Fixtures/demo.json). Expected numbers came from running the web app's own functions on it.
+/// Core calculations on the made-up fixture (Fixtures/demo.json).
 final class LogCoreTests: XCTestCase {
     static var dashboard: Dashboard = {
         let url = Bundle.module.url(forResource: "demo", withExtension: "json", subdirectory: "Fixtures")!

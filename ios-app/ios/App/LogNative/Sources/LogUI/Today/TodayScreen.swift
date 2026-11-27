@@ -2,7 +2,7 @@ import SwiftUI
 import LogCore
 import LogHealth
 
-/// The native Today tab (web renderTodayTab in app.js): a week strip to move between days, then the
+/// The Today tab: a week strip to move between days, then the
 /// day's weight, food, check-in, food thoughts, recovery signals, and medication cards,
 /// sleep, Apple Health, macros and meals. Past days show that day's data; future days are disabled.
 public struct TodayScreen: View {
@@ -78,7 +78,6 @@ public struct TodayScreen: View {
         .accessibilityAction(named: "Next day") { go(to: m.offset + 1, m) }
     }
 
-    /// The cards in the web app's order.
     private func dayBody(_ m: TodayModel) -> some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TodayHero(m: m).id("hero")
@@ -159,7 +158,7 @@ public struct TodayScreen: View {
         withAnimation(.snappy(duration: 0.3)) { dayOffset = next }
     }
 
-    /// Swipe left for the next day, right for the day before (the web's thresholds).
+    /// Swipe left for the next day, right for the day before.
     private func swipe(_ m: TodayModel) -> some Gesture {
         DragGesture(minimumDistance: 30)
             .onEnded { v in
@@ -172,7 +171,7 @@ public struct TodayScreen: View {
 
     // MARK: Writes
 
-    /// Send a log-write action the web app sends, then show what happened.
+    /// Send a log-write action, then show what happened.
     private func send(_ action: String, _ payload: [String: Any], _ success: String) async -> Bool {
         busy = true
         defer { busy = false }
@@ -188,7 +187,7 @@ public struct TodayScreen: View {
         }
     }
 
-    /// goal_set for each target given (web saveTargets). If the action isn't live yet, the targets
+    /// goal_set for each target given. If the action isn't live yet, the targets
     /// are kept on this phone instead.
     private func saveTargets(_ calories: Int?, _ protein: Int?) async {
         targetsMessage = nil

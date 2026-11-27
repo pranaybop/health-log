@@ -1,7 +1,7 @@
 import Foundation
 import LogCore
 
-/// Where the history backfill got to (health.js backfillState), kept in UserDefaults.
+/// Where the history backfill got to, kept in UserDefaults.
 ///
 /// It walks back from yesterday in windows that start at 10 days and grow to 60 while there's
 /// little data (shrinking if a read hits its limit), stops at 2015-01-01 or after a year with
@@ -58,7 +58,7 @@ public struct HealthBackfillState: Codable, Equatable, Sendable {
 
     /// Whether the log already holds the Apple Health history, so the backfill can start "done".
     ///
-    /// The web backfill uploaded history back to 2017 before the native sync existed. The payload
+    /// An earlier backfill uploaded history back to 2017 before the native sync existed. The payload
     /// shows it two ways: health_span (log.daily_health, filled by the Health export) reaches back
     /// more than a year, and health_metrics (the last 120 days of log.health_metrics) reaches back
     /// at least 100 days. Only a backfill fills metrics that far back: a catch-up sync covers 30 days
@@ -85,7 +85,6 @@ public struct HealthBackfillState: Codable, Equatable, Sendable {
     }
 }
 
-/// The panel's words, matching the web app (app.js renderHealthSync, health.js backfillText).
 public enum HealthText {
     private static let numberFormatter: NumberFormatter = {
         let f = NumberFormatter()
@@ -150,7 +149,7 @@ public enum HealthText {
         return b.cursor == nil ? "Backfill history" : "Continue backfill"
     }
 
-    /// health.js healthError, for errors that aren't already plain words.
+    /// For errors that aren't already plain words.
     public static func error(_ error: Error) -> String {
         if let e = error as? HealthSyncError { return e.text }
         if error is CancellationError { return "Couldn’t sync: it was stopped before it finished." }

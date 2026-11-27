@@ -1,8 +1,7 @@
 import XCTest
 @testable import LogCore
 
-/// Meds-tab calculations against the web app's own functions (analytics.js, signals.js) run on the
-/// same made-up fixture.
+/// Meds-tab calculations on the same made-up fixture.
 final class MedsTests: XCTestCase {
     var d: Dashboard { LogCoreTests.dashboard }
 

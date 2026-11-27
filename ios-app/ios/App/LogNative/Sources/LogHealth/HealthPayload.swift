@@ -1,6 +1,6 @@
 import Foundation
 
-/// health.js sendHealth: a window's rows as log-write requests, in the same order and chunk sizes
+/// A window's rows as log-write requests, in this order and these chunk sizes
 /// (days 31, weigh-ins 150, body 150, workouts 80 to `health_sync`; metrics 300 to `health_metrics`).
 public enum HealthPayload {
     public struct Request {

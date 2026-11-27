@@ -1,9 +1,8 @@
 import SwiftUI
 import LogCore
 
-// The Log tab's forms (web: forms.js). Each sends exactly the web form's action and payload: the
-// same keys, numbers as the typed text where the web sends input values, and the same checks and
-// wording. Fields keep what was typed if a save fails, and reset after a save like the web's redraw.
+// The Log tab's forms. Numbers go out as the typed text.
+// Fields keep what was typed if a save fails, and reset after a save.
 
 enum MLTime {
     /// Like JavaScript's toISOString: "2026-11-25T14:30:00.000Z".
@@ -17,7 +16,7 @@ enum MLTime {
 
 private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-/// Weigh-in (web: renderWeighIn): weight_lb as typed, optional notes.
+/// Weigh-in: weight_lb as typed, optional notes.
 struct MLWeighInCard: View {
     @Environment(LogStore.self) private var store
     @State private var weight = ""
@@ -78,7 +77,7 @@ struct MLWeighInCard: View {
     }
 }
 
-/// Earn It (web: renderEarnIt): today's earned flag.
+/// Earn It: today's earned flag.
 struct MLEarnItCard: View {
     @Environment(LogStore.self) private var store
     @State private var busy = false
@@ -122,7 +121,7 @@ struct MLEarnItCard: View {
     }
 }
 
-/// Log a dose (web: renderDoseForm): compound, mg, units, site (the suggested next one picked),
+/// Log a dose: compound, mg, units, site (the suggested next one picked),
 /// time, skipped and notes. The defaults follow the active protocol and the site rotation.
 struct MLDoseForm: View {
     @Binding var open: Bool
@@ -267,7 +266,7 @@ struct MLDoseForm: View {
     }
 }
 
-/// Side effect (web: renderSideEffectForm): a name and a 1-10 severity (starts at 5).
+/// Side effect: a name and a 1-10 severity (starts at 5).
 struct MLSideEffectForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -308,7 +307,7 @@ struct MLSideEffectForm: View {
     }
 }
 
-/// Measurement (web: renderMeasurementForm): metric, value as typed, unit.
+/// Measurement: metric, value as typed, unit.
 struct MLMeasurementForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -368,7 +367,7 @@ struct MLMeasurementForm: View {
     }
 }
 
-/// Start a vial (web: renderVialForm): total mg or total units required.
+/// Start a vial: total mg or total units required.
 struct MLVialForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -450,7 +449,7 @@ struct MLVialForm: View {
     }
 }
 
-/// Reconstitution calculator (web: renderReconCalc): units to draw for a dose. Nothing is saved.
+/// Reconstitution calculator: units to draw for a dose. Nothing is saved.
 struct MLReconForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -490,7 +489,6 @@ struct MLReconForm: View {
         return "Draw \(Fmt.num(units, 1)) units. That’s \(Fmt.num(conc, 2)) mg/mL after mixing. Not saved."
     }
 
-    /// web: retaMixNote
     static func mixNote(_ d: Dashboard?) -> String {
         let p = d.flatMap { Analytics.protocolRow($0, "retatrutide") }
         guard let units = p?.units, let mg = p?.typicalDoseMg, units > 0 else {
@@ -501,7 +499,7 @@ struct MLReconForm: View {
     }
 }
 
-/// The app version line (web: renderAppVersion), from the bundle.
+/// The app version line, from the bundle.
 enum MLAppVersion {
     static var text: String {
         let info = Bundle.main.infoDictionary ?? [:]

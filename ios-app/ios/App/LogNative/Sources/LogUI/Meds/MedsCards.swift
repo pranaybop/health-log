@@ -1,7 +1,7 @@
 import SwiftUI
 import LogCore
 
-/// Titration history (web: renderTitration): every dose on a timeline, marking each change.
+/// Titration history: every dose on a timeline, marking each change.
 struct MLTitrationCard: View {
     let data: Dashboard
 
@@ -46,7 +46,7 @@ struct MLTitrationCard: View {
     }
 }
 
-/// Protocol (web: renderProtocol): each compound's dose, half-life and start. Nothing without rows.
+/// Protocol: each compound's dose, half-life and start. Nothing without rows.
 struct MLProtocolCard: View {
     let data: Dashboard
 
@@ -85,7 +85,7 @@ struct MLProtocolCard: View {
     }
 }
 
-/// Vials (web: renderVials): totals by compound, each vial (identical unopened ones grouped),
+/// Vials: totals by compound, each vial (identical unopened ones grouped),
 /// supply runway at the planned weekly dose, and the runway before the switch.
 struct MLVialsCard: View {
     let data: Dashboard
@@ -108,7 +108,7 @@ struct MLVialsCard: View {
         return out
     }
 
-    /// Identical unopened vials collapse into one line (web: groupVials).
+    /// Identical unopened vials collapse into one line.
     static func groups(_ items: [VialItem]) -> [VialGroup] {
         var keys: [String] = []
         var map: [String: VialGroup] = [:]
@@ -172,7 +172,7 @@ struct MLVialsCard: View {
         return base
     }
 
-    /// Runway before the switch, by compound (web: renderCompoundRunway in focus.js).
+    /// Runway before the switch, by compound.
     static func runwayNote(_ data: Dashboard, now: Date = Date()) -> String? {
         let days = MLFmt.days(until: Analytics.retaSwitchAt(data), now: now)
         let tirz = Analytics.compoundRunway(data, "tirzepatide", now: now)
@@ -211,7 +211,7 @@ struct MLVialsCard: View {
     }
 }
 
-/// Dosing history (web: renderDoseHistory): every dose, newest first.
+/// Dosing history: every dose, newest first.
 struct MLDoseHistoryCard: View {
     let data: Dashboard
 

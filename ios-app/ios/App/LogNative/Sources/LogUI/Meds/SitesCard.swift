@@ -1,7 +1,7 @@
 import SwiftUI
 import LogCore
 
-/// Injection sites (web: renderSiteMap): a front-view drawing with the six rotation sites, the
+/// Injection sites: a front-view drawing with the six rotation sites, the
 /// legend, when each site was last used, and the suggested next site.
 struct MLSitesCard: View {
     let data: Dashboard
@@ -62,7 +62,7 @@ struct MLSiteDotKey: View {
     }
 }
 
-/// The web's 240 x 200 site map, scaled to the width it gets.
+/// A 240 x 200 site map, scaled to the width it gets.
 struct MLSiteMap: View {
     let rot: SiteRotation
     static let positions: [String: CGPoint] = [
@@ -130,7 +130,7 @@ struct MLSiteMap: View {
     }
 }
 
-/// Ribcage to hips, in the web drawing's 240 x 200 space.
+/// Ribcage to hips, in a 240 x 200 space.
 struct MLTorsoShape: Shape {
     func path(in rect: CGRect) -> Path {
         let k = rect.width / 240

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import LogCore
 
-/// Apple Health status and controls for the native screens (app.js renderHealthSync).
+/// Apple Health status and controls.
 ///
 /// - Full (the Log tab's Apple Health card): "Sync the last 30 days", the backfill button
 ///   ("Backfill history", "Continue backfill", "Backfill again"), the last sync or what the last
@@ -27,7 +27,7 @@ public struct HealthSyncPanel: View {
 }
 
 enum HealthPanelStyle {
-    /// LogColor.critInk (styles.css --crit-ink), for errors.
+    /// LogColor.critInk, for errors.
     static let errorInk = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 0xF0 / 255, green: 0x71 / 255, blue: 0x67 / 255, alpha: 1)

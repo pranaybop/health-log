@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// Colors (first taken from the web app's styles.css), light and dark. Use these, not raw colors, so the native
-/// screens match the rest of the app. Series colors s1-s4 are the chart palette (validated for
+/// Colors, light and dark. Use these, not raw colors, so the screens stay consistent.
+/// Series colors s1-s4 are the chart palette (validated for
 /// color-blind separation); status colors are only for good / watch / bad states, with a label.
 public enum LogColor {
     static func dyn(_ light: UInt32, _ dark: UInt32) -> Color {
@@ -45,7 +45,6 @@ extension UIColor {
     }
 }
 
-/// Spacing and shapes from the web app's tokens.
 public enum LogMetric {
     public static let gutter: CGFloat = 16
     public static let cardPad: CGFloat = 18
@@ -55,7 +54,7 @@ public enum LogMetric {
 }
 
 extension Font {
-    /// SF Pro Rounded for numbers (the web app's --font-num), tabular.
+    /// SF Pro Rounded for numbers, tabular.
     public static func logNumber(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
         .system(size: size, weight: weight, design: .rounded).monospacedDigit()
     }
@@ -63,7 +62,6 @@ extension Font {
     public static let logCardTitle = Font.system(size: 20, weight: .bold)
 }
 
-/// Number formatting that matches the web app's fmtNum / signed.
 public enum Fmt {
     private static func formatter(_ digits: Int) -> NumberFormatter {
         let f = NumberFormatter()
