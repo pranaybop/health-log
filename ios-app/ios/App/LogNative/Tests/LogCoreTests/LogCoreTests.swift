@@ -1,7 +1,6 @@
 import XCTest
 @testable import LogCore
 
-/// Core calculations on the made-up fixture (Fixtures/demo.json).
 final class LogCoreTests: XCTestCase {
     static var dashboard: Dashboard = {
         let url = Bundle.module.url(forResource: "demo", withExtension: "json", subdirectory: "Fixtures")!

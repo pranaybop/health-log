@@ -10,13 +10,9 @@ enum MLFmt {
         guard let s, let first = s.first else { return "" }
         return first.uppercased() + String(s.dropFirst())
     }
-    /// "Sun, Nov 22"
     static func day(_ d: Date) -> String { LogTime.weekdayDate(d) }
-    /// "Nov 22"
     static func short(_ d: Date) -> String { LogTime.shortDate(d) }
-    /// "4:00 PM CT"
     static func timeCT(_ d: Date) -> String { "\(LogTime.time(d)) CT" }
-    /// "Nov 22", "—" for nil
     static func shortKey(_ key: String?) -> String {
         guard let key, key.count >= 10, Int(key.prefix(4)) != nil else { return "—" }
         return LogTime.shortDate(key: String(key.prefix(10)))
@@ -34,7 +30,6 @@ enum MLFmt {
     }
 }
 
-/// A small status pill.
 struct MLBadge: View {
     enum Tone { case good, steady, watch }
     let text: String
@@ -84,7 +79,6 @@ struct MLLegendLine: View {
     }
 }
 
-/// A label, a big value and a detail line.
 struct MLTile: View {
     let label: String
     let value: String

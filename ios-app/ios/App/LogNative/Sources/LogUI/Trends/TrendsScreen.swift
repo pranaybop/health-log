@@ -2,8 +2,6 @@ import SwiftUI
 import UIKit
 import LogCore
 
-/// The Trends tab. One section at a time, picked from a
-/// row of chips and remembered in "log.trendsSection".
 /// Each section's numbers are worked out once per payload (TrendsCache), not on every render.
 public struct TrendsScreen: View {
     @Environment(LogStore.self) var store

@@ -1,8 +1,6 @@
 import Foundation
 import LogCore
 
-/// Where the history backfill got to, kept in UserDefaults.
-///
 /// It walks back from yesterday in windows that start at 10 days and grow to 60 while there's
 /// little data (shrinking if a read hits its limit), stops at 2015-01-01 or after a year with
 /// nothing in it, and saves the cursor after every window.
@@ -57,12 +55,6 @@ public struct HealthBackfillState: Codable, Equatable, Sendable {
     }
 
     /// Whether the log already holds the Apple Health history, so the backfill can start "done".
-    ///
-    /// An earlier backfill uploaded history back to 2017 before the native sync existed. The payload
-    /// shows it two ways: health_span (log.daily_health, filled by the Health export) reaches back
-    /// more than a year, and health_metrics (the last 120 days of log.health_metrics) reaches back
-    /// at least 100 days. Only a backfill fills metrics that far back: a catch-up sync covers 30 days
-    /// at most. So both together mean the history is there.
     public static func historyAlreadyThere(firstHealthDay: String?, earliestMetricDay: String?, today: String) -> Bool {
         guard let f = firstHealthDay, f.count >= 10, let m = earliestMetricDay, m.count >= 10 else { return false }
         return LogTime.dayDiff(today, String(f.prefix(10))) >= 365 && LogTime.dayDiff(today, String(m.prefix(10))) >= 100
@@ -149,7 +141,6 @@ public enum HealthText {
         return b.cursor == nil ? "Backfill history" : "Continue backfill"
     }
 
-    /// For errors that aren't already plain words.
     public static func error(_ error: Error) -> String {
         if let e = error as? HealthSyncError { return e.text }
         if error is CancellationError { return "Couldn’t sync: it was stopped before it finished." }

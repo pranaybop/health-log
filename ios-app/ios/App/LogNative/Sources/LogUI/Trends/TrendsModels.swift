@@ -78,7 +78,6 @@ struct TrWeightModel {
     }
 }
 
-/// The compare-with series under the weight chart.
 struct TrOverlay: Identifiable, Hashable {
     var id: String
     var label: String
@@ -187,7 +186,6 @@ struct TrMedsModel {
 
 // MARK: - Body
 
-/// A row of "More from Apple Health".
 struct TrHealthDef: Hashable {
     enum Style { case plain, minutes, mood, height }
     var id: String

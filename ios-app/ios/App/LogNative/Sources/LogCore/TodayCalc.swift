@@ -1,9 +1,6 @@
 import Foundation
 
-// Calculations behind the Today tab. Numbers only: the wording lives with the Today screen in LogUI.
-// TodayTests checks them against the made-up fixture.
 
-/// Straight-line pace through the last weeks of weigh-ins.
 public struct WeightPace: Hashable, Sendable {
     /// lb per week (negative = losing).
     public var weekly: Double
@@ -13,7 +10,6 @@ public struct WeightPace: Hashable, Sendable {
     public var count: Int
 }
 
-/// Start, goal and current weight.
 public struct WeightJourney: Hashable, Sendable {
     public var current: WeightPoint
     public var startLb: Double
@@ -23,7 +19,6 @@ public struct WeightJourney: Hashable, Sendable {
     public var changeStart: Double { current.lb - startLb }
 }
 
-/// Is the weight flat over the last 3 weeks?
 public struct StallResult: Hashable, Sendable {
     public var stalled: Bool
     public var ready: Bool
@@ -42,7 +37,6 @@ public struct SleepStages: Hashable, Sendable {
     public var total: Double { (core ?? 0) + (deep ?? 0) + (rem ?? 0) + (awake ?? 0) }
 }
 
-/// A recovery signal checked against its own normal.
 public struct SignalSpec: Hashable, Sendable {
     public var id: String
     public var label: String
@@ -77,7 +71,6 @@ extension Analytics {
 
     // MARK: Weight
 
-    /// The latest weigh-in on each day, oldest first.
     public static func dailyWeight(_ points: [WeightPoint]) -> [WeightPoint] {
         var byDay: [String: WeightPoint] = [:]
         for p in points { byDay[p.day] = p }
@@ -146,7 +139,6 @@ extension Analytics {
 
     // MARK: Doses
 
-    /// A week after the last logged dose, unless that's on or after the retatrutide switch.
     public static func plannedNextDose(_ d: Dashboard) -> Date? {
         let list = d.doses.filter { $0.skipped != true && $0.doseMg != nil && $0.takenDate != nil }
         guard let last = list.last?.takenDate else { return nil }

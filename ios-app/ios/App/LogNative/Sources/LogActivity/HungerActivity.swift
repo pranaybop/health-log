@@ -8,7 +8,6 @@ import LogCore
 /// current; the LogWidgets extension draws it.
 public struct HungerAttributes: ActivityAttributes {
     public struct Thought: Codable, Hashable, Sendable {
-        /// Minutes since midnight in the profile zone.
         public var minute: Int
         /// 1 passing thought, 2 strong pull, 3 craving
         public var strength: Int

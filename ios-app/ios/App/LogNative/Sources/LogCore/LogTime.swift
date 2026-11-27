@@ -1,8 +1,5 @@
 import Foundation
 
-/// Every calendar day is a day in the person's time zone
-/// (America/Chicago until `use` learns theirs from the profile), written as a "yyyy-MM-dd" key.
-/// `noon(key)` is noon standard time in that zone (18:00 UTC for Central).
 public enum LogTime {
     nonisolated(unsafe) public private(set) static var zone = TimeZone(identifier: "America/Chicago")!
     nonisolated(unsafe) public private(set) static var calendar: Calendar = makeCalendar(zone)
@@ -44,7 +41,6 @@ public enum LogTime {
 
     // MARK: Day keys
 
-    /// "2026-11-24" for the day `date` falls on in the profile zone.
     public static func dayKey(_ date: Date) -> String {
         let p = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", p.year ?? 0, p.month ?? 0, p.day ?? 0)
@@ -125,13 +121,12 @@ public enum LogTime {
                 date -= sign * (hours * 3600 + minutes * 60)
             }
         } else {
-            // No offset: treat as the profile zone, like a time typed on the phone.
             date -= Double(zone.secondsFromGMT(for: date))
         }
         return date
     }
 
-    // MARK: Formatting (profile zone, en_US)
+    // MARK: Formatting
 
     private static func formatter(_ format: String) -> DateFormatter {
         let f = DateFormatter()
@@ -176,10 +171,8 @@ public enum LogTime {
     /// "Tuesday"
     public static func weekday(_ date: Date) -> String { fWeekday.string(from: date) }
 
-    /// Hour of the day in the profile zone, 0-23.
     public static func hour(_ date: Date) -> Int { calendar.component(.hour, from: date) }
 
-    /// Whole days from now until `date` (negative if past), by profile-zone days.
     public static func daysUntil(_ date: Date, now: Date = Date()) -> Int {
         dayDiff(dayKey(date), dayKey(now))
     }

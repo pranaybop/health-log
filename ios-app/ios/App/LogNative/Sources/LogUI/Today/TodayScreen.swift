@@ -2,9 +2,6 @@ import SwiftUI
 import LogCore
 import LogHealth
 
-/// The Today tab: a week strip to move between days, then the
-/// day's weight, food, check-in, food thoughts, recovery signals, and medication cards,
-/// sleep, Apple Health, macros and meals. Past days show that day's data; future days are disabled.
 public struct TodayScreen: View {
     @Environment(LogStore.self) private var store
 
@@ -158,7 +155,6 @@ public struct TodayScreen: View {
         withAnimation(.snappy(duration: 0.3)) { dayOffset = next }
     }
 
-    /// Swipe left for the next day, right for the day before.
     private func swipe(_ m: TodayModel) -> some Gesture {
         DragGesture(minimumDistance: 30)
             .onEnded { v in
@@ -171,7 +167,6 @@ public struct TodayScreen: View {
 
     // MARK: Writes
 
-    /// Send a log-write action, then show what happened.
     private func send(_ action: String, _ payload: [String: Any], _ success: String) async -> Bool {
         busy = true
         defer { busy = false }
@@ -187,8 +182,6 @@ public struct TodayScreen: View {
         }
     }
 
-    /// goal_set for each target given. If the action isn't live yet, the targets
-    /// are kept on this phone instead.
     private func saveTargets(_ calories: Int?, _ protein: Int?) async {
         targetsMessage = nil
         var jobs: [(String, Int)] = []

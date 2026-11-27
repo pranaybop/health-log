@@ -1,7 +1,6 @@
 import SwiftUI
 import LogCore
 
-// Training section: steps and workouts.
 
 struct TrTrainingSectionView: View {
     var m: TrTrainingModel

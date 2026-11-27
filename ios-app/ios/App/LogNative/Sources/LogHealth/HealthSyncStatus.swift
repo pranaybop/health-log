@@ -67,7 +67,6 @@ public final class HealthSyncStatus {
     // MARK: Updates (NativeHealthSync)
 
     /// Start a sync, or nil to skip it (one is running, or a catch-up ran under a minute ago).
-    /// Returns how many days to sync: the first catch-up on this phone takes 30.
     func beginSync(_ mode: NativeHealthSync.Mode, days: Int, now: Date = Date()) -> Int? {
         guard !isSyncing else { return nil }
         if mode == .catchUp, let l = last, l.at <= now, now.timeIntervalSince(l.at) < 60 { return nil }

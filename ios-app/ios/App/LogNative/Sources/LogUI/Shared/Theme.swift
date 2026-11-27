@@ -1,9 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Colors, light and dark. Use these, not raw colors, so the screens stay consistent.
-/// Series colors s1-s4 are the chart palette (validated for
-/// color-blind separation); status colors are only for good / watch / bad states, with a label.
 public enum LogColor {
     static func dyn(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light) })
@@ -54,7 +51,6 @@ public enum LogMetric {
 }
 
 extension Font {
-    /// SF Pro Rounded for numbers, tabular.
     public static func logNumber(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
         .system(size: size, weight: weight, design: .rounded).monospacedDigit()
     }

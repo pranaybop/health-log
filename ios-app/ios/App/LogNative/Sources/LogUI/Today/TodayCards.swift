@@ -4,8 +4,6 @@ import LogActivity
 
 // MARK: Check-in prompt
 
-/// "Checked in today" with a summary, or the evening prompt to check in.
-/// Today's prompt waits until 6 PM in the profile zone; past days can be filled in any time.
 struct TodayCheckinNudge: View {
     let m: TodayModel
     let open: () -> Void
@@ -66,7 +64,6 @@ private struct Strength: Identifiable {
 private let strengths: [Strength] = [Strength(v: 1, label: "Passing thought"), Strength(v: 2, label: "Strong pull"), Strength(v: 3, label: "Craving")]
 private let commonEffects = ["Nausea", "Constipation", "Reflux", "Fatigue", "Headache", "Low appetite"]
 
-/// Today: one-tap food thoughts and a quick side effect.
 /// A past day: what was logged, if anything.
 struct TodayFeelNow: View {
     let m: TodayModel
@@ -218,7 +215,6 @@ private struct QuickEffect: View {
         guard !effect.isEmpty else { error = "Pick or type a side effect."; return }
         error = nil
         typing = false
-        // Severity goes out as text; log-write reads it either way.
         let payload: [String: Any] = ["effect": effect, "severity": String(Int(severity))]
         Task {
             if await send("side_effect_upsert", payload, "Logged \(effect.lowercased()).") { done() }
@@ -228,7 +224,6 @@ private struct QuickEffect: View {
 
 // MARK: Off your normal
 
-/// Shows only when two or more recovery signals are off their 30-day normal.
 struct TodayOffNormal: View {
     let checks: [SignalCheck]
 
@@ -299,7 +294,6 @@ private struct SignalRow: View {
 
     static func fmt(_ c: SignalCheck, _ v: Double) -> String { "\(Fmt.num(v, c.spec.digits))\(unit(c))" }
 
-    /// "+8 bpm", "−42%", "+3.5/min"
     static func diff(_ c: SignalCheck) -> String {
         if c.spec.id == "hrv_ms" { return "\(Fmt.signed(c.diff / c.median * 100, 0))%" }
         return "\(Fmt.signed(c.diff, c.spec.digits))\(unit(c))"
@@ -308,7 +302,6 @@ private struct SignalRow: View {
 
 // MARK: Countdowns
 
-/// Next dose and the retatrutide switch, in days.
 struct TodayCountdowns: View {
     let m: TodayModel
 
@@ -365,7 +358,6 @@ struct TodayCountdowns: View {
 
 // MARK: Verdict
 
-/// Is it working? Weight against the start, the recent pace and a stall check.
 struct TodayVerdict: View {
     let m: TodayModel
 
@@ -435,7 +427,6 @@ struct TodayVerdict: View {
 
 // MARK: Medication
 
-/// Today: the modeled level now, last and next dose, next site.
 struct TodayMedSummary: View {
     let m: TodayModel
 
@@ -475,7 +466,6 @@ struct TodayMedSummary: View {
     }
 }
 
-/// A past day: the level at 9 PM and that day's doses. Nothing before the first dose.
 struct TodayDayMeds: View {
     let m: TodayModel
 

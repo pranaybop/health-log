@@ -1,9 +1,6 @@
 import SwiftUI
 import LogCore
 
-/// Monday to Sunday for the week holding the day showing. Dots mark days with
-/// anything logged; future days and days before the log began are disabled. The month opens a
-/// calendar to jump to any day.
 struct TodayWeekStrip: View {
     let key: String
     let today: String
@@ -93,7 +90,6 @@ struct TodayWeekStrip: View {
     }
 }
 
-/// A calendar from the first logged day to today.
 struct TodayMonthPicker: View {
     let key: String
     let earliest: String

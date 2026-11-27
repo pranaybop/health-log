@@ -1,7 +1,5 @@
 import Foundation
 
-// Meds-tab calculations. retaSwitchAt is the shared Analytics function.
-// MedsTests checks them against the made-up fixture.
 
 /// One shot for the level model: a time, an amount and a compound.
 public struct Shot: Hashable, Sendable {
@@ -103,8 +101,6 @@ extension Analytics {
         }
     }
 
-    /// The logged shots plus the next weekly shot if it falls before the retatrutide switch.
-    /// Its amount is the active protocol's dose, else the last dose, else 3 mg.
     public static func plannedShots(_ doses: [Dose], protocols: [ProtocolRow]) -> (list: [Shot], next: Date?, withNext: [Shot]) {
         let list = realShots(doses)
         guard let last = list.last else { return (list, nil, list) }
@@ -152,7 +148,6 @@ extension Analytics {
 
     // MARK: Sites
 
-    /// Last site, suggested next site and when each site was last used.
     public static func siteRotation(_ d: Dashboard) -> SiteRotation {
         let doses = d.doses.filter { $0.skipped != true && !($0.site ?? "").isEmpty }
             .sorted { ($0.takenDate ?? .distantPast) < ($1.takenDate ?? .distantPast) }
@@ -170,7 +165,6 @@ extension Analytics {
         return SiteRotation(last: last, lastSite: lastSite, next: next, lastUsed: lastUsed)
     }
 
-    /// A dose's site as words, from `site` or a "site X;" note. "—" if none.
     public static func siteLabel(_ dose: Dose) -> String {
         var key = (dose.site ?? "").trimmingCharacters(in: .whitespaces)
         if key.isEmpty, let notes = dose.notes,
@@ -185,7 +179,6 @@ extension Analytics {
 
     // MARK: Titration and plan
 
-    /// Every dose in time order, marking the first and each change.
     public static func titrationHistory(_ doses: [Dose]) -> [TitrationStep] {
         let list = doses.filter { $0.takenDate != nil }.sorted { $0.takenDate! < $1.takenDate! }
         var steps: [TitrationStep] = []
@@ -203,12 +196,10 @@ extension Analytics {
         return steps
     }
 
-    /// Planned rows with an amount, by date.
     public static func planRows(_ d: Dashboard) -> [DosePlanRow] {
         d.dosePlan.filter { !$0.plannedOn.isEmpty && $0.doseMg != nil }.sorted { $0.plannedOn < $1.plannedOn }
     }
 
-    /// Consecutive weeks at the same compound and amount form a step.
     public static func planSteps(_ rows: [DosePlanRow]) -> [PlanStep] {
         var steps: [PlanStep] = []
         for r in rows {
@@ -237,7 +228,6 @@ extension Analytics {
 
     // MARK: Vials
 
-    /// Each vial's runway at its own compound's weekly dose.
     public static func vialRunway(_ d: Dashboard, now: Date = Date()) -> VialRunway {
         guard !d.vials.isEmpty else {
             return VialRunway(ready: false, summary: "Add a vial to see inventory and supply runway.", items: [], soonest: nil)
@@ -256,7 +246,6 @@ extension Analytics {
         return VialRunway(ready: true, summary: "", items: items, soonest: soonest)
     }
 
-    /// On-hand totals and weeks of supply for one compound.
     public static func compoundRunway(_ d: Dashboard, _ compound: String, now: Date = Date()) -> CompoundRunway {
         let r = vialRunway(d, now: now)
         let none = CompoundRunway(ready: false, items: [], mg: nil, units: nil, weeks: nil, weeklyMg: nil, weeklyUnits: nil)

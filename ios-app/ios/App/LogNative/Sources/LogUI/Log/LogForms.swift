@@ -1,8 +1,6 @@
 import SwiftUI
 import LogCore
 
-// The Log tab's forms. Numbers go out as the typed text.
-// Fields keep what was typed if a save fails, and reset after a save.
 
 enum MLTime {
     /// Like JavaScript's toISOString: "2026-11-25T14:30:00.000Z".
@@ -16,7 +14,6 @@ enum MLTime {
 
 private func trimmed(_ s: String) -> String { s.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-/// Weigh-in: weight_lb as typed, optional notes.
 struct MLWeighInCard: View {
     @Environment(LogStore.self) private var store
     @State private var weight = ""
@@ -77,7 +74,6 @@ struct MLWeighInCard: View {
     }
 }
 
-/// Earn It: today's earned flag.
 struct MLEarnItCard: View {
     @Environment(LogStore.self) private var store
     @State private var busy = false
@@ -121,8 +117,6 @@ struct MLEarnItCard: View {
     }
 }
 
-/// Log a dose: compound, mg, units, site (the suggested next one picked),
-/// time, skipped and notes. The defaults follow the active protocol and the site rotation.
 struct MLDoseForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -266,7 +260,6 @@ struct MLDoseForm: View {
     }
 }
 
-/// Side effect: a name and a 1-10 severity (starts at 5).
 struct MLSideEffectForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -307,7 +300,6 @@ struct MLSideEffectForm: View {
     }
 }
 
-/// Measurement: metric, value as typed, unit.
 struct MLMeasurementForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -367,7 +359,6 @@ struct MLMeasurementForm: View {
     }
 }
 
-/// Start a vial: total mg or total units required.
 struct MLVialForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -449,7 +440,6 @@ struct MLVialForm: View {
     }
 }
 
-/// Reconstitution calculator: units to draw for a dose. Nothing is saved.
 struct MLReconForm: View {
     @Binding var open: Bool
     @Environment(LogStore.self) private var store
@@ -499,7 +489,6 @@ struct MLReconForm: View {
     }
 }
 
-/// The app version line, from the bundle.
 enum MLAppVersion {
     static var text: String {
         let info = Bundle.main.infoDictionary ?? [:]

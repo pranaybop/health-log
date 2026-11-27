@@ -4,7 +4,6 @@ import LogCore
 
 // Building blocks for the Log tab's forms and the shared check-in form. Internal, prefixed "ML".
 
-/// A save result shown under the form's button.
 struct MLMessage: Equatable {
     var ok: Bool
     var text: String
@@ -54,7 +53,6 @@ enum MLWrite {
     }
 }
 
-/// Number text: trimmed, a comma read as a decimal point, and "" when it isn't a number.
 enum MLNum {
     static func text(_ s: String) -> String {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
@@ -153,8 +151,6 @@ struct MLOption: Hashable {
     let label: String
 }
 
-/// One-of-several chips: equal widths in a tinted track, or a grid of 3 columns.
-/// A choice can be changed but not cleared.
 struct MLChips: View {
     let options: [MLOption]
     @Binding var value: String
@@ -197,7 +193,6 @@ struct MLChips: View {
     }
 }
 
-/// A 1-10 slider that starts unset ("—").
 struct MLScale: View {
     let label: String
     @Binding var value: Int?
@@ -257,8 +252,6 @@ struct MLMessageView: View {
     }
 }
 
-/// A card that folds away. The form's state lives in the view that owns
-/// the fold, so closing it keeps what was typed.
 struct MLFold<Content: View>: View {
     let title: String
     let hint: String?

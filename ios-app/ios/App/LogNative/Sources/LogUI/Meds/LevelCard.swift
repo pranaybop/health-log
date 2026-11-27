@@ -2,8 +2,6 @@ import SwiftUI
 import Charts
 import LogCore
 
-/// Drug level: the modeled level now, a chart of past doses with the next
-/// planned shot dashed, and the half-life caption. Drag on the chart to read any moment.
 struct MLLevelCard: View {
     let data: Dashboard
     @State private var selected: Date?

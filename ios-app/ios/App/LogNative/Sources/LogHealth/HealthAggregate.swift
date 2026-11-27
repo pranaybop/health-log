@@ -1,8 +1,6 @@
 import Foundation
 import LogCore
 
-/// Per-day aggregation, sleep nights, unit conversions and rounding, lean mass, workout naming.
-/// No HealthKit here, so it's unit tested.
 public enum HealthAggregate {
     public static let sampleLimit = 20000
     public static let workoutLimit = 1000
@@ -35,7 +33,6 @@ public enum HealthAggregate {
     /// Date.toISOString(): "2026-11-24T15:04:05.123Z".
     public static func iso(_ d: Date) -> String { isoFormatter.string(from: d) }
 
-    /// "highIntensityIntervalTraining" -> "high intensity interval training".
     public static func words(_ camel: String?) -> String {
         let s = (camel?.isEmpty ?? true) ? "other" : camel!
         guard let re = try? NSRegularExpression(pattern: "([a-z])([A-Z])") else { return s.lowercased() }
@@ -65,7 +62,6 @@ public enum HealthAggregate {
         return total / 60000
     }
 
-    /// Samples grouped by the profile-zone day they started on, inside [from, to], in first-seen order.
     static func byDay(_ list: [HealthSample], _ from: String, _ to: String) -> [(day: String, items: [HealthSample])] {
         var order: [String] = []
         var groups: [String: [HealthSample]] = [:]
@@ -225,7 +221,6 @@ public enum HealthAggregate {
 
     // MARK: The window
 
-    /// The rows for the days [startKey, endKey].
     /// `includeDays` adds the per-day totals for log.daily_health.
     public static func collect(_ w: HealthWindowSamples, startKey: String, endKey: String, includeDays: Bool) -> HealthBatch {
         let from = startKey
@@ -338,7 +333,6 @@ public enum HealthAggregate {
         return batch
     }
 
-    /// Merge of the two halves of a split window.
     public static func merge(older: HealthBatch, newer: HealthBatch) -> HealthBatch {
         var out = HealthBatch()
         out.days = older.days + newer.days

@@ -7,8 +7,6 @@ import LogCore
 /// Apple Health sync in Swift. HealthKit reads (HealthAggregate) go to the `health_sync` and
 /// `health_metrics` log-write actions with the Keychain passcode.
 ///
-/// - sync(days:): the recent catch-up. The app calls it with 2 at launch, on pull to refresh and
-///   on coming back to the app (the first one on this phone takes 30 days).
 /// - The history backfill carries on after a foreground catch-up until it's done; never in the
 ///   background task.
 /// - A BGAppRefreshTask ("com.pranaybop.log.healthsync") catches up on the last 2 days about
@@ -110,8 +108,6 @@ public final class NativeHealthSync: @unchecked Sendable {
         return result
     }
 
-    /// Newest first, 10 days at a time: daily totals, every metric,
-    /// weigh-ins and body fat from the last 60 days or more (first window only), and workouts.
     private func performSync(days: Int, mode: Mode) async -> (HealthSyncResult, HealthSyncRecord?) {
         var totals = HealthSyncResult()
         do {
@@ -157,7 +153,6 @@ public final class NativeHealthSync: @unchecked Sendable {
         return code
     }
 
-    /// Split the window in half (down to one day) when a read hits its limit.
     func collectSafe(_ startKey: String, _ endKey: String, includeDays: Bool, weightStart: Date?, skipWeights: Bool) async -> HealthBatch {
         let data = await reader.collect(startKey: startKey, endKey: endKey, includeDays: includeDays,
                                         weightStart: weightStart, skipWeights: skipWeights)
@@ -169,7 +164,6 @@ public final class NativeHealthSync: @unchecked Sendable {
         return HealthAggregate.merge(older: older, newer: newer)
     }
 
-    /// The window in small requests; what the log stored.
     private func send(_ batch: HealthBatch, passcode: LogCredential) async throws -> HealthSyncResult {
         var totals = HealthSyncResult()
         for request in HealthPayload.requests(for: batch) {
@@ -187,10 +181,6 @@ public final class NativeHealthSync: @unchecked Sendable {
         await backfill(restart: false)
     }
 
-    /// Walk back through history from yesterday, sending metrics,
-    /// weigh-ins, body composition and workouts (not daily totals: older days of those came from
-    /// the Health export). Saves the cursor after every window; pauses if the app leaves the
-    /// foreground and carries on next time. `restart` starts again from yesterday ("Backfill again").
     public func backfill(restart: Bool) async {
         let leaving = await Self.inBackground()
         if leaving { return }
@@ -223,9 +213,6 @@ public final class NativeHealthSync: @unchecked Sendable {
         if final.values > startValues { await LogStore.shared.refresh() }
     }
 
-    /// After a foreground catch-up: carry on with the backfill unless it's done. The first time on
-    /// this phone, look at the payload first: if the history is already in the log,
-    /// start "done" instead (HealthBackfillState.historyAlreadyThere).
     func startBackfillIfNeeded() {
         Task.detached(priority: .utility) { [self] in
             let (decided, done, running, demo) = await MainActor.run {

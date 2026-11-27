@@ -2,11 +2,6 @@ import SwiftUI
 import Charts
 import LogCore
 
-/// The tirzepatide → retatrutide switch card. Meds shows it in
-/// its list; Today shows it on today's page.
-///
-/// Draws nothing once the first retatrutide dose is more than
-/// two weeks old (or before the data has loaded).
 public struct SwitchCard: View {
     @Environment(LogStore.self) private var store
 
