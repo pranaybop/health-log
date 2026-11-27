@@ -6,9 +6,8 @@ import Foundation
 // small, so it gets the `.compact` snapshot.
 
 public enum DataDigest {
-    /// compact: 2 weeks (Apple Intelligence's small context); medium: 30 days (a model on the
-    /// phone, where a longer prompt means a longer wait); full: 90 days with meals (cloud).
-    public enum Size: Sendable { case compact, medium, full }
+    /// compact: 2 weeks (Apple Intelligence's small context); full: 90 days with meals (cloud).
+    public enum Size: Sendable { case compact, full }
 
     static func f(_ v: Double?, _ digits: Int = 0) -> String {
         guard let v, v.isFinite else { return "" }
@@ -19,7 +18,7 @@ public enum DataDigest {
     /// (about 2 weeks); `full` is ~90 days for Claude or Grok.
     public static func make(_ d: Dashboard, now: Date = Date(), size: Size = .full) -> String {
         let full = size != .compact
-        let days = size == .full ? 90 : size == .medium ? 30 : 14
+        let days = size == .full ? 90 : 14
         let today = LogTime.today(now)
         let from = LogTime.shift(today, -(days - 1))
         var out: [String] = []

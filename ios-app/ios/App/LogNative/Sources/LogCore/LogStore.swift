@@ -63,9 +63,6 @@ public final class LogStore {
 
     private static let ownerKey = "log.account.owner"
 
-    /// The passcode for API calls (never shown or logged).
-    public var passcode: String? { isDemo ? "demo" : PasscodeStore.read() }
-
     /// What the next request signs in with.
     public func credential() async -> LogCredential? {
         if isDemo { return .passcode("demo") }
@@ -220,14 +217,6 @@ public final class LogStore {
         let changed = !isLocked
         isLocked = true
         if changed { onLockChange?(true) }
-    }
-
-    /// The shell calls this when the web view locked or unlocked on its own.
-    public func syncLockFromKeychain() {
-        let locked = isDemo ? false : (PasscodeStore.read() == nil && SessionStore.read() == nil)
-        guard locked != isLocked else { return }
-        if locked { dashboard = nil; clearCache() } else { loadCache() }
-        isLocked = locked
     }
 
     // MARK: Writes

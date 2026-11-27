@@ -29,8 +29,6 @@ public final class NativeHealthSync: @unchecked Sendable {
 
     let reader = HealthKitReader()
 
-    public static var isAvailable: Bool { HealthKitReader.isAvailable }
-
     // MARK: Background refresh
 
     private static let registration = NSLock()
@@ -181,11 +179,6 @@ public final class NativeHealthSync: @unchecked Sendable {
     }
 
     // MARK: History backfill
-
-    /// Continue the history backfill (it stops by itself when done).
-    public func backfill() async {
-        await backfill(restart: false)
-    }
 
     /// health.js backfillHealth: walk back through history from yesterday, sending metrics,
     /// weigh-ins, body composition and workouts (not daily totals: older days of those came from

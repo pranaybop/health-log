@@ -167,23 +167,8 @@ extension Analytics.Trends {
         d.protocols.first { ($0.compound ?? "").lowercased() == compound }
     }
 
-    /// Calorie and protein targets: the goals rows, else what this phone saved under "log.targets".
-    public static func targets(_ d: Dashboard, defaults: UserDefaults = .standard) -> (calories: Double?, protein: Double?) {
-        let goals = Analytics.targets(d)
-        var local: [String: Any] = [:]
-        if let text = defaults.string(forKey: "log.targets"), let data = text.data(using: .utf8),
-           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            local = obj
-        } else if let data = defaults.data(forKey: "log.targets"),
-                  let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
-            local = obj
-        }
-        func number(_ any: Any?) -> Double? {
-            if let n = any as? NSNumber { return n.doubleValue }
-            if let t = any as? String { return Double(t) }
-            return nil
-        }
-        return (goals.calories ?? number(local["calories"]), goals.protein ?? number(local["protein"]))
+    public static func targets(_ d: Dashboard) -> (calories: Double?, protein: Double?) {
+        Analytics.targets(d)
     }
 }
 
