@@ -3,7 +3,6 @@ import Foundation
 // The dashboard payload from the log-dashboard Edge Function (public.log_dashboard_payload()).
 // Keys are snake_case in JSON and camelCase here (decoded with .convertFromSnakeCase).
 // Timestamps stay strings as sent; use `LogTime.parse(_:)` (or the `...Date` helpers) for Dates.
-// Day keys ("2026-11-24") are America/Chicago calendar days.
 
 public struct Meal: Codable, Hashable, Sendable, Identifiable {
     @FlexText public var id: String?
@@ -272,7 +271,6 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
 public struct Account: Codable, Hashable, Sendable {
     public var kind: String?
     public var email: String?
-    public var isOwnerPasscode: Bool { kind == "owner" }
 }
 
 public struct Goal: Codable, Hashable, Sendable, Identifiable {

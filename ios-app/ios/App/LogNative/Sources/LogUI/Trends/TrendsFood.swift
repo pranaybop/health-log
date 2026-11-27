@@ -1,8 +1,6 @@
 import SwiftUI
 import LogCore
 
-// Food section: calories and protein (renderFoodTrends), maintenance calories
-// (renderMaintenance), protein target (renderProteinCard), food thoughts (renderFoodThoughtsCard).
 
 struct TrFoodSectionView: View {
     var m: TrFoodModel
@@ -10,6 +8,13 @@ struct TrFoodSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TrFoodTrendsCard(f: m.trends).id("food-trends")
+            if let b = m.breakdown {
+                LogCard("Calorie breakdown") {
+                    CalorieBreakdownView(b: b, targetDensity: m.targetDensity, perDay: true)
+                    Caption("An average of the \(b.days) day\(b.days == 1 ? "" : "s") with food logged in the last 30. Energy from protein and carbs is 4 kcal a gram, fat 9; calories logged without macros show as not broken down.")
+                }
+                .id("breakdown")
+            }
             if !m.maintenance.burn.isEmpty || !m.maintenance.logged.isEmpty {
                 TrMaintenanceCard(m: m.maintenance, target: m.calorieTarget).id("maintenance")
             }

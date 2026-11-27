@@ -1,8 +1,6 @@
 import SwiftUI
 import LogCore
 
-/// The native Meds tab (web: renderMedsTab in app.js): drug level, injection sites, dose plan,
-/// titration, the retatrutide switch, protocol, vials and dosing history.
 public struct MedsScreen: View {
     @Environment(LogStore.self) private var store
 

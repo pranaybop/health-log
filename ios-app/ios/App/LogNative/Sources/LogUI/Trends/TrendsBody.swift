@@ -1,8 +1,6 @@
 import SwiftUI
 import LogCore
 
-// Body section: off your normal (renderOffNormalTrends), heart (renderHeartCard), more from
-// Apple Health (renderMoreHealth) and measurements (renderMeasurements).
 
 struct TrBodySectionView: View {
     var m: TrBodyModel

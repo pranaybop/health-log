@@ -2,7 +2,6 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {
   adminClient,
   bearer,
-  corsHeaders,
   failDelay,
   passcodeMatches,
   resolveCaller,
@@ -17,7 +16,7 @@ import {
 //   refresh       { refresh_token }              -> session
 //   google_url    { redirect_to, code_challenge } -> { url } to open in a web auth session
 //   google_finish { auth_code, code_verifier }   -> session
-//   apple_finish  { id_token, nonce? }           -> session (built, not shown in the app yet)
+//   apple_finish  { id_token, nonce? }           -> session
 //   reset         { email }                      -> sends a password reset email
 //   signout       (Bearer)                       -> ends the session
 //   me            (Bearer)                       -> { user, owner, claimed }
@@ -38,14 +37,12 @@ function str(v: unknown, max = 4096): string {
 }
 
 Deno.serve(async (req: Request) => {
-  const cors = corsHeaders(req.headers.get("Origin"), "POST, OPTIONS");
   const json = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), {
       status,
-      headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" },
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
 
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (req.method !== "POST") return json(405, { ok: false, error: "method_not_allowed" });
 
   const url = Deno.env.get("SUPABASE_URL");

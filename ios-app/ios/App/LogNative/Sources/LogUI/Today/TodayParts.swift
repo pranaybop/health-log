@@ -2,8 +2,6 @@ import SwiftUI
 import UIKit
 import LogCore
 
-// Small pieces the Today cards share: chips, tiles, callouts, property rows, a wrapping layout,
-// the text helpers that match the web app's wording, and debug launch arguments.
 
 enum TodayTone {
     case plain, good, watch, steady
@@ -27,7 +25,6 @@ enum TodayTone {
     }
 }
 
-/// A rounded status chip (web .chip).
 struct TodayChip: View {
     let text: String
     var tone: TodayTone = .plain
@@ -46,7 +43,6 @@ struct TodayChip: View {
     }
 }
 
-/// A label, a big number and a detail on an inset tile (web .tiles .metric).
 struct TodayTile: View {
     let label: String
     let value: String
@@ -103,7 +99,6 @@ struct TileGrid: View {
     }
 }
 
-/// Label-value rows with hairlines between them (web .props).
 struct TodayProps: View {
     let rows: [(String, String)]
 
@@ -117,7 +112,6 @@ struct TodayProps: View {
     }
 }
 
-/// A short note in a tinted box with an optional button on the right (web .callout).
 struct TodayCallout<Trailing: View>: View {
     let title: String
     let detail: String
@@ -140,7 +134,6 @@ struct TodayCallout<Trailing: View>: View {
     }
 }
 
-/// A text button in the link color (web button.link), for card headers.
 struct TodayLink: View {
     let title: String
     var color: Color = LogColor.link
@@ -160,7 +153,6 @@ struct TodayLink: View {
     }
 }
 
-/// A card caption (web .caption).
 struct TodayCaption: View {
     let text: String
     var color: Color = LogColor.ink2
@@ -171,7 +163,6 @@ struct TodayCaption: View {
     }
 }
 
-/// Lays children out left to right and wraps onto new lines (the web's flex-wrap chip rows).
 struct FlowLayout: Layout {
     var spacing: CGFloat = 6
     var lineSpacing: CGFloat = 6
@@ -245,19 +236,15 @@ struct ShareBar: View {
     }
 }
 
-// MARK: Wording (matches the web app's helpers)
 
 enum TodayText {
-    /// "11:20 PM CT" (web fmtTimeCT)
     static func timeCT(_ d: Date) -> String { LogTime.time(d) + " CT" }
 
-    /// "Tue, Nov 24", with ", 2027" when it isn't this year (web fmtDateYearCT)
     static func weekdayDateYear(_ d: Date, now: Date) -> String {
         let y = LogTime.calendar.component(.year, from: d)
         return y == LogTime.calendar.component(.year, from: now) ? LogTime.weekdayDate(d) : "\(LogTime.weekdayDate(d)), \(y)"
     }
 
-    /// "today", "tomorrow", "in 3 days", "1 day ago", "3 days ago" (web daysWord)
     static func daysWord(_ n: Int) -> String {
         if n == 0 { return "today" }
         if n == 1 { return "tomorrow" }
@@ -276,7 +263,6 @@ enum TodayText {
     /// A number the way JavaScript prints it: 9, 7.5.
     static func plain(_ v: Double?) -> String { Fmt.mg(v) }
 
-    /// The big title: Today, Yesterday, the weekday this past week, else the date (web dayTitle).
     static func dayTitle(_ key: String, today: String, now: Date) -> String {
         let off = LogTime.dayDiff(key, today)
         if off == 0 { return "Today" }

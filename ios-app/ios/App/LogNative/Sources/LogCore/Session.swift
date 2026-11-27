@@ -194,12 +194,6 @@ public enum LogAuth {
         _ = try await call(["action": "claim"], bearer: accessToken, passcode: passcode)
     }
 
-    /// Whether this account holds the owner's log.
-    public static func isOwner(accessToken: String) async throws -> Bool {
-        let json = try await call(["action": "me"], bearer: accessToken)
-        return (json["owner"] as? Bool) ?? false
-    }
-
     // MARK: Plumbing
 
     private static func sessionCall(_ body: [String: Any]) async throws -> Result {

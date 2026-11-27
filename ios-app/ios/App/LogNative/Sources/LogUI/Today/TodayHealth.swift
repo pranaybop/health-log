@@ -4,7 +4,6 @@ import LogHealth
 
 // MARK: Sleep
 
-/// Last night's sleep, its stages and the 7-night debt against 8-hour nights (web renderSleepNight).
 struct TodaySleepCard: View {
     let m: TodayModel
 
@@ -94,7 +93,6 @@ private struct StageBar: View {
 
 // MARK: Body (Apple Health)
 
-/// Steps, sleep, resting heart rate and HRV for the day, or the latest day synced (web renderSignals).
 struct TodayBodyCard: View {
     let m: TodayModel
 
@@ -129,32 +127,6 @@ struct TodayBodyCard: View {
 }
 
 // MARK: Macros and meals
-
-/// Protein, carbs, fat and fiber in grams, as bars against the largest (web renderMacros).
-struct TodayMacros: View {
-    let totals: DailyTotal
-
-    var body: some View {
-        let rows: [(String, Double?, Bool)] = [("Protein", totals.proteinG, true), ("Carbs", totals.carbsG, false), ("Fat", totals.fatG, false), ("Fiber", totals.fiberG, false)]
-        let top = max(1, rows.map { $0.1 ?? 0 }.max() ?? 1)
-        VStack(spacing: 10) {
-            Rectangle().fill(LogColor.hairline).frame(height: 1)
-            VStack(spacing: 10) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
-                    HStack(spacing: 10) {
-                        Text(r.0).font(.subheadline).foregroundStyle(LogColor.ink2).frame(width: 64, alignment: .leading)
-                        ShareBar(share: (r.1 ?? 0) / top, color: r.2 ? LogColor.s2 : LogColor.axis)
-                        Text(r.1.map { "\(Fmt.num($0, 0)) g" } ?? "—").font(.subheadline).monospacedDigit().foregroundStyle(LogColor.ink)
-                            .frame(minWidth: 56, alignment: .trailing)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(r.0)
-                    .accessibilityValue(r.1.map { "\(Fmt.num($0, 0)) grams" } ?? "none")
-                }
-            }
-        }
-    }
-}
 
 /// "Log a meal". Sits in the Food today card, right under today's calories. For the original log
 /// it opens Log in Grok Bot (unless Account says otherwise); everyone else describes the meal in
@@ -207,7 +179,6 @@ struct LogMealButton: View {
     }
 }
 
-/// The day's meals (web renderMeals), listed inside the Food card right under "Log a meal".
 struct TodayMeals: View {
     let meals: [Meal]
     let past: Bool

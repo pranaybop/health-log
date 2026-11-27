@@ -1,19 +1,17 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { attachProgressPhotos } from "../_shared/progress_photos.ts";
-import { adminClient, corsHeaders, failDelay, resolveCaller, userParam } from "../_shared/auth.ts";
+import { adminClient, failDelay, resolveCaller, userParam } from "../_shared/auth.ts";
 
 // GET the caller's dashboard: a signed-in account (Bearer token), or the owner
 // (x-log-passcode / x-log-token).
 
 Deno.serve(async (req: Request) => {
-  const cors = corsHeaders(req.headers.get("Origin"), "GET, OPTIONS");
   const json = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), {
       status,
-      headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" },
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
 
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
   if (req.method !== "GET") return json(405, { error: "method_not_allowed" });
 
   const admin = adminClient();

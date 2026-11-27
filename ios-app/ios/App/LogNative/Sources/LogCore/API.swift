@@ -82,11 +82,6 @@ public enum LogAPI {
 
     /// POST {action, payload} to log-write. Returns the response JSON (counts, ok, etc.).
     @discardableResult
-    public static func write(_ action: String, payload: [String: Any], passcode: String) async throws -> [String: Any] {
-        try await write(action, payload: payload, credential: .passcode(passcode))
-    }
-
-    @discardableResult
     public static func write(_ action: String, payload: [String: Any], credential: LogCredential) async throws -> [String: Any] {
         let body = try JSONSerialization.data(withJSONObject: ["action": action, "payload": payload])
         let data = try await withRetry(credential) { cred in

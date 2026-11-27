@@ -151,3 +151,49 @@ final class AskToolsTests: XCTestCase {
         XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: AskTools.googleSchemas))
     }
 }
+
+final class CalorieBreakdownTests: XCTestCase {
+    func decode<T: Decodable>(_ json: String) -> T {
+        let dec = JSONDecoder()
+        dec.keyDecodingStrategy = .convertFromSnakeCase
+        return try! dec.decode(T.self, from: Data(json.utf8))
+    }
+
+    func testMacroSplitAndMeals() throws {
+        let totals: DailyTotal = decode(#"{"date":"2026-11-24","calories":2000,"protein_g":150,"carbs_g":200,"fat_g":60,"fiber_g":25}"#)
+        let meals: [Meal] = decode(#"""
+        [{"eaten_at":"2026-11-24T08:00:00-06:00","meal_type":"breakfast","item":"Eggs","calories":500,"protein_g":40},
+         {"eaten_at":"2026-11-24T12:30:00-06:00","meal_type":"Lunch","item":"Bowl","calories":700,"protein_g":50},
+         {"eaten_at":"2026-11-24T19:00:00-06:00","item":"Salmon","calories":600,"protein_g":50},
+         {"eaten_at":"2026-11-24T22:30:00-06:00","meal_type":"snacks","item":"Yogurt","calories":200,"protein_g":10}]
+        """#)
+        let b = try XCTUnwrap(CalorieBreakdown.make(meals: meals, totals: totals))
+        XCTAssertEqual(b.calories, 2000)
+        // 150 g protein = 600 kcal = 30%; 200 g carbs = 800 kcal; 60 g fat = 540 kcal.
+        XCTAssertEqual(b.macros.map(\.id), ["protein", "carbs", "fat"], "60 kcal unaccounted is under the 5% floor")
+        XCTAssertEqual(b.macros[0].share, 0.30, accuracy: 1e-9)
+        XCTAssertEqual(b.macros[2].kcal, 540, accuracy: 1e-9)
+        XCTAssertEqual(b.proteinPer100 ?? 0, 7.5, accuracy: 1e-9)
+        XCTAssertEqual(b.meals.map(\.label), ["Breakfast", "Lunch", "Dinner", "Snacks"], "untyped 7 PM meal counts as dinner")
+        XCTAssertEqual(b.meals[1].share, 0.35, accuracy: 1e-9)
+        XCTAssertEqual(b.fiber, 25)
+    }
+
+    func testCaloriesWithoutMacrosShowSeparately() throws {
+        let totals: DailyTotal = decode(#"{"date":"2026-11-24","calories":2000,"protein_g":100,"carbs_g":100,"fat_g":40}"#)
+        let b = try XCTUnwrap(CalorieBreakdown.make(meals: [], totals: totals))
+        let other = try XCTUnwrap(b.macros.first { $0.id == "other" })
+        XCTAssertEqual(other.kcal, 2000 - 1160, accuracy: 1e-9)
+        XCTAssertEqual(b.macros.reduce(0) { $0 + $1.share }, 1, accuracy: 1e-9)
+        XCTAssertNil(CalorieBreakdown.make(meals: [], totals: nil))
+    }
+
+    func testThirtyDayAverageFromFixture() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "demo", withExtension: "json", subdirectory: "Fixtures"))
+        let d = try Dashboard.decode(Data(contentsOf: url))
+        let b = try XCTUnwrap(CalorieBreakdown.average(d, now: LogTime.parse("2026-11-24T23:20:00-06:00")!))
+        XCTAssertGreaterThan(b.days, 1)
+        XCTAssertLessThanOrEqual(b.macros.reduce(0) { $0 + $1.share }, 1.000001)
+        XCTAssertEqual(CalorieBreakdown.targetDensity(protein: 150, calories: 2200) ?? 0, 150.0 / 22, accuracy: 1e-9)
+    }
+}

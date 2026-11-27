@@ -1,7 +1,7 @@
 import Foundation
 
 // Local reminders: what to schedule, with no UserNotifications here so it can be tested.
-// The phone turns these into notifications. Times are America/Chicago, like the rest of Log.
+// The phone turns these into notifications.
 
 public struct ReminderSettings: Codable, Equatable, Sendable {
     public var shot: Bool
@@ -156,7 +156,6 @@ public enum ReminderPlanner {
         return out
     }
 
-    /// The Central-time instant of hour:minute on a day key.
     public static func fireDate(_ day: String, _ hour: Int, _ minute: Int) -> Date? {
         var parts = LogTime.calendar.dateComponents([.year, .month, .day], from: LogTime.noon(day))
         parts.hour = hour

@@ -78,7 +78,6 @@ struct TrWeightModel {
     }
 }
 
-/// The compare-with series under the weight chart (web OVERLAYS).
 struct TrOverlay: Identifiable, Hashable {
     var id: String
     var label: String
@@ -97,7 +96,6 @@ struct TrOverlay: Identifiable, Hashable {
         TrOverlay(id: "noise", label: "Noise", title: "Food noise", color: "s3", zero: false),
     ]
 
-    /// The value with its unit, as the web's fmt.
     func text(_ v: Double) -> String {
         switch id {
         case "calories": return "\(TrendsCalc.num(v)) kcal"
@@ -110,7 +108,6 @@ struct TrOverlay: Identifiable, Hashable {
         }
     }
 
-    /// Axis labels, as the web's ovFmtAxis.
     func axis(_ v: Double) -> String {
         switch id {
         case "sleep": return "\(TrendsCalc.num(v))h"
@@ -155,6 +152,9 @@ struct TrFoodModel {
     var calorieTarget: Double?
     var protein: TrendsCalc.ProteinCard?
     var thoughts: TrendsCalc.ThoughtsCard?
+    /// The average logged day, last 30 days.
+    var breakdown: CalorieBreakdown?
+    var targetDensity: Double?
 
     init(_ d: Dashboard, now: Date, targets: TrTargets) {
         trends = TrendsCalc.foodTrends(d, now: now, calorieTarget: targets.calories, proteinTarget: targets.protein)
@@ -162,6 +162,8 @@ struct TrFoodModel {
         calorieTarget = targets.calories
         protein = TrendsCalc.proteinCard(d, now: now, target: targets.protein)
         thoughts = TrendsCalc.thoughtsCard(d, now: now)
+        breakdown = CalorieBreakdown.average(d, days: 30, now: now)
+        targetDensity = CalorieBreakdown.targetDensity(protein: targets.protein, calories: targets.calories)
     }
 }
 
@@ -189,7 +191,6 @@ struct TrMedsModel {
 
 // MARK: - Body
 
-/// A row of "More from Apple Health" (web MORE_HEALTH).
 struct TrHealthDef: Hashable {
     enum Style { case plain, minutes, mood, height }
     var id: String

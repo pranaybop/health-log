@@ -1,9 +1,6 @@
 import SwiftUI
 import LogCore
 
-/// Dose plan (web: renderDosePlan in signals.js): the next planned dose with when, the vial to draw
-/// from, the next step-up and retatrutide used so far, then the plan's steps. A missed dose stays
-/// here, marked overdue, until it's logged or skipped. Nothing without rows.
 struct MLDosePlanCard: View {
     let data: Dashboard
     @Environment(LogStore.self) private var store

@@ -1,27 +1,14 @@
 import SwiftUI
 import LogCore
 
-/// Calorie and protein targets: an active log.goals row wins; otherwise the target saved on this
-/// phone (only used if goal_set isn't switched on, like the web app's localStorage fallback).
 struct TodayTargets: Equatable {
     var calories: Double?
     var protein: Double?
     var isEmpty: Bool { calories == nil && protein == nil }
 
-    private static let localKey = "log.native.targets"
-
     static func current(_ d: Dashboard) -> TodayTargets {
         let goals = Analytics.targets(d)
-        let local = UserDefaults.standard.dictionary(forKey: localKey) ?? [:]
-        return TodayTargets(calories: goals.calories ?? (local["calories"] as? Double),
-                            protein: goals.protein ?? (local["protein"] as? Double))
-    }
-
-    static func saveLocally(calories: Int?, protein: Int?) {
-        var local = UserDefaults.standard.dictionary(forKey: localKey) ?? [:]
-        if let calories { local["calories"] = Double(calories) }
-        if let protein { local["protein"] = Double(protein) }
-        UserDefaults.standard.set(local, forKey: localKey)
+        return TodayTargets(calories: goals.calories, protein: goals.protein)
     }
 }
 
@@ -30,8 +17,6 @@ struct TodayMessage: Equatable {
     var text: String
 }
 
-/// Food today (web renderFood): calorie and protein gauges against the targets, the targets
-/// editor, the protein line and how many meals are logged.
 struct TodayFoodCard: View {
     let m: TodayModel
     @Binding var editing: Bool
@@ -75,8 +60,9 @@ struct TodayFoodCard: View {
                     LogMealButton()
                 }
                 TodayMeals(meals: m.meals, past: !m.isToday)
-                if let totals = m.totals {
-                    TodayMacros(totals: totals)
+                if let b = CalorieBreakdown.make(meals: m.meals, totals: m.totals) {
+                    Rectangle().fill(LogColor.hairline).frame(height: 1)
+                    CalorieBreakdownView(b: b, targetDensity: CalorieBreakdown.targetDensity(protein: t.protein, calories: t.calories))
                 }
                 if m.isToday, let target = t.protein {
                     ProteinLine(s: Analytics.proteinStreak(m.d, target: target, now: m.now))
@@ -102,7 +88,6 @@ struct TodayFoodCard: View {
         return t.isEmpty && !editing ? "\(meals). Set daily targets to track progress toward them." : "\(meals). Macros may be estimates."
     }
 
-    /// "585 left", "88 g to go", "Hit, 1 g over", "699 over" (web gauge).
     static func status(kind: String, value: Double?, target: Double?, unit: String, past: Bool) -> String {
         guard let value, let target, target > 0 else { return "" }
         let diff = target - value
@@ -113,8 +98,6 @@ struct TodayFoodCard: View {
     }
 }
 
-/// Calories (outer ring) and protein (inner ring) against today's targets. Past 100% the ring
-/// is full and gets a small gap at the top, like the web gauge's over-target notch.
 private struct FoodRing: View {
     let calories: Double
     let protein: Double
@@ -170,58 +153,7 @@ private struct FoodStat: View {
     }
 }
 
-/// One gauge: label and status, the amount against the target, and a bar (web .gauge).
-private struct FoodGauge: View {
-    let label: String
-    let color: Color
-    let value: Double?
-    let target: Double?
-    let unit: String
-    let status: String
-    @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 36
-
-    init(label: String, color: Color, value: Double?, target: Double?, unit: String, status: String) {
-        self.label = label
-        self.color = color
-        self.value = value
-        self.target = target
-        self.unit = unit
-        self.status = status
-    }
-
-    var body: some View {
-        let hasTarget = (target ?? 0) > 0
-        let share = value != nil && hasTarget ? value! / target! : 0
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                HStack(spacing: 8) {
-                    Circle().fill(color).frame(width: 10, height: 10)
-                    Text(label).font(.body.weight(.semibold)).foregroundStyle(LogColor.ink)
-                }
-                Spacer(minLength: 8)
-                Text(status).font(.subheadline.weight(.medium)).foregroundStyle(LogColor.ink2)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Text(value != nil ? Fmt.num(value, 0) : "0").font(.logNumber(min(size, 52), weight: .semibold)).foregroundStyle(LogColor.ink)
-                Text(hasTarget ? " / \(Fmt.num(target, 0)) \(unit)" : " \(unit)").font(.logNumber(17, weight: .medium)).foregroundStyle(LogColor.ink2)
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.6)
-            .padding(.top, 2)
-            .padding(.bottom, 8)
-            ZStack(alignment: .trailing) {
-                ShareBar(share: min(1, share), color: color, height: 10)
-                if share > 1 {
-                    Rectangle().fill(LogColor.surface).frame(width: 3, height: 10)
-                }
-            }
-            .clipShape(Capsule())
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-/// "88 g left to hit 150 g. No hit streak yet." (web renderProteinLine)
+/// "88 g left to hit 150 g. No hit streak yet."
 private struct ProteinLine: View {
     let s: ProteinStreak
 
@@ -235,7 +167,6 @@ private struct ProteinLine: View {
     }
 }
 
-/// Daily calorie and protein targets, saved with goal_set (web renderTargetsEditor).
 private struct TargetsEditor: View {
     let targets: TodayTargets
     let save: (_ calories: Int?, _ protein: Int?) async -> Void
@@ -303,7 +234,6 @@ private struct TargetsEditor: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// The web's checks: whole numbers, 800–6,000 kcal and 20–400 g; at least one box filled.
     private func submit() {
         let c = calories.trimmingCharacters(in: .whitespaces)
         let p = protein.trimmingCharacters(in: .whitespaces)

@@ -2,9 +2,6 @@ import SwiftUI
 import LogCore
 import LogHealth
 
-/// The native Today tab (web renderTodayTab in app.js): a week strip to move between days, then the
-/// day's weight, food, check-in, food thoughts, recovery signals, and medication cards,
-/// sleep, Apple Health, macros and meals. Past days show that day's data; future days are disabled.
 public struct TodayScreen: View {
     @Environment(LogStore.self) private var store
 
@@ -78,7 +75,6 @@ public struct TodayScreen: View {
         .accessibilityAction(named: "Next day") { go(to: m.offset + 1, m) }
     }
 
-    /// The cards in the web app's order.
     private func dayBody(_ m: TodayModel) -> some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TodayHero(m: m).id("hero")
@@ -159,7 +155,6 @@ public struct TodayScreen: View {
         withAnimation(.snappy(duration: 0.3)) { dayOffset = next }
     }
 
-    /// Swipe left for the next day, right for the day before (the web's thresholds).
     private func swipe(_ m: TodayModel) -> some Gesture {
         DragGesture(minimumDistance: 30)
             .onEnded { v in
@@ -172,7 +167,6 @@ public struct TodayScreen: View {
 
     // MARK: Writes
 
-    /// Send a log-write action the web app sends, then show what happened.
     private func send(_ action: String, _ payload: [String: Any], _ success: String) async -> Bool {
         busy = true
         defer { busy = false }
@@ -188,32 +182,22 @@ public struct TodayScreen: View {
         }
     }
 
-    /// goal_set for each target given (web saveTargets). If the action isn't live yet, the targets
-    /// are kept on this phone instead.
     private func saveTargets(_ calories: Int?, _ protein: Int?) async {
         targetsMessage = nil
         var jobs: [(String, Int)] = []
         if let calories { jobs.append(("calories", calories)) }
         if let protein { jobs.append(("protein", protein)) }
-        var notLive = false
         var failed: String?
         for (kind, target) in jobs {
             do {
                 let result = try await store.write("goal_set", ["kind": kind, "target": target])
                 if let ok = result["ok"] as? Bool, !ok { throw LogError.server((result["error"] as? String) ?? "write_failed") }
-            } catch LogError.server(let message) where message.hasPrefix("invalid_action") {
-                notLive = true
-                break
             } catch {
                 failed = TodayText.writeError(error)
                 break
             }
         }
-        if notLive {
-            TodayTargets.saveLocally(calories: calories, protein: protein)
-            editTargets = false
-            targetsMessage = TodayMessage(ok: true, text: "Saved on this phone for now. Saving targets to your log isn't switched on yet.")
-        } else if let failed {
+        if let failed {
             targetsMessage = TodayMessage(ok: false, text: failed)
         } else {
             editTargets = false
