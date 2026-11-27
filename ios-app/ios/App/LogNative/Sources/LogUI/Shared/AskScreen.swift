@@ -236,12 +236,17 @@ struct AskSectionView: View {
                     // Show the answer as it's written.
                     turns.append(AskTurn(role: .assistant, text: ""))
                     let i = turns.count - 1
-                    var raw = ""
-                    for try await chunk in chat.stream(q) {
-                        raw += chunk
-                        turns[i].text = LocalChat.clean(raw)
+                    let finished = try await LocalModel.shared.answer(chat, q) { raw in
+                        if i < turns.count { turns[i].text = LocalChat.clean(raw) }
                     }
-                    if turns[i].text.isEmpty { turns[i].text = "No answer came back. Try asking another way." }
+                    guard i < turns.count else { return }
+                    if !finished {
+                        let kept = turns[i].text
+                        turns[i].text = kept.isEmpty ? "Stopped when you left the app. Ask again to get an answer."
+                            : kept + "\n\n(Stopped when you left the app.)"
+                    } else if turns[i].text.isEmpty {
+                        turns[i].text = "No answer came back. Try asking another way."
+                    }
                     return
                 } else if m == .onDevice {
                     let r = try await OnDevice.ask(q, dashboard: d, session: localSession)

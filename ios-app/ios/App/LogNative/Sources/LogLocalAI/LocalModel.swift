@@ -73,12 +73,51 @@ public final class LocalModel {
     /// they don't read them again. Keyed by model and instructions.
     @ObservationIgnored private var base: (key: String, session: ChatSession)?
     @ObservationIgnored private var warming: Task<Void, Never>?
+    /// The answer being written, and the conversation writing it.
+    @ObservationIgnored private var generation: Task<Void, Error>?
+    @ObservationIgnored private var generatingIn: ChatSession?
+    @ObservationIgnored private var resignObserver: NSObjectProtocol?
 
     private init() {
         memoryObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.unload() }
+            MainActor.assumeIsolated { self?.memoryWarning() }
+        }
+        // iOS ends an app that sends GPU work once it's in the background, so stop the model as
+        // soon as the app starts to leave the screen (willResignActive comes before that).
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.willResignActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stopGPU() }
+        }
+    }
+
+    /// Cancels the answer, the warm-up and any load in progress, then waits for the GPU to finish
+    /// what it already has (a background task keeps the app awake for that).
+    public func stopGPU() {
+        let sessions = [generatingIn, base?.session].compactMap { $0 }
+        let running = generation != nil || warming != nil || task != nil
+        guard running else { return }
+        generation?.cancel()
+        warming?.cancel()
+        task?.cancel()
+        let bg = UIApplication.shared.beginBackgroundTask(withName: "Stop the local model", expirationHandler: nil)
+        Task { @MainActor in
+            for s in sessions { await s.synchronize() }
+            MLX.Memory.clearCache()
+            if bg != .invalid { UIApplication.shared.endBackgroundTask(bg) }
+        }
+    }
+
+    /// Low on memory: stop first (freeing weights the GPU is still using would crash), then unload.
+    private func memoryWarning() {
+        let sessions = [generatingIn, base?.session].compactMap { $0 }
+        generation?.cancel()
+        warming?.cancel()
+        Task { @MainActor in
+            for s in sessions { await s.synchronize() }
+            self.unload()
         }
     }
 
@@ -199,6 +238,8 @@ public final class LocalModel {
         p.topP = 0.8
         p.topK = 20
         p.presencePenalty = 1.5
+        // Read the prompt in smaller pieces: a lower memory peak on the phone.
+        p.prefill.stepSize = 256
         return p
     }
 
@@ -230,6 +271,36 @@ public final class LocalModel {
             _ = try? await session.respond(to: "Ready?")
             session.generateParameters = Self.parameters
             self.warming = nil
+        }
+    }
+
+    /// Writes the answer to `question`, calling `onText` with the raw text so far. Returns false
+    /// when it stopped early (the app left the screen, or memory ran low); what was written stays.
+    public func answer(_ chat: LocalChat, _ question: String, onText: @escaping @MainActor (String) -> Void) async throws -> Bool {
+        if let w = warming { await w.value }
+        let session = chat.session
+        let t = Task { @MainActor in
+            var raw = ""
+            for try await chunk in session.streamResponse(to: question) {
+                try Task.checkCancellation()
+                raw += chunk
+                onText(raw)
+            }
+        }
+        generation = t
+        generatingIn = session
+        defer {
+            if generatingIn === session { generation = nil; generatingIn = nil }
+        }
+        do {
+            try await t.value
+            return !t.isCancelled
+        } catch is CancellationError {
+            await session.synchronize()
+            return false
+        } catch {
+            if t.isCancelled { await session.synchronize(); return false }
+            throw error
         }
     }
 
