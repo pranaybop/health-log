@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { handleProgressPhoto, isProgressPhotoAction } from "../_shared/progress_photos.ts";
-import { adminClient, corsHeaders, failDelay, resolveCaller, userParam } from "../_shared/auth.ts";
+import { adminClient, failDelay, resolveCaller, userParam } from "../_shared/auth.ts";
 
 const MAX_BODY_BYTES = 32_768;
 const ACTIONS = new Set([
@@ -25,11 +25,10 @@ const ACTIONS = new Set([
   "regimen_end",
 ]);
 
-function json(cors: Record<string, string>, status: number, body: unknown) {
+function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
-      ...cors,
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
     },
@@ -337,54 +336,48 @@ function validate(action: string, payload: Record<string, unknown>) {
 }
 
 Deno.serve(async (req: Request) => {
-  const cors = corsHeaders(req.headers.get("Origin"), "POST, OPTIONS");
-
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: cors });
-  }
-
   if (req.method !== "POST") {
-    return json(cors, 405, { error: "method_not_allowed" });
+    return json(405, { error: "method_not_allowed" });
   }
 
   const admin = adminClient();
-  if (!admin) return json(cors, 500, { error: "server_misconfigured" });
+  if (!admin) return json(500, { error: "server_misconfigured" });
 
   const caller = await resolveCaller(req, admin).catch(() => null);
   if (!caller) {
     await failDelay();
-    return json(cors, 401, { error: "unauthorized" });
+    return json(401, { error: "unauthorized" });
   }
   const user = userParam(caller);
 
   const rawLen = Number(req.headers.get("content-length") ?? "0");
   if (rawLen > MAX_BODY_BYTES) {
-    return json(cors, 413, { ok: false, error: "payload_too_large" });
+    return json(413, { ok: false, error: "payload_too_large" });
   }
 
   let body: unknown;
   try {
     const text = await req.text();
     if (text.length > MAX_BODY_BYTES) {
-      return json(cors, 413, { ok: false, error: "payload_too_large" });
+      return json(413, { ok: false, error: "payload_too_large" });
     }
     body = text ? JSON.parse(text) : {};
   } catch {
-    return json(cors, 400, { ok: false, error: "invalid_json" });
+    return json(400, { ok: false, error: "invalid_json" });
   }
 
   if (!isPlainObject(body)) {
-    return json(cors, 400, { ok: false, error: "invalid_json" });
+    return json(400, { ok: false, error: "invalid_json" });
   }
 
   const action = asString(body.action)?.trim() ?? "";
   if (!ACTIONS.has(action)) {
-    return json(cors, 400, { ok: false, error: "invalid_action", field: "action" });
+    return json(400, { ok: false, error: "invalid_action", field: "action" });
   }
 
   const payload = isPlainObject(body.payload) ? body.payload : {};
   const failed = validate(action, payload);
-  if (failed) return json(cors, 400, failed);
+  if (failed) return json(400, failed);
 
   try {
     // Each action runs as the caller (p_user; null is the owner).
@@ -407,14 +400,14 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await call;
       if (error) {
         console.error("log_write", action, error.message);
-        return json(cors, 500, { ok: false, error: "query_failed" });
+        return json(500, { ok: false, error: "query_failed" });
       }
       result = data ?? { ok: false, error: "empty_result" };
     }
     const ok = !!(result as { ok?: boolean }).ok;
-    return json(cors, ok ? 200 : 400, result);
+    return json(ok ? 200 : 400, result);
   } catch (err) {
     console.error("log-write", err);
-    return json(cors, 500, { ok: false, error: "server_error" });
+    return json(500, { ok: false, error: "server_error" });
   }
 });

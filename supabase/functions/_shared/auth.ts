@@ -23,23 +23,6 @@ const PASSCODE_SHA256 =
 
 export const FAIL_DELAY_MS = 600;
 
-export const ALLOWED_ORIGINS = [
-  "https://pranaybop.github.io",
-  "http://127.0.0.1:4173",
-  "http://localhost:4173",
-];
-
-export function corsHeaders(origin: string | null, methods: string): Record<string, string> {
-  const allow = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    "Access-Control-Allow-Origin": allow,
-    "Access-Control-Allow-Headers": "authorization, x-log-token, x-log-passcode, content-type",
-    "Access-Control-Allow-Methods": methods,
-    "Access-Control-Max-Age": "86400",
-    Vary: "Origin",
-  };
-}
-
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let out = 0;
