@@ -129,8 +129,8 @@ export async function handleProgressPhoto(
   return result;
 }
 
-// Adds progress_photos with a signed url on each row. Leaves the payload alone
-// when the SQL function is not deployed yet, so the rest of the dashboard still loads.
+// Adds progress_photos with a signed url on each row. On error, leaves the payload
+// alone so the rest of the dashboard still loads.
 export async function attachProgressPhotos(admin: Admin, payload: unknown, user: string | null): Promise<void> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
   const body = payload as Record<string, unknown>;
