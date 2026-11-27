@@ -53,19 +53,6 @@ public enum Analytics {
         return total
     }
 
-    /// Level of the compound you're on, as a share of the peak a weekly dose at your latest amount
-    /// settles at. Comparable across dose changes and compounds. nil before the first dose.
-    public static func levelShare(at: Date, dashboard: Dashboard) -> Double? {
-        let taken = dashboard.doses.filter { $0.counts && ($0.takenDate ?? .distantFuture) <= at }
-            .sorted { ($0.takenDate ?? .distantPast) < ($1.takenDate ?? .distantPast) }
-        guard let last = taken.last, let mg = last.doseMg, mg > 0 else { return nil }
-        let comp = (last.compound ?? "").lowercased()
-        let same = taken.filter { ($0.compound ?? "").lowercased() == comp }
-        let h = halfLifeDays(comp, protocols: dashboard.protocols)
-        let peak = mg / (1 - pow(0.5, 7 / h))
-        return remaining(at: at, doses: same, protocols: dashboard.protocols) / peak
-    }
-
     /// How many days before its planned day a dose still counts for that week (a Saturday shot for
     /// a Sunday plan). Each plan week runs from this many days before its day to the same point
     /// before the next one, so every logged dose covers at most one week.
