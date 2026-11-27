@@ -1,6 +1,6 @@
 import Foundation
 
-// Core calculations shared by every screen, ported from ios-app/www/analytics.js (and a few helpers
+// Core calculations shared by every screen, ported from the original web app's analytics.js (and a few helpers
 // from app.js / signals.js). Screen-specific calculations live with their screens. Keep results
 // identical to the web app: tests in LogCoreTests check them against the made-up fixture.
 
@@ -41,6 +41,7 @@ public enum Analytics {
         if let p = protocols.first(where: { ($0.compound ?? "").lowercased() == c }), let h = p.halfLifeHours, h > 0 {
             return h / 24
         }
+        if c == "semaglutide" { return 7 }
         return c == "retatrutide" ? 6 : 5
     }
 
@@ -55,9 +56,27 @@ public enum Analytics {
         return total
     }
 
+    /// Level of the compound you're on, as a share of the peak a weekly dose at your latest amount
+    /// settles at. Comparable across dose changes and compounds. nil before the first dose.
+    public static func levelShare(at: Date, dashboard: Dashboard) -> Double? {
+        let taken = dashboard.doses.filter { $0.counts && ($0.takenDate ?? .distantFuture) <= at }
+            .sorted { ($0.takenDate ?? .distantPast) < ($1.takenDate ?? .distantPast) }
+        guard let last = taken.last, let mg = last.doseMg, mg > 0 else { return nil }
+        let comp = (last.compound ?? "").lowercased()
+        let same = taken.filter { ($0.compound ?? "").lowercased() == comp }
+        let h = halfLifeDays(comp, protocols: dashboard.protocols)
+        let peak = mg / (1 - pow(0.5, 7 / h))
+        return remaining(at: at, doses: same, protocols: dashboard.protocols) / peak
+    }
+
+    /// How many days before its planned day a dose still counts for that week (a Saturday shot for
+    /// a Sunday plan). Each plan week runs from this many days before its day to the same point
+    /// before the next one, so every logged dose covers at most one week.
+    public static let planEarlyDays = 3
+
     /// Planned doses no logged dose has covered yet, earliest first. A dose (taken or skipped)
-    /// covers the plan row for the week it falls in: on or after that planned day and before the
-    /// next one. A missed week stays here until something is logged in it.
+    /// covers the plan row for the week it falls in: from planEarlyDays before that planned day
+    /// to the same point before the next one. A missed week stays here until something is logged in it.
     public static func openPlan(_ d: Dashboard) -> [DosePlanRow] {
         let rows = d.dosePlan
             .filter { !$0.plannedOn.isEmpty && $0.doseMg != nil }
@@ -68,8 +87,9 @@ public enum Analytics {
         }
         var open: [DosePlanRow] = []
         for (i, row) in rows.enumerated() {
-            let end = i + 1 < rows.count ? rows[i + 1].plannedOn : "9999-12-31"
-            if !days.contains(where: { $0 >= row.plannedOn && $0 < end }) { open.append(row) }
+            let start = LogTime.shift(row.plannedOn, -planEarlyDays)
+            let end = i + 1 < rows.count ? LogTime.shift(rows[i + 1].plannedOn, -planEarlyDays) : "9999-12-31"
+            if !days.contains(where: { $0 >= start && $0 < end }) { open.append(row) }
         }
         return open
     }

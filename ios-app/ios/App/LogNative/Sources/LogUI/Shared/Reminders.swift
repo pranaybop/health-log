@@ -3,6 +3,7 @@ import UIKit
 import UserNotifications
 import Observation
 import LogCore
+import LogActivity
 
 // Local notifications only. The app is sideloaded with a free Apple ID, so there is no push,
 // no APNs, and no paid entitlement. Scheduling is decided by ReminderPlanner; this file asks
@@ -15,6 +16,10 @@ enum ReminderRouter {
 
     @MainActor
     static func open(_ route: String) {
+        if route == "progress" {
+            TrendsRouter.open("weight", card: "progress")
+            return
+        }
         pending = route
         switch route {
         case "checkin": TodayTabs.select(0)
@@ -35,6 +40,8 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
     private let lock = NSLock()
     private var token = 0
     private var observing = false
+    /// What was last handed to iOS, so the minute-by-minute refresh doesn't redo identical work.
+    private var applied: String?
 
     private override init() { super.init() }
 
@@ -46,6 +53,10 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
     @MainActor
     public func bind() {
         reschedule(LogStore.shared.dashboard)
+        if let d = LogStore.shared.dashboard, !LogStore.shared.isDemo {
+            HomeWidgets.publish(d)
+            ProgressNotifier.check(d)
+        }
         guard !observing else { return }
         observing = true
         observe()
@@ -53,12 +64,14 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
 
     @MainActor
     public func reschedule(_ dashboard: Dashboard?) {
-        let generation = bump()
         let settings = ReminderSettings.load()
         let now = TodayDebug.now ?? Date()
         let planned = dashboard.map { ReminderPlanner.requests($0, settings: settings, now: now) } ?? []
+        let signature = planned.map { "\($0.id)|\($0.hour):\($0.minute)|\($0.body)" }.joined(separator: "\n")
+        if signature == appliedSignature() { return }
+        let generation = bump()
         Task {
-            await apply(planned, generation: generation)
+            await apply(planned, signature: signature, generation: generation)
         }
     }
 
@@ -100,6 +113,18 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         return generation
     }
 
+    private func appliedSignature() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return applied
+    }
+
+    private func setApplied(_ signature: String?, generation: Int) {
+        lock.lock()
+        if token == generation { applied = signature }
+        lock.unlock()
+    }
+
     private func isCurrent(_ generation: Int) -> Bool {
         lock.lock()
         defer { lock.unlock() }
@@ -114,20 +139,31 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
             Task { @MainActor in
                 guard let self else { return }
                 self.reschedule(LogStore.shared.dashboard)
+                // The hunger Live Activity follows the same data.
+                if let d = LogStore.shared.dashboard, !LogStore.shared.isDemo {
+                    await HungerActivity.sync(d)
+                    // Home and Lock Screen widgets read a snapshot from the shared app group.
+                    HomeWidgets.publish(d)
+                    ProgressNotifier.check(d)
+                }
                 self.observe()
             }
         }
     }
 
-    private func apply(_ planned: [ReminderRequest], generation: Int) async {
+    private func apply(_ planned: [ReminderRequest], signature: String, generation: Int) async {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
         guard isCurrent(generation) else { return }
-        let ours = pending.map(\.identifier).filter { $0 == "log.checkin" || $0 == "log.weigh" || $0.hasPrefix("log.shot.") }
+        // Includes the older repeating "log.checkin" / "log.weigh" ids from before one-per-day reminders.
+        let ours = pending.map(\.identifier).filter { $0.hasPrefix("log.checkin") || $0.hasPrefix("log.weigh") || $0.hasPrefix("log.shot.") }
         center.removePendingNotificationRequests(withIdentifiers: ours)
         let status = await center.notificationSettings().authorizationStatus
         guard isCurrent(generation) else { return }
-        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+        guard status == .authorized || status == .provisional || status == .ephemeral else {
+            setApplied(nil, generation: generation)
+            return
+        }
         let now = Date()
         for req in planned {
             if let day = req.day, let at = ReminderPlanner.fireDate(day, req.hour, req.minute), at <= now { continue }
@@ -150,6 +186,7 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: req.day == nil)
             try? await center.add(UNNotificationRequest(identifier: req.id, content: content, trigger: trigger))
         }
+        setApplied(signature, generation: generation)
     }
 }
 
@@ -228,7 +265,7 @@ struct ReminderSettingsCard: View {
 
     var body: some View {
         LogCard("Reminders") {
-            Caption("Shot day, an evening check-in, and a morning weigh-in. They stay on this phone.")
+            Caption("Shot day, an evening check-in, a morning weigh-in, and progress alerts. They stay on this phone.")
             row("Shot day", "The planned dose, including one you missed",
                 on: model.settings.shot, time: model.settings.shotHour, minute: model.settings.shotMinute,
                 toggle: { await model.setShot($0) }, clock: { model.setShotClock($0) })
@@ -240,6 +277,8 @@ struct ReminderSettingsCard: View {
             row("Morning weigh-in", "Log your weight",
                 on: model.settings.weighIn, time: model.settings.weighHour, minute: model.settings.weighMinute,
                 toggle: { await model.setWeigh($0) }, clock: { model.setWeighClock($0) })
+            MLHairline()
+            ProgressAlertsRow()
             if model.allowed == false {
                 Text("Notifications are off for Log. Turn them on in iOS Settings to use these.")
                     .font(.footnote).foregroundStyle(LogColor.ink2).fixedSize(horizontal: false, vertical: true)
@@ -284,5 +323,23 @@ struct ReminderSettingsCard: View {
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+    }
+}
+
+/// Log › Reminders: milestone alerts and the Sunday recap (ProgressNotifier).
+struct ProgressAlertsRow: View {
+    @State private var on = ProgressNotifier.enabled
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { on }, set: { value in
+            Task { @MainActor in on = await ProgressNotifier.setEnabled(value) }
+        })) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Milestones and weekly recap").foregroundStyle(LogColor.ink)
+                Text("When a weigh-in passes the next 5 lb mark, and Sunday at 6 PM with your trend, pace and goal date")
+                    .font(.footnote).foregroundStyle(LogColor.ink2).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .tint(LogColor.good)
     }
 }

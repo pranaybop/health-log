@@ -82,8 +82,23 @@ public struct TodayScreen: View {
     private func dayBody(_ m: TodayModel) -> some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             TodayHero(m: m).id("hero")
+            if let r = ReadinessCache.day(m.key, in: m.d) {
+                TodayReadiness(day: r, week: ReadinessCache.week(ending: m.key, in: m.d), isToday: m.isToday)
+                    .id("readiness")
+            }
+            if m.isToday {
+                TodayPhotoPrompt(d: m.d, now: m.now).id("photo")
+            }
             TodayFoodCard(m: m, editing: $editTargets, message: $targetsMessage, save: { c, p in await saveTargets(c, p) })
                 .id("food")
+            if m.isToday, let low = UnderEating.check(m.d, now: m.now) {
+                UnderEatingCard(low: low).id("undereating")
+            }
+            if m.isToday {
+                ForEach(Analytics.regimenStatuses(m.d, now: m.now).filter { $0.dueToday && !$0.loggedToday }, id: \.self) { s in
+                    RegimenCard(status: s, compact: true).id("regimen")
+                }
+            }
             if TodayCheckinNudge.shows(m) {
                 TodayCheckinNudge(m: m) { checkinDay = CheckinDay(key: m.key, isToday: m.isToday) }.id("checkin")
             }
@@ -105,10 +120,6 @@ public struct TodayScreen: View {
             Group {
                 TodaySleepCard(m: m).id("sleep")
                 TodayBodyCard(m: m).id("body")
-                if let totals = m.totals {
-                    TodayMacros(totals: totals).id("macros")
-                }
-                TodayMeals(meals: m.meals, past: !m.isToday).id("meals")
                 if m.isToday {
                     updatedLine(m).id("updated")
                 }

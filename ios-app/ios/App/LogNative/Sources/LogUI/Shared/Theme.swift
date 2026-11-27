@@ -1,35 +1,40 @@
 import SwiftUI
 import UIKit
 
-/// Colors from ios-app/www/styles.css, light and dark. Use these, not raw colors, so the native
+/// Colors (first taken from the web app's styles.css), light and dark. Use these, not raw colors, so the native
 /// screens match the rest of the app. Series colors s1-s4 are the chart palette (validated for
 /// color-blind separation); status colors are only for good / watch / bad states, with a label.
 public enum LogColor {
     static func dyn(_ light: UInt32, _ dark: UInt32) -> Color {
         Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light) })
     }
-    public static let bg = dyn(0xF2F2F7, 0x000000)
-    public static let surface = dyn(0xFFFFFF, 0x16181D)
-    public static let surface2 = dyn(0xF2F3F7, 0x22252C)
-    public static let ink = dyn(0x10131A, 0xF2F3F5)
-    public static let ink2 = dyn(0x5D6472, 0x9BA1AC)
-    public static let hairline = dyn(0xE3E5EA, 0x2A2D34)
-    public static let grid = dyn(0xECEEF2, 0x24272D)
-    public static let axis = dyn(0xC6CAD2, 0x3B3F47)
-    public static let accent = dyn(0x1B64BE, 0x2370CD)
-    public static let link = dyn(0x1B64BE, 0x6AABF1)
-    public static let accentSoft = dyn(0xE6EFFB, 0x15253C)
-    public static let s1 = dyn(0x257DE0, 0x338CED)
-    public static let s2 = dyn(0xF47230, 0xE76624)
-    public static let s3 = dyn(0x6A4CE2, 0x9887EF)
-    public static let s4 = dyn(0x00B894, 0x00A888)
-    public static let good = dyn(0x0AAC23, 0x0AAC23)
-    public static let goodInk = dyn(0x006C10, 0x53C556)
-    public static let goodSoft = dyn(0xE3F5E6, 0x10291A)
-    public static let warn = dyn(0xFBB315, 0xFBB315)
-    public static let warnInk = dyn(0x8A5A00, 0xFBB315)
-    public static let warnSoft = dyn(0xFDF1D6, 0x2E2410)
-    public static let crit = dyn(0xDC3C3D, 0xDC3C3D)
+    // Log 2.0: a soft grey-green ground, white cards, near-black ink and one teal accent.
+    public static let bg = dyn(0xF3F5F2, 0x0B0F0D)
+    public static let surface = dyn(0xFFFFFF, 0x171C19)
+    public static let surface2 = dyn(0xF3F5F2, 0x222A26)
+    public static let ink = dyn(0x142019, 0xEEF2EF)
+    public static let ink2 = dyn(0x5B6660, 0x9AA6A0)
+    public static let hairline = dyn(0xE3E7E3, 0x2A322E)
+    public static let grid = dyn(0xEEF1EE, 0x232A26)
+    public static let axis = dyn(0xC9D0CB, 0x3A4440)
+    public static let accent = dyn(0x0F7A68, 0x178A74)
+    public static let link = dyn(0x0F7A68, 0x5BD3B8)
+    public static let accentSoft = dyn(0xDDEFEA, 0x12302A)
+    /// The inverted "next dose" card (near-black in light, raised graphite in dark).
+    public static let hero = dyn(0x142019, 0x222A26)
+    public static let heroInk2 = dyn(0xB9C8C1, 0xA9B7B0)
+    // Chart series (validated for color-blind separation, light and dark).
+    public static let s1 = dyn(0x119A80, 0x2DB596)
+    public static let s2 = dyn(0xD56A1F, 0xE57A30)
+    public static let s3 = dyn(0x2F6FE0, 0x5B8DF0)
+    public static let s4 = dyn(0xB8479A, 0xD062B4)
+    public static let good = dyn(0x1F9A4A, 0x2FB862)
+    public static let goodInk = dyn(0x1F6B3F, 0x5ACB7E)
+    public static let goodSoft = dyn(0xE6F2EC, 0x12291C)
+    public static let warn = dyn(0xE0A21A, 0xE0A21A)
+    public static let warnInk = dyn(0x7A4F00, 0xF0BE4A)
+    public static let warnSoft = dyn(0xFBEFD6, 0x2E2410)
+    public static let crit = dyn(0xD13D3D, 0xD13D3D)
     public static let critInk = dyn(0xB42318, 0xF07167)
     public static let critSoft = dyn(0xFBE5E5, 0x331617)
 }
@@ -55,7 +60,7 @@ extension Font {
         .system(size: size, weight: weight, design: .rounded).monospacedDigit()
     }
     /// Card titles.
-    public static let logCardTitle = Font.system(size: 20, weight: .bold, design: .rounded)
+    public static let logCardTitle = Font.system(size: 20, weight: .bold)
 }
 
 /// Number formatting that matches the web app's fmtNum / signed.

@@ -1,0 +1,108 @@
+# Chooses where iOS jobs run. No runner-list API and no extra token.
+# Trusted: push to main, native/**, or cursor/**; workflow_dispatch; a pull request whose
+# head repository is this one. Those refs use the mac-mini labels.
+# Fork pull requests stay on macos-15. pull_request_target is never trusted.
+# Repository variable IOS_RUNNER=hosted forces macos-15 even for a trusted ref
+# (set it in repo Settings → Secrets and variables → Actions when the mini is off).
+name: Pick runner
+
+on:
+  workflow_call:
+    inputs:
+      event_name:
+        description: github.event_name from the caller
+        type: string
+        required: true
+      ref:
+        description: github.ref from the caller
+        type: string
+        required: true
+      repository:
+        description: github.repository from the caller
+        type: string
+        required: true
+      head_repository:
+        description: pull request head repo, empty unless this is a pull_request
+        type: string
+        default: ""
+      ios_runner:
+        description: Repository variable IOS_RUNNER. hosted forces macos-15.
+        type: string
+        default: ""
+    outputs:
+      runs_on:
+        description: JSON value for runs-on
+        value: ${{ jobs.pick.outputs.runs_on }}
+
+permissions:
+  contents: read
+
+jobs:
+  pick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      runs_on: ${{ steps.choose.outputs.runs_on }}
+    steps:
+      - name: Choose runner
+        id: choose
+        env:
+          PICK_EVENT: ${{ inputs.event_name }}
+          PICK_REF: ${{ inputs.ref }}
+          PICK_REPOSITORY: ${{ inputs.repository }}
+          PICK_HEAD_REPOSITORY: ${{ inputs.head_repository }}
+          IOS_RUNNER: ${{ inputs.ios_runner }}
+        run: |
+          python3 - << 'PY'
+          import os
+
+          HOSTED = '"macos-15"'
+          MINI = '["self-hosted","macOS","ARM64","mac-mini"]'
+          REPO = "pranaybop/health-log"
+
+          def trusted():
+              repository = os.environ.get("PICK_REPOSITORY", "")
+              if repository != REPO:
+                  return False, "workflow is not running in pranaybop/health-log"
+              event = os.environ.get("PICK_EVENT", "")
+              ref = os.environ.get("PICK_REF", "")
+              print("event=%s ref=%s repository=%s head=%s" % (event, ref, repository, os.environ.get("PICK_HEAD_REPOSITORY", "")))
+              if event == "pull_request_target":
+                  return False, "pull_request_target never uses the self-hosted runner"
+              if event == "workflow_dispatch":
+                  return True, "workflow_dispatch"
+              if event == "push":
+                  branch = ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ""
+                  if branch == "main" or branch.startswith("native/") or branch.startswith("cursor/"):
+                      return True, "push to " + (branch or ref)
+                  return False, "push to " + (branch or ref) + " is not a trusted branch"
+              if event == "pull_request":
+                  full = os.environ.get("PICK_HEAD_REPOSITORY", "")
+                  if full == repository:
+                      return True, "pull request from this repository"
+                  return False, "fork pull request stays on macos-15"
+              return False, "event " + (event or "unknown") + " is not trusted"
+
+          ok, why = trusted()
+          switch = os.environ.get("IOS_RUNNER", "")
+          print("IOS_RUNNER=%s" % switch)
+          if not ok:
+              choice = HOSTED
+              reason = "Untrusted: " + why + ". Using macos-15."
+          elif switch == "hosted":
+              choice = HOSTED
+              reason = "Repository variable IOS_RUNNER=hosted. Using macos-15."
+          else:
+              choice = MINI
+              reason = "Trusted (" + why + "). Using the mac-mini."
+          print(reason)
+          print("RUNNER-CHOICE: " + choice)
+          output = os.environ.get("GITHUB_OUTPUT")
+          if output:
+              with open(output, "a") as handle:
+                  handle.write("runs_on=" + choice + "\n")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a") as handle:
+                  handle.write("### Runner\n\n" + reason + "\n\n`" + choice + "`\n")
+          PY

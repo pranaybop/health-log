@@ -1,9 +1,8 @@
 import XCTest
 @testable import LogCore
 
-/// Core calculations against the web app's results on the same made-up fixture (tests/fixture.js,
-/// regenerate with: node -e 'process.stdout.write(JSON.stringify(require("./tests/fixture").makeFixture()))').
-/// Expected numbers came from running ios-app/www's own functions on that fixture.
+/// Core calculations against the original web app's results on the same made-up fixture
+/// (Fixtures/demo.json). Expected numbers came from running the web app's own functions on it.
 final class LogCoreTests: XCTestCase {
     static var dashboard: Dashboard = {
         let url = Bundle.module.url(forResource: "demo", withExtension: "json", subdirectory: "Fixtures")!
@@ -103,6 +102,14 @@ final class LogCoreTests: XCTestCase {
         onPlannedDay.doses.append(exact)
         XCTAssertEqual(Analytics.nextPlanned(onPlannedDay)?.plannedOn, "2026-12-06")
 
+        // A shot a day or two early (Saturday for a Sunday plan) counts for that week.
+        var early = d
+        var sat = early.doses[0]
+        sat.takenAt = "2026-11-28T18:00:00Z"
+        sat.skipped = false
+        early.doses.append(sat)
+        XCTAssertEqual(Analytics.nextPlanned(early)?.plannedOn, "2026-12-06")
+
         // Logging the following Sunday does not erase the week that was missed.
         var onlyNext = d
         var nextWeek = onlyNext.doses[0]
@@ -147,10 +154,21 @@ final class LogCoreTests: XCTestCase {
 
         let daily = ReminderSettings(checkin: true, weighIn: true)
         let habits = ReminderPlanner.requests(open, settings: daily, now: evening)
-        XCTAssertEqual(habits.map(\.id), ["log.checkin", "log.weigh"])
-        XCTAssertEqual(habits.map(\.hour), [18, 8])
-        XCTAssertEqual(habits.map(\.route), ["checkin", "weigh"])
-        XCTAssertTrue(habits.allSatisfy { $0.day == nil })
+        // One reminder per day ahead; tonight's 6 PM check-in time has already passed.
+        let checkins = habits.filter { $0.route == "checkin" }
+        let weighs = habits.filter { $0.route == "weigh" }
+        XCTAssertEqual(checkins.first?.id, "log.checkin.2026-11-25")
+        XCTAssertEqual(checkins.count, ReminderPlanner.habitDays - 1)
+        XCTAssertEqual(weighs.first?.id, "log.weigh.2026-11-25")
+        XCTAssertEqual(Set(checkins.map(\.hour)), [18])
+        XCTAssertEqual(Set(weighs.map(\.hour)), [8])
+        // A day that's already done gets no reminder.
+        let morning = LogTime.parse("2026-11-24T06:00:00-06:00")!
+        let done = try Dashboard.decode(Data(#"{"weights":[{"measured_at":"2026-11-24T05:30:00-06:00","weight_lb":238}]}"#.utf8))
+        let todayWeigh = ReminderPlanner.requests(done, settings: daily, now: morning).filter { $0.route == "weigh" }
+        XCTAssertEqual(todayWeigh.first?.day, "2026-11-25")
+        XCTAssertEqual(ReminderPlanner.requests(open, settings: daily, now: morning).first { $0.route == "weigh" }?.day, "2026-11-24")
+        XCTAssertTrue(habits.allSatisfy { $0.day != nil })
 
         let shot = ReminderSettings(shot: true, shotHour: 9)
         XCTAssertEqual(ReminderPlanner.requests(open, settings: shot, now: evening).map(\.id), [

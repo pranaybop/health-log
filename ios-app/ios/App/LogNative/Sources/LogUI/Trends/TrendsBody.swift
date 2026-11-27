@@ -10,10 +10,93 @@ struct TrBodySectionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
+            if let latest = m.readiness.last { TrReadinessCard(latest: latest, days: m.readiness).id("readiness") }
             if let off = m.off { TrOffNormalCard(o: off, now: m.now).id("off-normal") }
             if !m.heart.isEmpty { TrHeartCard(panels: m.heart, now: m.now).id("heart") }
             if !m.health.isEmpty || canSync { TrMoreHealthCard(groups: m.health, now: m.now).id("more-health") }
             TrMeasurementsCard(series: m.measurements, now: m.now).id("measurements")
+        }
+    }
+}
+
+// MARK: - Readiness
+
+struct TrReadinessCard: View {
+    var latest: Readiness.Day
+    var days: [Readiness.Day]
+
+    func tone(_ score: Double) -> Color {
+        score >= 7 ? LogColor.good : score >= 4 ? LogColor.s1 : LogColor.warn
+    }
+
+    func partValue(_ p: Readiness.Part) -> String {
+        switch p.id {
+        case "sleep": return "\(TrendsCalc.num(p.value, 1)) h"
+        case "load": return p.value < 1 ? "Rest" : TrendsCalc.num(p.value)
+        default: return "\(TrendsCalc.num(p.value)) \(p.unit)"
+        }
+    }
+
+    func partNormal(_ p: Readiness.Part) -> String {
+        switch p.id {
+        case "sleep": return "normal \(TrendsCalc.num(p.normal, 1)) h"
+        case "load": return "normal \(TrendsCalc.num(p.normal))"
+        default: return "normal \(TrendsCalc.num(p.normal)) \(p.unit)"
+        }
+    }
+
+    func context(_ day: Readiness.Day) -> String {
+        var bits: [String] = []
+        if let n = day.daysSinceDose { bits.append(n == 0 ? "Shot day" : "Day \(n) after a shot") }
+        if let k = day.calories { bits.append("\(TrendsCalc.num(k)) kcal logged") }
+        if let w = day.weightTrend { bits.append("weight trend \(TrendsCalc.num(w, 1)) lb") }
+        return bits.joined(separator: " · ")
+    }
+
+    var body: some View {
+        LogCard("Readiness") {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(TrendsCalc.num(latest.score, 1)).font(.logNumber(40)).foregroundStyle(tone(latest.score))
+                Text("/ 10").font(.headline).foregroundStyle(LogColor.ink2)
+                Spacer()
+                TrBadge(latest.band, tone: latest.score < 4 ? .watch : .quiet)
+            }
+            Text(latest.key == LogTime.today() ? "Today" : TrendsCalc.short(latest.key))
+                .font(.subheadline).foregroundStyle(LogColor.ink2)
+            let ctx = context(latest)
+            if !ctx.isEmpty { Caption(ctx) }
+            VStack(spacing: 0) {
+                ForEach(Array(latest.parts.enumerated()), id: \.element.id) { i, p in
+                    if i > 0 { Divider().overlay(LogColor.hairline) }
+                    HStack(spacing: 10) {
+                        Text(p.label).font(.subheadline).foregroundStyle(LogColor.ink)
+                        Spacer(minLength: 6)
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(partValue(p)).font(.logNumber(15)).foregroundStyle(LogColor.ink)
+                            Text(partNormal(p)).font(.caption2).foregroundStyle(LogColor.ink2)
+                        }
+                        TrBadge(abs(p.z) < 0.5 ? "Normal" : (p.z > 0 ? "Better" : "Worse"), tone: p.z <= -1 ? .watch : .quiet)
+                            .frame(minWidth: 70, alignment: .trailing)
+                    }
+                    .padding(.vertical, 8)
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            if days.count >= 3 {
+                TrColumnChart(columns: days.map { TrendsCalc.Column(key: $0.key, value: $0.score) }, color: LogColor.s4,
+                              height: 120, main: "\(TrendsCalc.num(days.map(\.score).reduce(0, +) / Double(days.count), 1)) average",
+                              sub: "Last \(days.count) scored days",
+                              scrub: { c in
+                                  let day = days.first { $0.key == c.key }
+                                  return ("\(TrendsCalc.num(c.value, 1)) / 10", [TrendsCalc.short(c.key), day.map(context) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                              },
+                              aria: "Readiness, last 30 days")
+            }
+            TrDisclosure(title: "Next to food, weight and shots", headers: ["Day", "Score", "kcal", "Trend", "Shot"], rows: days.reversed().map { day in
+                [TrendsCalc.short(day.key), TrendsCalc.num(day.score, 1), TrendsCalc.num(day.calories),
+                 TrendsCalc.num(day.weightTrend, 1), day.daysSinceDose.map { $0 == 0 ? "Shot" : "+\($0)d" } ?? ""]
+            })
+            Caption("Overnight HRV (35%), resting heart rate (30%), sleep (25%) and the last 3 days’ training against the 4 weeks before (10%), each compared with your own last 4 weeks. 5 is a normal day for you. It tracks the same signals as watch readiness scores but won’t match them, and it isn’t medical advice.")
         }
     }
 }
@@ -120,10 +203,10 @@ struct TrHeartCard: View {
 
     func panel(_ p: TrendsCalc.HeartPanel, color: Color) -> some View {
         let unit = p.unit
-        var marks = [TrMark(at: LogTime.tirzStart, label: "Tirzepatide")]
-        if LogTime.retaStart <= now { marks.append(TrMark(at: LogTime.retaStart, label: "Retatrutide")) }
+        var marks = [TrMark(at: LogTime.tirzStart, label: LogTime.journeyName)]
+        if let switchAt = LogTime.switchStart, switchAt <= now { marks.append(TrMark(at: switchAt, label: LogTime.switchName)) }
         let readout: TrScrub = p.recent.map { r in
-            ("\(TrendsCalc.num(r)) \(unit)", "7-day average\(p.base.map { ". Before tirzepatide: \(TrendsCalc.num($0))" } ?? "")")
+            ("\(TrendsCalc.num(r)) \(unit)", "7-day average\(p.base.map { ". Before \(LogTime.journeyName.lowercased()): \(TrendsCalc.num($0))" } ?? "")")
         } ?? ("—", "")
         var tone = TrTone.steady
         if let delta = p.delta, abs(delta) >= 2 { tone = (delta > 0) == p.higherIsBetter ? .good : .watch }

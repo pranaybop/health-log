@@ -18,11 +18,19 @@ public enum NativeScreens {
         return host
     }
 
-    /// The native lock screen, full screen over everything.
+    /// Sign-in, then first-run setup for a new account, full screen over everything.
     @MainActor
     public static func makeLockScreen(store: LogStore = .shared) -> UIViewController {
-        let host = UIHostingController(rootView: LockScreen().environment(store))
+        let host = UIHostingController(rootView: GateView().environment(store).tint(LogColor.link))
         host.modalPresentationStyle = .fullScreen
+        return host
+    }
+
+    /// The Face ID cover shown when coming back to the app (Account > Require Face ID).
+    @MainActor
+    public static func makeAppLock(onUnlock: @escaping () -> Void) -> UIViewController {
+        let host = UIHostingController(rootView: AppLockCover(onUnlock: onUnlock))
+        host.modalPresentationStyle = .overFullScreen
         return host
     }
 }

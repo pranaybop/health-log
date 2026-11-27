@@ -53,11 +53,15 @@ struct TodayFoodCard: View {
                     }
                 }
             } content: {
-                VStack(alignment: .leading, spacing: 18) {
-                    FoodGauge(label: "Calories", color: LogColor.s1, value: cal, target: t.calories, unit: "kcal",
-                              status: Self.status(kind: "calories", value: cal, target: t.calories, unit: "kcal", past: !m.isToday))
-                    FoodGauge(label: "Protein", color: LogColor.s2, value: pro, target: t.protein, unit: "g",
-                              status: Self.status(kind: "protein", value: pro, target: t.protein, unit: "g", past: !m.isToday))
+                HStack(alignment: .center, spacing: 18) {
+                    FoodRing(calories: share(cal, t.calories), protein: share(pro, t.protein))
+                    VStack(alignment: .leading, spacing: 12) {
+                        FoodStat(label: "Calories", color: LogColor.s1, value: cal, target: t.calories, unit: "kcal", big: true,
+                                 status: Self.status(kind: "calories", value: cal, target: t.calories, unit: "kcal", past: !m.isToday))
+                        FoodStat(label: "Protein", color: LogColor.s2, value: pro, target: t.protein, unit: "g", big: false,
+                                 status: Self.status(kind: "protein", value: pro, target: t.protein, unit: "g", past: !m.isToday))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if editing && m.isToday {
                     TargetsEditor(targets: t, save: save, cancel: { editing = false })
@@ -67,12 +71,24 @@ struct TodayFoodCard: View {
                         .foregroundStyle(message.ok ? LogColor.goodInk : LogColor.critInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if m.isToday {
+                    LogMealButton()
+                }
+                TodayMeals(meals: m.meals, past: !m.isToday)
+                if let totals = m.totals {
+                    TodayMacros(totals: totals)
+                }
                 if m.isToday, let target = t.protein {
                     ProteinLine(s: Analytics.proteinStreak(m.d, target: target, now: m.now))
                 }
                 TodayCaption(caption(t))
             }
         }
+    }
+
+    private func share(_ value: Double?, _ target: Double?) -> Double {
+        guard let value, let target, target > 0 else { return 0 }
+        return value / target
     }
 
     private func caption(_ t: TodayTargets) -> String {
@@ -94,6 +110,63 @@ struct TodayFoodCard: View {
             return diff > 0 ? "\(Fmt.num(diff, 0)) \(unit) \(past ? "short" : "to go")" : "Hit, \(Fmt.num(-diff, 0)) \(unit) over"
         }
         return diff >= 0 ? "\(Fmt.num(diff, 0)) \(past ? "under" : "left")" : "\(Fmt.num(-diff, 0)) over"
+    }
+}
+
+/// Calories (outer ring) and protein (inner ring) against today's targets. Past 100% the ring
+/// is full and gets a small gap at the top, like the web gauge's over-target notch.
+private struct FoodRing: View {
+    let calories: Double
+    let protein: Double
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 112
+
+    var body: some View {
+        let side = min(size, 140)
+        ZStack {
+            ring(calories, color: LogColor.s1, inset: 0, width: side * 0.095)
+            ring(protein, color: LogColor.s2, inset: side * 0.14, width: side * 0.08)
+        }
+        .frame(width: side, height: side)
+        .accessibilityHidden(true)
+    }
+
+    private func ring(_ share: Double, color: Color, inset: CGFloat, width: CGFloat) -> some View {
+        ZStack {
+            Circle().stroke(LogColor.surface2, lineWidth: width)
+            Circle()
+                .trim(from: 0, to: max(0.001, min(1, share)) - (share > 1 ? 0.012 : 0))
+                .stroke(color, style: StrokeStyle(lineWidth: width, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .padding(inset + width / 2)
+    }
+}
+
+/// One line of the food card: the colored label, amount / target, and what's left.
+private struct FoodStat: View {
+    let label: String
+    let color: Color
+    let value: Double?
+    let target: Double?
+    let unit: String
+    let big: Bool
+    let status: String
+
+    var body: some View {
+        let hasTarget = (target ?? 0) > 0
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(.footnote.weight(.semibold)).foregroundStyle(color)
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text(value != nil ? Fmt.num(value, 0) : "0").font(.logNumber(big ? 28 : 22, weight: .bold)).foregroundStyle(LogColor.ink)
+                Text(hasTarget ? " / \(Fmt.num(target, 0))" : " \(unit)").font(.logNumber(15, weight: .semibold)).foregroundStyle(LogColor.ink2)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            if !status.isEmpty {
+                Text(status).font(.footnote).foregroundStyle(LogColor.ink2)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

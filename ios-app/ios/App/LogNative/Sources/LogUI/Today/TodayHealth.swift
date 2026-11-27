@@ -137,8 +137,9 @@ struct TodayMacros: View {
     var body: some View {
         let rows: [(String, Double?, Bool)] = [("Protein", totals.proteinG, true), ("Carbs", totals.carbsG, false), ("Fat", totals.fatG, false), ("Fiber", totals.fiberG, false)]
         let top = max(1, rows.map { $0.1 ?? 0 }.max() ?? 1)
-        LogCard("Macros") {
-            VStack(spacing: 12) {
+        VStack(spacing: 10) {
+            Rectangle().fill(LogColor.hairline).frame(height: 1)
+            VStack(spacing: 10) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                     HStack(spacing: 10) {
                         Text(r.0).font(.subheadline).foregroundStyle(LogColor.ink2).frame(width: 64, alignment: .leading)
@@ -155,54 +156,42 @@ struct TodayMacros: View {
     }
 }
 
-/// The day's meals (web renderMeals). Today can open the Log bot in Grok Bot to record one.
-struct TodayMeals: View {
-    let meals: [Meal]
-    let past: Bool
-
+/// "Log a meal". Sits in the Food today card, right under today's calories. For the original log
+/// it opens Log in Grok Bot (unless Account says otherwise); everyone else describes the meal in
+/// the app. openURL calls UIApplication.open and says whether it was accepted, so this doesn't use
+/// canOpenURL and doesn't need LSApplicationQueriesSchemes.
+struct LogMealButton: View {
     @Environment(\.openURL) private var openURL
+    @Environment(LogStore.self) private var store
     @State private var unavailable = false
+    @State private var showSheet = false
 
     var body: some View {
-        LogCard("Meals") {
-            VStack(alignment: .leading, spacing: 12) {
-                if meals.isEmpty {
-                    EmptyNote(past ? "No meals logged this day." : "No meals yet today.")
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(meals.enumerated()), id: \.offset) { i, meal in
-                            if i > 0 { Rectangle().fill(LogColor.hairline).frame(height: 1) }
-                            row(meal)
-                        }
-                    }
-                }
-                if !past {
-                    logButton
-                    if unavailable {
-                        Text(LogBot.unavailableMessage)
-                            .font(.footnote)
-                            .foregroundStyle(LogColor.ink2)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: logMeal) {
+                Label("Log a meal", systemImage: "fork.knife")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .tint(LogColor.accent)
+            .accessibilityHint(store.mealLoggingInApp ? "Describe a meal to log it" : "Opens Log in Grok Bot")
+            .sheet(isPresented: $showSheet) { MealSheet().environment(store) }
+            if unavailable {
+                Text(LogBot.unavailableMessage)
+                    .font(.footnote)
+                    .foregroundStyle(LogColor.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button("Log it here instead") { showSheet = true }.font(.footnote.weight(.semibold))
             }
         }
     }
 
-    /// Opens Log in Grok Bot. openURL calls UIApplication.open and says whether it was accepted,
-    /// so this doesn't use canOpenURL and doesn't need LSApplicationQueriesSchemes.
-    private var logButton: some View {
-        Button(action: openLogBot) {
-            Text("Log a meal")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 4)
-        }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .tint(LogColor.accent)
-        .accessibilityHint("Opens Log in Grok Bot")
+    private func logMeal() {
+        if store.mealLoggingInApp { showSheet = true } else { openLogBot() }
     }
 
     private func openLogBot() {
@@ -214,6 +203,27 @@ struct TodayMeals: View {
         openURL(url) { accepted in
             guard !accepted else { return }
             Task { @MainActor in unavailable = true }
+        }
+    }
+}
+
+/// The day's meals (web renderMeals), listed inside the Food card right under "Log a meal".
+struct TodayMeals: View {
+    let meals: [Meal]
+    let past: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Rectangle().fill(LogColor.hairline).frame(height: 1)
+            if meals.isEmpty {
+                EmptyNote(past ? "No meals logged this day." : "No meals yet today.")
+                    .padding(.top, 12)
+            } else {
+                ForEach(Array(meals.enumerated()), id: \.offset) { i, meal in
+                    if i > 0 { Rectangle().fill(LogColor.hairline).frame(height: 1) }
+                    row(meal)
+                }
+            }
         }
     }
 

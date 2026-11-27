@@ -1,6 +1,6 @@
 import Foundation
 
-// Meds-tab calculations, ported from ios-app/www: plannedDoses, levelPoints, siteRotation,
+// Meds-tab calculations, ported from the original web app (removed Nov 2026): plannedDoses, levelPoints, siteRotation,
 // vialRunway, titrationHistory (analytics.js), planRows, planSteps (signals.js),
 // firstRetaDose, compoundRunway (focus.js) and siteLabel (app.js). retaSwitchAt is the
 // shared Analytics function. Results match the web app on the same data; MedsTests

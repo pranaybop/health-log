@@ -1,4 +1,6 @@
-# Checks the iPhone app on GitHub's Mac runners, on made-up data only (tests/fixture.js):
+# Checks the iPhone app on a Mac runner, on made-up data only (ios-app/ios/screenshots/demo.json).
+# runs_on is a JSON string (default "macos-15"). Callers pass the mac-mini labels for a
+# trusted ref unless repository variable IOS_RUNNER is hosted; see pick-runner.yml.
 #   1. the LogNative package's own tests (ios-app/ios/App/LogNative, in an iOS simulator)
 #   2. a debug build of the whole app for the simulator
 #   3. screenshots: the app opens on each tab with -demo <tab>, from every list in
@@ -17,40 +19,77 @@ on:
       soft:
         type: boolean
         default: false
+      # JSON text, not a YAML list. "macos-15" or ["self-hosted","macOS","ARM64","mac-mini"].
+      runs_on:
+        type: string
+        default: '"macos-15"'
+      # "all": every list in ios-app/ios/screenshots (about 75 shots, ~20 min).
+      # "quick": only base.txt (one shot per tab), for routine .ipa builds.
+      shots:
+        type: string
+        default: all
 
 permissions:
   contents: read
 
 jobs:
   simulator:
-    runs-on: macos-15
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    # Applies on the mini and on macos-15, so a stuck simulator job cannot run forever.
     timeout-minutes: 50
+    # No concurrency group: the mini is one runner, so it already runs one job at a time,
+    # and a group would cancel a waiting build whenever another job queued behind it.
     steps:
       - uses: actions/checkout@v4
 
       - name: Pick Xcode
         run: |
-          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
-          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
-          xcodebuild -version
+          echo "RUNNER_NAME=$RUNNER_NAME RUNNER_ENVIRONMENT=$RUNNER_ENVIRONMENT"
+          # The mini already has Xcode 27.2 selected. sudo xcode-select is the hosted path.
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            xcodebuild -version
+          else
+            X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+            if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+            xcodebuild -version
+          fi
+
+      # MLX (the on-device model in Ask) compiles Metal shaders; Xcode 26+ ships the Metal
+      # toolchain as a separate download. It stays installed on the Mac mini after the first run.
+      - name: Metal toolchain
+        run: |
+          xcrun -f metal >/dev/null 2>&1 && xcrun metal -v >/dev/null 2>&1 && { echo "Metal toolchain present"; exit 0; }
+          xcodebuild -downloadComponent MetalToolchain
 
       - name: Pick a simulator
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
           import json, re, sys
+          data = json.load(sys.stdin)["devices"]
+          # Plain iOS-N-M runtimes only when any exist, so iOS-27-2-iPhone19-4 (iPhone Duo)
+          # cannot outrank iPhone 18 Pro on the real iOS 27.2 runtime.
+          exact = [(rt, devs) for rt, devs in data.items() if re.search(r"iOS-\d+-\d+$", rt)]
+          pool = exact or list(data.items())
           best = None
-          for rt, devs in json.load(sys.stdin)["devices"].items():
+          for rt, devs in pool:
+              if "Duo" in rt or "iPhone19" in rt:
+                  continue
               m = re.search(r"iOS-(\d+)-(\d+)", rt)
               if not m:
                   continue
               ver = (int(m.group(1)), int(m.group(2)))
               for d in devs:
                   n = d["name"]
+                  if "Duo" in n:
+                      continue
                   if not n.startswith("iPhone") or "Max" in n or "Plus" in n or "SE" in n:
                       continue
-                  score = (ver, "Pro" in n)
+                  model = re.search(r"iPhone\s*(\d+)", n)
+                  score = (ver, "Pro" in n, int(model.group(1)) if model else 0)
                   if best is None or score > best[0]:
                       best = (score, d["udid"], n, rt)
+          if best is None:
+              sys.exit("no matching iPhone simulator")
           print(best[1])
           print("Simulator:", best[2], best[3], file=sys.stderr)
           ')
@@ -73,10 +112,10 @@ jobs:
           grep -E "error:|Test Case .* (passed|failed)|XCTAssert|Executed|\*\* TEST" "$RUNNER_TEMP/pkg.log" | sort -u | tail -300 || true
           exit $rc
 
-      - name: Bundle the app files and the demo data
+      # Debug builds with -demo read made-up data from public/demo.json (ios/screenshots/demo.json).
+      - name: Demo data
         run: |
-          sh ios-app/sync-web.sh
-          node -e 'process.stdout.write(JSON.stringify(require("./tests/fixture").makeFixture()))' > ios-app/ios/App/App/public/demo.json
+          cp ios-app/ios/screenshots/demo.json ios-app/ios/App/App/public/demo.json
           ls -la ios-app/ios/App/App/public/demo.json
 
       - name: Build for the simulator (Debug)
@@ -123,7 +162,10 @@ jobs:
           }
           # Warm up once: the first launch on a fresh simulator is slow.
           xcrun simctl launch "$UDID" com.pranaybop.log -demo today >/dev/null < /dev/null; sleep 25; xcrun simctl terminate "$UDID" com.pranaybop.log || true
-          for f in ios-app/ios/screenshots/*.txt; do
+          LISTS="ios-app/ios/screenshots/*.txt"
+          if [ "${{ inputs.shots }}" = "quick" ]; then LISTS="ios-app/ios/screenshots/base.txt"; fi
+          # shellcheck disable=SC2086
+          for f in $LISTS; do
             while read -r name tab look rest <&3; do
               case "$name" in ""|\#*) continue ;; esac
               # shellcheck disable=SC2086
@@ -138,7 +180,17 @@ jobs:
         run: |
           P="${{ steps.package.outcome }}"; B="${{ steps.build.outcome }}"; S="${{ steps.shots.outcome }}"
           echo "package tests: $P, build: $B, screenshots: $S"
+          echo "Runner: $RUNNER_NAME ($RUNNER_ENVIRONMENT)"
           if [ "$P" = success ] && [ "$B" = success ] && [ "$S" = success ]; then R=PASS; else R=FAIL; fi
           echo "NATIVE-CHECK: $R"
           echo "### NATIVE-CHECK: $R (package tests $P, build $B, screenshots $S)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Runner: $RUNNER_NAME ($RUNNER_ENVIRONMENT)" >> "$GITHUB_STEP_SUMMARY"
           if [ "$R" = FAIL ] && [ "$SOFT" != "true" ]; then exit 1; fi
+
+      - name: Clean up the self-hosted runner
+        if: always() && runner.environment == 'self-hosted'
+        run: |
+          xcrun simctl shutdown booted || true
+          if [ -n "$RUNNER_TEMP" ]; then
+            rm -rf "$RUNNER_TEMP/pkg" "$RUNNER_TEMP/sim" "$RUNNER_TEMP/dd" "$RUNNER_TEMP/ipa"
+          fi

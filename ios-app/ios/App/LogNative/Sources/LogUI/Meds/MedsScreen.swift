@@ -12,7 +12,11 @@ public struct MedsScreen: View {
         ScrollViewReader { proxy in
             ScreenScaffold("Meds") {
                 if let d = store.dashboard {
+                    if MLNextDoseHero.shows(d) { MLNextDoseHero(data: d).id("next") }
                     MLLevelCard(data: d).id("level")
+                    ForEach(RegimenCard.grouped(Analytics.regimenStatuses(d)), id: \.0) { g in
+                        RegimenCard(status: g.0, later: g.1).id("regimen-\(g.0.regimen.compound ?? "")")
+                    }
                     MLSitesCard(data: d).id("sites")
                     if MLDosePlanCard.shows(d) { MLDosePlanCard(data: d).id("plan") }
                     MLTitrationCard(data: d).id("titration")

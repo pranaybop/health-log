@@ -1,4 +1,4 @@
-# Native Today tab. -now pins the clock to the made-up data's day (tests/fixture.js, Nov 24 2026, 11:20 PM CT).
+# Native Today tab. -now pins the clock to the made-up data's day (screenshots/demo.json, Nov 24 2026, 11:20 PM CT).
 today-fix-light today light -now 2026-11-24T23:20:00-06:00
 today-fix-dark today dark -now 2026-11-24T23:20:00-06:00
 today-feel today light -now 2026-11-24T23:20:00-06:00 -scrollTo checkin
@@ -6,8 +6,7 @@ today-verdict-dark today dark -now 2026-11-24T23:20:00-06:00 -scrollTo verdict
 today-meds today light -now 2026-11-24T23:20:00-06:00 -scrollTo meds
 today-dose-overdue today light -now 2026-11-30T09:00:00-06:00 -scrollTo meds
 today-sleep-dark today dark -now 2026-11-24T23:20:00-06:00 -scrollTo sleep
-today-macros today light -now 2026-11-24T23:20:00-06:00 -scrollTo macros
-today-meals today light -now 2026-11-24T23:20:00-06:00 -scrollTo meals
+today-food today light -now 2026-11-24T23:20:00-06:00 -scrollTo food
 today-targets today light -now 2026-11-24T23:20:00-06:00 -todayOpen targets -scrollTo food
 today-effect today light -now 2026-11-24T23:20:00-06:00 -todayOpen effect -scrollTo feel
 today-month today light -now 2026-11-24T23:20:00-06:00 -todayOpen month
@@ -15,3 +14,4 @@ today-checkin today dark -now 2026-11-24T23:20:00-06:00 -todayOpen checkin
 today-past today light -now 2026-11-24T23:20:00-06:00 -dayOffset -1
 today-past-lower today light -now 2026-11-24T23:20:00-06:00 -dayOffset -1 -scrollTo meds
 today-old-dark today dark -now 2026-11-24T23:20:00-06:00 -dayOffset -30
+today-photo today light -now 2026-11-24T23:20:00-06:00 -scrollTo photo

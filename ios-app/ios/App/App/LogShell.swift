@@ -38,8 +38,8 @@ final class ShellTabBarController: UITabBarController {
         setViewControllers(hosts, animated: false)
         tabBar.tintColor = UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.42, green: 0.67, blue: 0.95, alpha: 1)
-                : UIColor(red: 0.11, green: 0.39, blue: 0.75, alpha: 1)
+                ? UIColor(red: 0.36, green: 0.83, blue: 0.72, alpha: 1)
+                : UIColor(red: 0.06, green: 0.48, blue: 0.41, alpha: 1)
         }
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
@@ -49,6 +49,7 @@ final class ShellTabBarController: UITabBarController {
 
         store.healthSync = { days in _ = await NativeHealthSync.shared.sync(days: days) }
         store.onLockChange = { [weak self] locked in self?.nativeLockChanged(locked) }
+        store.onDataChange = { [weak self] in self?.gateChanged() }
         ReminderScheduler.shared.bind()
 
         var start = 0
@@ -66,10 +67,26 @@ final class ShellTabBarController: UITabBarController {
     }
 
     private var refreshTimer: Timer?
+    private var leftAt: Date?
+    private weak var appLock: UIViewController?
 
     @objc private func appWillEnterForeground() {
         Task { await store.refresh(syncHealth: true) }
         ReminderScheduler.shared.reschedule(store.dashboard)
+        // Face ID after a minute away (Account > Require Face ID).
+        if AppLock.enabled, !store.isLocked, !store.isDemo, let left = leftAt, Date().timeIntervalSince(left) > 60 {
+            presentAppLock()
+        }
+    }
+
+    private func presentAppLock() {
+        guard appLock == nil else { return }
+        let cover = NativeScreens.makeAppLock { [weak self] in
+            self?.appLock?.dismiss(animated: true)
+            self?.appLock = nil
+        }
+        appLock = cover
+        (presentedViewController ?? self).present(cover, animated: false)
     }
 
     @objc private func appDidBecomeActive() {
@@ -82,11 +99,17 @@ final class ShellTabBarController: UITabBarController {
     @objc private func appWillResignActive() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+        leftAt = Date()
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        if store.isLocked { presentLock() }
+        if store.isLocked || store.needsOnboarding { presentLock() }
+    }
+
+    /// New data: a new account shows first-run setup until it's done.
+    private func gateChanged() {
+        if store.isLocked || store.needsOnboarding { presentLock() } else { dismissLock() }
     }
 
     private func nativeLockChanged(_ locked: Bool) {
@@ -106,7 +129,7 @@ final class ShellTabBarController: UITabBarController {
     }
 
     private func dismissLock() {
-        guard let lock = lockScreen else { return }
+        guard let lock = lockScreen, !store.needsOnboarding, !store.isLocked else { return }
         lock.dismiss(animated: true)
         lockScreen = nil
     }

@@ -1,5 +1,5 @@
-# Builds the Log iPhone app on GitHub's Mac runners and saves an unsigned .ipa, named with its
-# version and build number (Log-1.1-12.ipa). The app's files are bundled from ios-app/www.
+# Builds the Log iPhone app on a Mac runner and saves an unsigned .ipa, named with its
+# version and build number (Log-1.1-12.ipa). The app is all native Swift (ios-app/ios/App).
 # Install it with Sideloadly or AltStore, which sign it with your Apple ID.
 # No secrets or certificates are used or needed here.
 name: iPhone app (.ipa)
@@ -7,7 +7,7 @@ name: iPhone app (.ipa)
 on:
   workflow_dispatch:
   push:
-    branches: [main, "cursor/**"]
+    branches: [main, "cursor/**", "native/**"]
     paths:
       - "ios-app/**"
       - ".github/workflows/ios-ipa.yml"
@@ -16,23 +16,46 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    uses: ./.github/workflows/tests.yml
+  pick-runner:
+    name: Pick runner
+    uses: ./.github/workflows/pick-runner.yml
+    with:
+      event_name: ${{ github.event_name }}
+      ref: ${{ github.ref }}
+      repository: ${{ github.repository }}
+      head_repository: ${{ github.event.pull_request.head.repo.full_name || '' }}
+      ios_runner: ${{ vars.IOS_RUNNER }}
 
   build:
-    needs: test
-    runs-on: macos-15
+    needs: [pick-runner]
+    runs-on: ${{ fromJSON(needs.pick-runner.outputs.runs_on) }}
+    # Applies on the mini and on macos-15, so a stuck device build cannot run forever.
     timeout-minutes: 30
+    # No concurrency group: the mini is one runner, so it already runs one job at a time,
+    # and a group would cancel a waiting build whenever another job queued behind it.
     steps:
       - uses: actions/checkout@v4
 
-      # Liquid Glass needs the iOS 26 SDK: use the newest Xcode 26 on the runner if it has one.
+      # Liquid Glass needs the iOS 26 SDK: use the newest Xcode 26 on GitHub-hosted runners.
+      # The mini already has Xcode 27.2 selected, so skip sudo xcode-select there.
       - name: Pick Xcode
         run: |
+          echo "RUNNER_NAME=$RUNNER_NAME RUNNER_ENVIRONMENT=$RUNNER_ENVIRONMENT"
           ls -d /Applications/Xcode*.app || true
-          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
-          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
-          xcodebuild -version
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            xcodebuild -version
+          else
+            X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -vi beta | sort -V | tail -1)
+            if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+            xcodebuild -version
+          fi
+
+      # MLX (the on-device model in Ask) compiles Metal shaders; Xcode 26+ ships the Metal
+      # toolchain as a separate download. It stays installed on the Mac mini after the first run.
+      - name: Metal toolchain
+        run: |
+          xcrun -f metal >/dev/null 2>&1 && xcrun metal -v >/dev/null 2>&1 && { echo "Metal toolchain present"; exit 0; }
+          xcodebuild -downloadComponent MetalToolchain
 
       # Version: ios-app/VERSION (bump it for a release you want to tell apart), build: this
       # workflow's run number, which goes up by one every build.
@@ -40,16 +63,6 @@ jobs:
         run: |
           echo "APP_VERSION=$(tr -d '[:space:]' < ios-app/VERSION)" >> "$GITHUB_ENV"
           echo "APP_BUILD=${{ github.run_number }}" >> "$GITHUB_ENV"
-
-      # The app runs from files inside the .ipa (ios-app/www), not from the website.
-      - name: Bundle the app files
-        run: |
-          sh ios-app/sync-web.sh
-          SHA=$(git rev-parse --short HEAD)
-          BUILT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          printf 'window.LOG_VERSION = { version: "%s", build: %s, commit: "%s", built: "%s" };\n' "$APP_VERSION" "$APP_BUILD" "$SHA" "$BUILT" > ios-app/ios/App/App/public/version.js
-          cat ios-app/ios/App/App/public/version.js
-          test -f ios-app/ios/App/App/public/app.js
 
       - name: Build (Release, device, unsigned)
         working-directory: ios-app/ios/App
@@ -74,14 +87,19 @@ jobs:
           test -d "$APP"
           /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Info.plist"
           /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP/Info.plist"
-          test -f "$APP/public/app.js"
           IPA="Log-$APP_VERSION-$APP_BUILD.ipa"
           echo "IPA=$IPA" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
           # Carry the HealthKit entitlement in the binary so the signing tool asks for it.
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ] && [ -x /opt/homebrew/bin/brew ]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+          fi
           if brew install ldid >/dev/null 2>&1; then
             ldid -S"ios-app/ios/App/App/App.entitlements" "$RUNNER_TEMP/ipa/Payload/App.app/App" && echo "entitlements embedded"
+            # The widget extension shares the app group (the widgets read a snapshot the app writes).
+            W="$RUNNER_TEMP/ipa/Payload/App.app/PlugIns/LogWidgets.appex/LogWidgets"
+            if [ -f "$W" ]; then ldid -S"ios-app/ios/App/LogWidgets/LogWidgets.entitlements" "$W" && echo "widget entitlements embedded"; fi
           else
             echo "ldid unavailable; entitlements not embedded"
           fi
@@ -95,7 +113,19 @@ jobs:
           path: ${{ env.IPA }}
           retention-days: 30
 
+      - name: Clean up the self-hosted runner
+        if: always() && runner.environment == 'self-hosted'
+        run: |
+          xcrun simctl shutdown booted || true
+          if [ -n "$RUNNER_TEMP" ]; then
+            rm -rf "$RUNNER_TEMP/pkg" "$RUNNER_TEMP/sim" "$RUNNER_TEMP/dd" "$RUNNER_TEMP/ipa"
+          fi
+
   # A debug copy in the iPhone simulator on made-up data: package tests, tabs, screenshots.
   simulator:
-    needs: test
+    needs: [pick-runner]
     uses: ./.github/workflows/ios-check.yml
+    with:
+      runs_on: ${{ needs.pick-runner.outputs.runs_on }}
+      # Every screenshot list when started by hand (Run workflow); one shot per tab on pushes.
+      shots: ${{ github.event_name == 'workflow_dispatch' && 'all' || 'quick' }}

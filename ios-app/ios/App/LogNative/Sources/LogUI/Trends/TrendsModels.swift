@@ -26,7 +26,7 @@ struct TrSection: Identifiable, Hashable {
     var id: String
     var label: String
     static let all = [
-        TrSection(id: "summary", label: "Summary"), TrSection(id: "weight", label: "Weight"), TrSection(id: "food", label: "Food"),
+        TrSection(id: "summary", label: "Summary"), TrSection(id: "ask", label: "Ask"), TrSection(id: "weight", label: "Weight"), TrSection(id: "food", label: "Food"),
         TrSection(id: "meds", label: "Meds"), TrSection(id: "body", label: "Body"), TrSection(id: "training", label: "Training"),
         TrSection(id: "more", label: "More"),
     ]
@@ -51,6 +51,9 @@ struct TrWeightModel {
     var reta: Date
     var overlays: [String: [String: Double]]
     var recent: [[String]]
+    var progress: WeightProgress.Summary?
+    /// First weigh-in after a long gap, when Apple Health brought in years-old history.
+    var recentStart: Date?
 
     init(_ d: Dashboard, now: Date) {
         self.now = now
@@ -67,6 +70,8 @@ struct TrWeightModel {
         var ov: [String: [String: Double]] = [:]
         for o in TrOverlay.all where o.id != "none" { ov[o.id] = TrendsCalc.overlayDaily(d, o.id, now: now) }
         overlays = ov
+        recentStart = WeightProgress.recentStart(sm)
+        progress = WeightProgress.make(sm, startLb: d.profile?.startWeightLb, goalLb: d.profile?.goalWeightLb, since: glp1, now: now)
         recent = sm.reversed().prefix(30).map { w in
             ["\(LogTime.weekdayDate(w.at)), \(LogTime.calendar.component(.year, from: w.at))", TrendsCalc.num(w.lb, 1), TrendsCalc.num(w.trend, 1)]
         }
@@ -286,6 +291,7 @@ struct TrHealthGroup: Identifiable {
 }
 
 struct TrBodyModel {
+    var readiness: [Readiness.Day]
     var off: TrendsCalc.OffTrends?
     var heart: [TrendsCalc.HeartPanel]
     var health: [TrHealthGroup]
@@ -294,6 +300,7 @@ struct TrBodyModel {
 
     init(_ d: Dashboard, now: Date) {
         self.now = now
+        readiness = Readiness.history(d, now: now)
         off = TrendsCalc.offNormalTrends(d, now: now)
         heart = TrendsCalc.heart(d, now: now)
         measurements = TrendsCalc.measurements(d)

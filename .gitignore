@@ -7,6 +7,3 @@
 ACCESS-LINK*
 ACCESS-LINK.txt
 node_modules/
-test-features.html
-tests/shots/
-tests/fixture.json

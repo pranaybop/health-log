@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CAPACITOR_DEBUG</key>
-	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -22,6 +20,17 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.pranaybop.log.widgets</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pranaybop-log</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -51,6 +60,10 @@
 	<array>
 		<string>fetch</string>
 	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Log uses Face ID to keep your log private when you come back to the app.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Log reads your steps, sleep, resting heart rate, HRV, weigh-ins, body fat and workouts from Apple Health to show them on your dashboard.</string>
 	<key>NSHealthUpdateUsageDescription</key>

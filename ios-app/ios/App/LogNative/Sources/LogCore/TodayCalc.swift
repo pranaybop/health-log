@@ -1,6 +1,6 @@
 import Foundation
 
-// Calculations behind the Today tab, ported from ios-app/www (analytics.js, focus.js, signals.js,
+// Calculations behind the Today tab, ported from the original web app (removed Nov 2026) (analytics.js, focus.js, signals.js,
 // insights.js and app.js). Numbers only: the wording lives with the Today screen in LogUI.
 // TodayTests checks them against the web functions run on the made-up fixture.
 
