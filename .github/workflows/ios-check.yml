@@ -4,7 +4,10 @@
 #   1. the LogNative package's own tests (ios-app/ios/App/LogNative, in an iOS simulator)
 #   2. a debug build of the whole app for the simulator. That build copies
 #      ios/screenshots/demo.json into the app bundle (Release builds leave it out).
-#   3. screenshots: the app opens on each tab with -demo <tab>, from every list in
+#   3. XCUI tests (AppUITests) on that Debug build, launched with -demo so they read the
+#      bundled demo.json. They run on the quick path and on the full path; the step's
+#      own elapsed time is the cost on top of the screenshot job.
+#   4. screenshots: the app opens on each tab with -demo <tab>, from every list in
 #      ios-app/ios/screenshots/*.txt (one line each: name tab light|dark [more launch arguments]).
 #      They're printed into the log as base64 JPEG lines (IMGDATA <name> ...), so they can be read
 #      without downloading artifacts.
@@ -133,8 +136,9 @@ jobs:
         working-directory: ios-app/ios/App
         run: |
           rc=0
+          # Same simulator the UI tests and screenshots use, so this build is reused.
           xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/sim" \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$RUNNER_TEMP/sim" \
             CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/build.log" 2>&1 || rc=$?
           grep -E "error:|\*\* BUILD" "$RUNNER_TEMP/build.log" | sort -u | tail -200 || true
           # -demo reads this file from the bundle. The Debug build copies it in; a missing file
@@ -146,6 +150,22 @@ jobs:
               exit 1
             fi
           fi
+          exit $rc
+
+      - name: UI tests (demo data)
+        id: uitests
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        working-directory: ios-app/ios/App
+        run: |
+          rc=0
+          xcodebuild test -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator \
+            -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$RUNNER_TEMP/sim" \
+            -only-testing:AppUITests -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/uitest.log" 2>&1 || rc=$?
+          grep -E "error:|Test Case .* (passed|failed)|XCTAssert|Executed|\*\* TEST" "$RUNNER_TEMP/uitest.log" | sort -u | tail -300 || true
+          echo "UI-TESTS-SECONDS=$SECONDS"
+          echo "### UI tests: ${SECONDS}s" >> "$GITHUB_STEP_SUMMARY"
           exit $rc
 
       - name: Run it and take screenshots
@@ -196,12 +216,12 @@ jobs:
         env:
           SOFT: ${{ inputs.soft }}
         run: |
-          P="${{ steps.package.outcome }}"; B="${{ steps.build.outcome }}"; S="${{ steps.shots.outcome }}"
-          echo "package tests: $P, build: $B, screenshots: $S"
+          P="${{ steps.package.outcome }}"; B="${{ steps.build.outcome }}"; U="${{ steps.uitests.outcome }}"; S="${{ steps.shots.outcome }}"
+          echo "package tests: $P, build: $B, ui tests: $U, screenshots: $S"
           echo "Runner: $RUNNER_NAME ($RUNNER_ENVIRONMENT)"
-          if [ "$P" = success ] && [ "$B" = success ] && [ "$S" = success ]; then R=PASS; else R=FAIL; fi
+          if [ "$P" = success ] && [ "$B" = success ] && [ "$U" = success ] && [ "$S" = success ]; then R=PASS; else R=FAIL; fi
           echo "NATIVE-CHECK: $R"
-          echo "### NATIVE-CHECK: $R (package tests $P, build $B, screenshots $S)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### NATIVE-CHECK: $R (package tests $P, build $B, ui tests $U, screenshots $S)" >> "$GITHUB_STEP_SUMMARY"
           echo "Runner: $RUNNER_NAME ($RUNNER_ENVIRONMENT)" >> "$GITHUB_STEP_SUMMARY"
           if [ "$R" = FAIL ] && [ "$SOFT" != "true" ]; then exit 1; fi
 

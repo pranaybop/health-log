@@ -29,6 +29,13 @@ public final class HealthSyncStatus {
     static let lastKey = "log.native.healthSync"
     static let backfillKey = "log.native.healthBackfill"
 
+    /// Drop the saved sync and backfill cursor. UI tests call this before the panel is created.
+    public static func resetSaved() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: lastKey)
+        defaults.removeObject(forKey: backfillKey)
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         let decoder = JSONDecoder()

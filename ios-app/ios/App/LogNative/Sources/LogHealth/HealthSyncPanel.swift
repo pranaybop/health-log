@@ -47,6 +47,7 @@ struct HealthSyncFullPanel: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(status.isSyncing || blocked != nil)
+            .accessibilityIdentifier("health.sync")
 
             Button {
                 let restart = status.backfill.done
@@ -58,12 +59,14 @@ struct HealthSyncFullPanel: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
             .disabled(status.backfill.running || blocked != nil)
+            .accessibilityIdentifier("health.backfill")
 
             Text(blocked ?? status.statusLine)
                 .font(.footnote)
                 .monospacedDigit()
                 .foregroundStyle(status.isError && blocked == nil ? HealthPanelStyle.errorInk : Color.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("health.status")
 
             let line = blocked == nil ? status.backfillLine : ""
             if !line.isEmpty {
