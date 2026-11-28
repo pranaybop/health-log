@@ -2,7 +2,8 @@
 # runs_on is a JSON string (default "macos-15"). Callers pass the mac-mini labels for a
 # trusted ref unless repository variable IOS_RUNNER is hosted; see pick-runner.yml.
 #   1. the LogNative package's own tests (ios-app/ios/App/LogNative, in an iOS simulator)
-#   2. a debug build of the whole app for the simulator
+#   2. a debug build of the whole app for the simulator. That build copies
+#      ios/screenshots/demo.json into the app bundle (Release builds leave it out).
 #   3. screenshots: the app opens on each tab with -demo <tab>, from every list in
 #      ios-app/ios/screenshots/*.txt (one line each: name tab light|dark [more launch arguments]).
 #      They're printed into the log as base64 JPEG lines (IMGDATA <name> ...), so they can be read
@@ -112,12 +113,6 @@ jobs:
           grep -E "error:|Test Case .* (passed|failed)|XCTAssert|Executed|\*\* TEST" "$RUNNER_TEMP/pkg.log" | sort -u | tail -300 || true
           exit $rc
 
-      # Debug builds with -demo read made-up data from public/demo.json (ios/screenshots/demo.json).
-      - name: Demo data
-        run: |
-          cp ios-app/ios/screenshots/demo.json ios-app/ios/App/App/public/demo.json
-          ls -la ios-app/ios/App/App/public/demo.json
-
       - name: Build for the simulator (Debug)
         id: build
         continue-on-error: true
@@ -128,6 +123,15 @@ jobs:
             -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/sim" \
             CODE_SIGNING_ALLOWED=NO build > "$RUNNER_TEMP/build.log" 2>&1 || rc=$?
           grep -E "error:|\*\* BUILD" "$RUNNER_TEMP/build.log" | sort -u | tail -200 || true
+          # -demo reads this file from the bundle. The Debug build copies it in; a missing file
+          # means the screenshots would open on "No demo data" and still look like a pass.
+          if [ "$rc" -eq 0 ]; then
+            DEMO="$RUNNER_TEMP/sim/Build/Products/Debug-iphonesimulator/App.app/demo.json"
+            if [ ! -f "$DEMO" ]; then
+              echo "::error::Debug app is missing demo.json (screenshot data)"
+              exit 1
+            fi
+          fi
           exit $rc
 
       - name: Run it and take screenshots
