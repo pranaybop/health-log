@@ -11,6 +11,7 @@ on:
     paths:
       - "ios-app/**"
       - ".github/workflows/ios-ipa.yml"
+      - ".github/workflows/ios-check.yml"
 
 permissions:
   contents: read
