@@ -81,8 +81,8 @@ final class TrendsTests: XCTestCase {
         XCTAssertEqual(r.checked.map(\.diffText), ["+8 bpm", "−42%", "+3.5/min", "−0.1°F"])
     }
 
-    func testRetaBaseline() {
-        let r = T.retaVsTirz(d, now: now)
+    func testRetaBaseline() throws {
+        let r = try XCTUnwrap(T.retaVsTirz(d, now: now))
         XCTAssertNil(r.reta)
         XCTAssertEqual(r.tirz.delta ?? 0, -9.1, accuracy: 1e-6)
         XCTAssertEqual(r.tirz.noise ?? 0, 4.523809523809524, accuracy: 1e-9)

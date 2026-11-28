@@ -11,7 +11,7 @@ struct TrMedsSectionView: View {
         VStack(alignment: .leading, spacing: LogMetric.stack) {
             if let rows = m.shotWeek { TrShotWeekCard(rows: rows).id("shot-week") }
             if let a = m.appetite { TrAppetiteCard(a: a).id("appetite") }
-            TrRetaCard(r: m.reta).id("reta-vs-tirz")
+            if let reta = m.reta { TrRetaCard(r: reta).id("reta-vs-tirz") }
             TrCyclesCard(recaps: m.recaps).id("cycles")
             TrFeelCard(f: m.feel).id("feel")
             LogCard("Wear-off") {
@@ -141,7 +141,7 @@ struct TrAppetiteCard: View {
             } else {
                 Caption("Shows once you've tracked food thoughts for 3 days. Tap a food-thought button on Today when one hits.")
             }
-            Caption("Level is the modeled amount of the medication you're on, as a share of the peak a weekly dose at your latest amount settles at (half-life 5 days for tirzepatide, 6 for retatrutide), so it reads the same across dose changes and the switch. Food thoughts are divided by the hours you spent in each band. A dash means no data in that band yet.")
+            Caption("Level is the modeled amount of the medication you're on, as a share of the peak a weekly dose at your latest amount settles at (\(a.halfLives)), so it reads the same across dose changes\(LogTime.switchStart == nil ? "" : " and the switch"). Food thoughts are divided by the hours you spent in each band. A dash means no data in that band yet.")
         }
     }
 
@@ -182,10 +182,11 @@ struct TrRetaCard: View {
             if let reta = r.reta { b = reta[keyPath: line.1].map(line.2) ?? "—" }
             return [line.0, a, b]
         }
-        return LogCard("Retatrutide vs tirzepatide") {
+        let column = LogTime.switchStart != nil ? LogTime.switchName : "Retatrutide"
+        return LogCard("\(column) vs \(LogTime.journeyName.lowercased())") {
             TrLead(r.lead)
-            TrTable(headers: ["", "Tirzepatide", r.reta == nil ? "" : "Retatrutide"], rows: rows)
-            Caption("Averages over each window; calories burned is the Apple Watch's middle full day. Dashes mean that measure wasn’t logged in the window. The retatrutide column fills in over the first two weeks. This is a comparison, not advice.")
+            TrTable(headers: ["", LogTime.journeyName, r.reta == nil ? "" : column], rows: rows)
+            Caption("Averages over each window; calories burned is the Apple Watch's middle full day. Dashes mean that measure wasn’t logged in the window. The \(column.lowercased()) column fills in over the first two weeks. This is a comparison, not advice.")
         }
     }
 }

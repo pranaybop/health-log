@@ -252,9 +252,9 @@ extension Analytics.Trends {
         return LogTime.tirzStart
     }
 
-    public static func retaSwitchAt(_ d: Dashboard) -> Date {
+    public static func retaSwitchAt(_ d: Dashboard) -> Date? {
         if let p = protocolRow(d, "retatrutide"), let s = p.startedOn, s.count >= 10 { return LogTime.noon(String(s.prefix(10))) }
-        return LogTime.retaStart
+        return LogTime.switchStart
     }
 
     public static func firstRetaDose(_ d: Dashboard) -> Dose? {
@@ -680,6 +680,7 @@ extension Analytics.Trends {
         public var nowShare: Double?
         public var lead: String
         public var noiseCount: Int
+        public var halfLives: String
     }
 
     /// appetiteByLevel: food noise and food thoughts by modeled level band. nil hides the card.
@@ -727,7 +728,20 @@ extension Analytics.Trends {
             lead = "Needs 3 check-ins at both low and high levels to compare."
         }
         return Appetite(noise: noiseStats, thoughts: thoughtStats, trackedDays: trackedDays, nowShare: level.share(at: now),
-                        lead: lead, noiseCount: noiseN)
+                        lead: lead, noiseCount: noiseN, halfLives: halfLifeNote(d))
+    }
+
+    /// Half-lives of the compounds on this log, read from the protocol when it has one.
+    static func halfLifeNote(_ d: Dashboard) -> String {
+        let names = Analytics.compoundsInPlay(d)
+        guard let first = names.first else { return "its half-life" }
+        func days(_ c: String) -> String {
+            let v = Analytics.halfLifeDays(c, protocols: d.protocols)
+            return v.rounded() == v ? num(v, 0) : num(v, 1)
+        }
+        var parts = ["\(days(first)) days for \(first)"]
+        for c in names.dropFirst() { parts.append("\(days(c)) for \(c)") }
+        return "half-life " + parts.joined(separator: ", ")
     }
 
     public struct WeekRow: Hashable, Sendable, Identifiable {
@@ -836,7 +850,10 @@ extension Analytics.Trends {
         public var reta: WindowStats?
     }
 
-    public static func retaVsTirz(_ d: Dashboard, now: Date) -> RetaVsTirz {
+    public static func retaVsTirz(_ d: Dashboard, now: Date) -> RetaVsTirz? {
+        let inPlay = Analytics.compoundsInPlay(d)
+        guard LogTime.switchStart != nil || inPlay.contains("retatrutide") else { return nil }
+        let journey = LogTime.journeyName.lowercased()
         let today = LogTime.today(now)
         let reta0 = firstRetaDose(d)?.takenDate.map(LogTime.dayKey)
         let tirz1 = LogTime.shift(reta0 ?? today, -1)
@@ -847,9 +864,12 @@ extension Analytics.Trends {
         if let reta0 {
             b = windowStats(d, from: reta0, to: LogTime.shift(reta0, 13), now: now)
             let retaDays = min(14, LogTime.dayDiff(today, reta0) + 1)
-            lead = "Last 4 weeks on tirzepatide (\(short(tirz0))–\(short(tirz1))) vs the first \(max(1, retaDays)) day\(s(retaDays)) on retatrutide."
+            lead = "Last 4 weeks on \(journey) (\(short(tirz0))–\(short(tirz1))) vs the first \(max(1, retaDays)) day\(s(retaDays)) on retatrutide."
+        } else if let planned = retaSwitchAt(d) {
+            let column = LogTime.switchStart != nil ? LogTime.switchName.lowercased() : "retatrutide"
+            lead = "Your \(journey) baseline for the last 4 full weeks (\(short(tirz0))–\(short(tirz1))). The \(column) column starts with your first dose (planned \(LogTime.weekdayDate(planned)))."
         } else {
-            lead = "Your tirzepatide baseline for the last 4 full weeks (\(short(tirz0))–\(short(tirz1))). The retatrutide column starts with your first dose (planned \(LogTime.weekdayDate(retaSwitchAt(d))))."
+            lead = "Your \(journey) baseline for the last 4 full weeks (\(short(tirz0))–\(short(tirz1)))."
         }
         return RetaVsTirz(lead: lead, tirz: a, reta: b)
     }

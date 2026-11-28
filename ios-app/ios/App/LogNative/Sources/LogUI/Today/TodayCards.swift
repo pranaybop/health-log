@@ -313,13 +313,11 @@ struct TodayCountdowns: View {
 
     private var counts: [Count] {
         let next = Analytics.plannedNextDose(m.d)
-        let switchAt = Analytics.retaSwitchAt(m.d)
         var out: [Count] = []
-        let hasSwitch = LogTime.hasSwitch && switchAt != .distantFuture
         if let next {
             out.append(Count(label: "Next dose", date: next))
-            if hasSwitch && LogTime.daysUntil(LogTime.retaStart, now: m.now) >= 0 { out.append(Count(label: LogTime.switchName, date: switchAt)) }
-        } else if hasSwitch && LogTime.daysUntil(switchAt, now: m.now) >= 0 {
+        }
+        if LogTime.hasSwitch, let switchAt = Analytics.retaSwitchAt(m.d), LogTime.daysUntil(switchAt, now: m.now) >= 0 {
             out.append(Count(label: LogTime.switchName, date: switchAt))
         }
         return out

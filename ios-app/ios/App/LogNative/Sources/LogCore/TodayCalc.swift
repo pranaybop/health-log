@@ -143,7 +143,8 @@ extension Analytics {
         let list = d.doses.filter { $0.skipped != true && $0.doseMg != nil && $0.takenDate != nil }
         guard let last = list.last?.takenDate else { return nil }
         let next = last.addingTimeInterval(7 * 86400)
-        return next >= LogTime.retaStart ? nil : next
+        if let switchAt = LogTime.switchStart, next >= switchAt { return nil }
+        return next
     }
 
     // MARK: Days

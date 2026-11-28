@@ -13,16 +13,30 @@ final class MedsTests: XCTestCase {
     }
 
     func testLevelPoints() throws {
-        let lp = try XCTUnwrap(Analytics.levelPoints(d))
-        XCTAssertEqual(lp.logged.count, 197)
-        XCTAssertEqual(lp.withNext.count, 197)
+        let now = LogTime.parse("2026-11-24T23:20:00-06:00")!
+        let lp = try XCTUnwrap(Analytics.levelPoints(d, now: now))
+        XCTAssertEqual(lp.logged.count, 151)
+        XCTAssertEqual(lp.withNext.count, 151)
         XCTAssertEqual(lp.start, LogTime.parse("2026-11-02T16:00:00Z"))
-        XCTAssertEqual(lp.end, LogTime.parse("2026-12-20T18:00:00Z"))
+        XCTAssertEqual(lp.end, LogTime.parse("2026-12-09T05:20:00Z"))
         XCTAssertEqual(lp.logged.map(\.v).max()!, 4.170032872004458, accuracy: 1e-9)
-        XCTAssertEqual(lp.logged.last!.v, 0.08597486504363899, accuracy: 1e-9)
-        XCTAssertEqual(lp.withNext.last!.v, 0.24920309566166224, accuracy: 1e-9)
+        XCTAssertEqual(lp.logged.last!.v, 0.423389899146237, accuracy: 1e-9)
+        XCTAssertEqual(lp.withNext.last!.v, 1.2272199960484569, accuracy: 1e-9)
         XCTAssertEqual(lp.logged[100].t, LogTime.parse("2026-11-26T22:00:00Z"))
         XCTAssertEqual(lp.logged[100].v, 2.313470586147773, accuracy: 1e-9)
+    }
+
+    /// No planned switch must not sample out to the far future.
+    func testLevelPointsNilSwitchIsBounded() throws {
+        let saved = LogTime.switchStart
+        LogTime.switchStart = nil
+        defer { LogTime.switchStart = saved }
+        let now = LogTime.parse("2026-11-24T23:20:00-06:00")!
+        let lp = try XCTUnwrap(Analytics.levelPoints(d, now: now))
+        let last = try XCTUnwrap(d.doses.compactMap(\.takenDate).max())
+        XCTAssertEqual(lp.end, max(now, last).addingTimeInterval(14 * 86400))
+        XCTAssertLessThan(lp.logged.count, 400)
+        XCTAssertEqual(lp.logged.count, lp.withNext.count)
     }
 
     func testSitesAndTitration() {
@@ -55,7 +69,7 @@ final class MedsTests: XCTestCase {
         XCTAssertEqual(reta.mg, 34)
         XCTAssertNil(reta.units)
         XCTAssertNil(reta.weeks)
-        XCTAssertEqual(Analytics.retaSwitchAt(d), LogTime.noon("2026-12-06"))
+        XCTAssertEqual(Analytics.retaSwitchAt(d), Optional(LogTime.noon("2026-12-06")))
         XCTAssertNil(Analytics.firstRetaDose(d))
         var dose = d.doses[0]
         dose.site = nil

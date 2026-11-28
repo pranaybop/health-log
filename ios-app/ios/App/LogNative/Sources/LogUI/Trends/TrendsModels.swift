@@ -48,7 +48,7 @@ struct TrWeightModel {
     var pace: TrendsCalc.Pace?
     var loss: TrendsCalc.LossRate?
     var glp1: Date
-    var reta: Date
+    var reta: Date?
     var overlays: [String: [String: Double]]
     var recent: [[String]]
     var progress: WeightProgress.Summary?
@@ -172,7 +172,7 @@ struct TrFoodModel {
 struct TrMedsModel {
     var shotWeek: [TrendsCalc.WeekRow]?
     var appetite: TrendsCalc.Appetite?
-    var reta: TrendsCalc.RetaVsTirz
+    var reta: TrendsCalc.RetaVsTirz?
     var recaps: [TrendsCalc.CycleRecap]
     var feel: TrendsCalc.FeelReport
     var wearOff: TrendsCalc.WearOff

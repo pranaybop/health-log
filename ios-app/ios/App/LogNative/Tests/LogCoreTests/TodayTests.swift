@@ -34,7 +34,7 @@ final class TodayTests: XCTestCase {
         XCTAssertTrue(logged.contains("2026-11-24"))
         XCTAssertTrue(logged.contains("2026-11-23"))
         XCTAssertEqual(Analytics.plannedNextDose(d), LogTime.parse("2026-11-29T16:00:00Z"))
-        XCTAssertEqual(Analytics.retaSwitchAt(d), LogTime.noon("2026-12-06"))
+        XCTAssertEqual(Analytics.retaSwitchAt(d), Optional(LogTime.noon("2026-12-06")))
         let at = LogTime.noon("2026-11-23").addingTimeInterval(9 * 3600)
         XCTAssertEqual(Analytics.remaining(at: at, doses: d.doses, protocols: d.protocols), 3.406740575045724, accuracy: 1e-9)
     }

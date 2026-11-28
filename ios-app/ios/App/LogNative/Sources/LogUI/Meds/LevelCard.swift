@@ -111,11 +111,14 @@ struct MLLevelCard: View {
     }
 
     private var caption: String {
-        let tirz = Fmt.mg(Analytics.halfLifeDays("tirzepatide", protocols: data.protocols))
-        let reta = Fmt.mg(Analytics.halfLifeDays("retatrutide", protocols: data.protocols))
+        let names = Analytics.compoundsInPlay(data)
+        let halves = names.map { "\($0) \(Fmt.mg(Analytics.halfLifeDays($0, protocols: data.protocols))) days" }
+        let model = halves.isEmpty ? "Half-life model." : "Half-life model: \(halves.joined(separator: ", "))."
+        let shot = (data.doses.last { $0.skipped != true }?.compound ?? LogTime.journeyName).lowercased()
         let dashed = LogTime.switchStart.map {
-            " The dashed line adds the next planned tirzepatide shot if it falls before the \(LogTime.switchName) switch on \(LogTime.shortDate($0))."
+            " The dashed line adds the next planned \(shot) shot if it falls before the \(LogTime.switchName) switch on \(LogTime.shortDate($0))."
         } ?? ""
-        return "Half-life model: tirzepatide \(tirz) days, retatrutide \(reta) days.\(dashed) No retatrutide mg amount is assumed. An estimate, not a lab value."
+        let assumed = names.contains("retatrutide") ? " No retatrutide mg amount is assumed." : ""
+        return "\(model)\(dashed)\(assumed) An estimate, not a lab value."
     }
 }

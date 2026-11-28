@@ -105,7 +105,7 @@ extension Analytics {
         let list = realShots(doses)
         guard let last = list.last else { return (list, nil, list) }
         let next = last.at.addingTimeInterval(7 * 86400)
-        if next >= LogTime.retaStart { return (list, nil, list) }
+        if let switchAt = LogTime.switchStart, next >= switchAt { return (list, nil, list) }
         let active = protocols.first { $0.status == "active" }
         var plannedMg = last.mg
         if let a = active?.typicalDoseMg, a != 0 { plannedMg = a }
@@ -114,14 +114,17 @@ extension Analytics {
         return (list, next, list + [planned])
     }
 
-    /// The level on a real time axis every `stepHours`, from the first dose to two weeks after the
-    /// switch, plus each shot's instant (and a minute before) so peaks are sharp. nil with no doses.
-    public static func levelPoints(_ d: Dashboard, stepHours: Double = 6) -> LevelPoints? {
+    /// The level every `stepHours`, from the first dose through two weeks after today or the last
+    /// dose, plus each shot's instant (and a minute before) so peaks are sharp. nil with no doses.
+    /// The end is that near date: a missing switch is not the far future, which sampled millions of
+    /// points on the main thread.
+    public static func levelPoints(_ d: Dashboard, stepHours: Double = 6, now: Date = Date()) -> LevelPoints? {
         let real = realShots(d.doses)
         guard let first = real.first else { return nil }
         let planned = plannedShots(d.doses, protocols: d.protocols).withNext
         let start = first.at
-        let end = LogTime.retaStart.addingTimeInterval(14 * 86400)
+        let lastAt = real.last?.at ?? start
+        let end = max(now, lastAt).addingTimeInterval(14 * 86400)
         let step = stepHours * 3600
         var times = Set<Double>()
         var t = start.timeIntervalSince1970

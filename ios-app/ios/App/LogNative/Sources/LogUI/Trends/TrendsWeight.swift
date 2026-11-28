@@ -139,7 +139,7 @@ struct TrWeightCard: View {
         }
         var marks: [TrMark] = []
         if m.glp1 >= chartFrom { marks.append(TrMark(at: m.glp1, label: LogTime.journeyName)) }
-        if m.reta >= chartFrom && m.reta <= t1 { marks.append(TrMark(at: m.reta, label: "Reta")) }
+        if let reta = m.reta, reta >= chartFrom && reta <= t1 { marks.append(TrMark(at: reta, label: "Reta")) }
 
         let byTime = m.byTime
         let scrub: (TrendsCalc.Point, [String: TrendsCalc.Point]) -> TrScrub = { p, _ in
@@ -187,7 +187,7 @@ struct TrWeightCard: View {
             TrendsCalc.Tile("Range", lows.map { "\(TrendsCalc.num($0, 1))–\(TrendsCalc.num(highs, 1))" } ?? "—", "lowest to highest"),
         ]
         let caption = proj.map { p in
-            "The trend smooths day-to-day water swings. The projection extends the straight-line fit since starting tirzepatide (\(TrendsCalc.signed(p.weekly, 2)) lb a week) six weeks out. It describes the past; it isn’t a prediction."
+            "The trend smooths day-to-day water swings. The projection extends the straight-line fit since starting \(LogTime.journeyName.lowercased()) (\(TrendsCalc.signed(p.weekly, 2)) lb a week) six weeks out. It describes the past; it isn’t a prediction."
         } ?? "The trend smooths day-to-day water swings, so one high or low weigh-in barely moves it."
 
         return LogCard("Weight") {
