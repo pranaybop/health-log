@@ -80,7 +80,7 @@ final class LogStoreWriteTests: XCTestCase {
         await gate.started()
 
         let writeTask = Task { try await self.store.write("measurement", ["kind": "waist", "value": 32]) }
-        let writeReq = try XCTUnwrap(await ScriptedURL.next(timeout: 3))
+        let writeReq = try await nextJob()
         XCTAssertEqual(writeReq.url.lastPathComponent, "log-write")
         writeReq.finish(.success((200, Data("{\"ok\":true}".utf8))))
         let saved = try await writeTask.value
@@ -93,7 +93,7 @@ final class LogStoreWriteTests: XCTestCase {
         XCTAssertTrue(store.isRefreshing)
 
         gate.release()
-        let first = try XCTUnwrap(await ScriptedURL.next(timeout: 3))
+        let first = try await nextJob()
         XCTAssertEqual(first.url.lastPathComponent, "log-dashboard")
         first.finish(.success((200, dashboard("2026-11-28T00:00:00Z"))))
 
@@ -112,14 +112,14 @@ final class LogStoreWriteTests: XCTestCase {
     /// A save while nothing is refreshing still updates the screen once.
     func testWriteWhileIdleRefreshesOnce() async throws {
         let writeTask = Task { try await self.store.write("measurement", ["kind": "waist", "value": 32]) }
-        let writeReq = try XCTUnwrap(await ScriptedURL.next(timeout: 3))
+        let writeReq = try await nextJob()
         XCTAssertEqual(writeReq.url.lastPathComponent, "log-write")
         writeReq.finish(.success((200, Data("{\"ok\":true}".utf8))))
         let saved = try await writeTask.value
         XCTAssertEqual(saved["ok"] as? Bool, true)
         XCTAssertNil(saved["queued"])
 
-        let dash = try XCTUnwrap(await ScriptedURL.next(timeout: 3))
+        let dash = try await nextJob()
         XCTAssertEqual(dash.url.lastPathComponent, "log-dashboard")
         dash.finish(.success((200, dashboard("2026-11-28T02:00:00Z"))))
         let showed = await waitUntil { self.store.dashboard?.asOf == "2026-11-28T02:00:00Z" && !self.store.isRefreshing }
@@ -129,6 +129,12 @@ final class LogStoreWriteTests: XCTestCase {
         extra?.finish(.success((200, dashboard("2026-11-28T03:00:00Z"))))
         XCTAssertNil(extra)
         XCTAssertEqual(store.dashboard?.asOf, "2026-11-28T02:00:00Z")
+    }
+
+    /// `XCTUnwrap` takes an autoclosure, which cannot await.
+    private func nextJob(timeout: TimeInterval = 3) async throws -> ScriptedURL.Job {
+        let job = await ScriptedURL.next(timeout: timeout)
+        return try XCTUnwrap(job)
     }
 
     private func dashboard(_ asOf: String) -> Data {
