@@ -28,12 +28,24 @@ final class TodayTests: XCTestCase {
         XCTAssertEqual(Analytics.trend(at: endOf23, in: pts) ?? 0, 241.4397960382286, accuracy: 1e-9)
     }
 
+    /// The countdown uses this plan day, which is not the last shot plus 7 days.
+    func testCountdownUsesTheOpenPlan() throws {
+        XCTAssertEqual(Analytics.nextPlanned(d)?.plannedOn, "2026-11-29")
+        var shifted = d
+        shifted.doses[shifted.doses.count - 1].takenAt = "2026-11-30T16:00:00Z"
+        let plan = try XCTUnwrap(Analytics.nextPlanned(shifted))
+        XCTAssertEqual(plan.plannedOn, "2026-12-06")
+        XCTAssertEqual(LogTime.noon(plan.plannedOn), LogTime.noon("2026-12-06"))
+        let lastPlusWeek = LogTime.parse("2026-11-30T16:00:00Z")!.addingTimeInterval(7 * 86400)
+        XCTAssertGreaterThanOrEqual(lastPlusWeek, LogTime.retaStart)
+        XCTAssertNotEqual(LogTime.dayKey(lastPlusWeek), plan.plannedOn)
+    }
+
     func testDaysDosesAndLevel() {
         XCTAssertEqual(Analytics.earliestDay(d, now: clock), "2024-11-04")
         let logged = Analytics.loggedDays(d)
         XCTAssertTrue(logged.contains("2026-11-24"))
         XCTAssertTrue(logged.contains("2026-11-23"))
-        XCTAssertEqual(Analytics.plannedNextDose(d), LogTime.parse("2026-11-29T16:00:00Z"))
         XCTAssertEqual(Analytics.retaSwitchAt(d), LogTime.noon("2026-12-06"))
         let at = LogTime.noon("2026-11-23").addingTimeInterval(9 * 3600)
         XCTAssertEqual(Analytics.remaining(at: at, doses: d.doses, protocols: d.protocols), 3.406740575045724, accuracy: 1e-9)

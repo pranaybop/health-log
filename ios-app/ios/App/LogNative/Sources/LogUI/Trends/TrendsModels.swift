@@ -66,7 +66,7 @@ struct TrWeightModel {
         pace = TrendsCalc.recentPace(sm, days: 28)
         loss = TrendsCalc.lossRate(sm)
         glp1 = TrendsCalc.firstGlp1At(d)
-        reta = TrendsCalc.retaSwitchAt(d)
+        reta = Analytics.retaSwitchAt(d)
         var ov: [String: [String: Double]] = [:]
         for o in TrOverlay.all where o.id != "none" { ov[o.id] = TrendsCalc.overlayDaily(d, o.id, now: now) }
         overlays = ov

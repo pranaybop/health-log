@@ -312,7 +312,7 @@ struct TodayCountdowns: View {
     }
 
     private var counts: [Count] {
-        let next = Analytics.plannedNextDose(m.d)
+        let next = Analytics.nextPlanned(m.d).map { LogTime.noon($0.plannedOn) }
         let switchAt = Analytics.retaSwitchAt(m.d)
         var out: [Count] = []
         let hasSwitch = LogTime.hasSwitch && switchAt != .distantFuture
@@ -457,9 +457,6 @@ struct TodayMedSummary: View {
             let text = "\(TodayText.capitalize(plan.compound ?? "")) \(Fmt.num(plan.doseMg, 1)) mg\(plan.units.map { " (\(Fmt.num($0, 0)) units)" } ?? "")"
             let when = "\(text), \(LogTime.weekdayDate(day)) (\(TodayText.daysWord(LogTime.daysUntil(day, now: m.now))))"
             return Analytics.planIsOverdue(plan, now: m.now) ? "Overdue: \(when)" : when
-        }
-        if let next = Analytics.plannedNextDose(m.d) {
-            return "\(LogTime.weekdayDate(next)), \(TodayText.daysWord(LogTime.daysUntil(next, now: m.now)))"
         }
         if let switchAt = LogTime.switchStart { return "\(LogTime.switchName) starts \(LogTime.weekdayDate(switchAt))" }
         return "Add your schedule in Meds"

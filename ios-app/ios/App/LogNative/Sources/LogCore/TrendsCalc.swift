@@ -150,17 +150,6 @@ extension Analytics.Trends {
         Analytics.metric(d, id).map { Point(key: $0.key, value: $0.value) }
     }
 
-    /// The first value of a log.health_metrics series on a day.
-    static func metricMap(_ d: Dashboard, _ id: String) -> [String: Double] {
-        var m: [String: Double] = [:]
-        for p in d.healthMetrics[id] ?? [] where p.value.isFinite && m[p.day] == nil { m[p.day] = p.value }
-        return m
-    }
-
-    static func protocolRow(_ d: Dashboard, _ compound: String) -> ProtocolRow? {
-        d.protocols.first { ($0.compound ?? "").lowercased() == compound }
-    }
-
     public static func targets(_ d: Dashboard) -> (calories: Double?, protein: Double?) {
         Analytics.targets(d)
     }
@@ -169,32 +158,14 @@ extension Analytics.Trends {
 // MARK: - Weight
 
 extension Analytics.Trends {
-    /// The latest weigh-in each day, oldest first.
-    public static func dailyWeight(_ pts: [WeightPoint]) -> [WeightPoint] {
-        var byDay: [String: WeightPoint] = [:]
-        for p in pts { byDay[p.day] = p }
-        return byDay.values.sorted { $0.at < $1.at }
-    }
-
     public struct LineFit: Hashable, Sendable {
         public var slope: Double
         public var intercept: Double
     }
 
     public static func linearFit(_ pts: [(x: Double, y: Double)]) -> LineFit? {
-        guard pts.count >= 2 else { return nil }
-        let n = Double(pts.count)
-        let mx = pts.reduce(0.0) { $0 + $1.x } / n
-        let my = pts.reduce(0.0) { $0 + $1.y } / n
-        var top = 0.0
-        var bottom = 0.0
-        for p in pts {
-            top += (p.x - mx) * (p.y - my)
-            bottom += (p.x - mx) * (p.x - mx)
-        }
-        guard bottom != 0 else { return nil }
-        let slope = top / bottom
-        return LineFit(slope: slope, intercept: my - slope * mx)
+        guard let fit = Analytics.linearFit(pts) else { return nil }
+        return LineFit(slope: fit.slope, intercept: fit.intercept)
     }
 
     public struct Pace: Hashable, Sendable {
@@ -204,14 +175,8 @@ extension Analytics.Trends {
 
     /// Straight-line pace through the last `days` days of weigh-ins (one a day).
     public static func recentPace(_ parsed: [WeightPoint], days: Double = 28) -> Pace? {
-        guard let last = parsed.last else { return nil }
-        let from = last.at.addingTimeInterval(-days * 86400)
-        let daily = dailyWeight(parsed.filter { $0.at >= from })
-        guard daily.count >= 4, let first = daily.first, let end = daily.last else { return nil }
-        let span = end.at.timeIntervalSince(first.at) / 86400
-        guard span >= 7 else { return nil }
-        guard let fit = linearFit(daily.map { (x: $0.at.timeIntervalSince(first.at) / 86400, y: $0.lb) }) else { return nil }
-        return Pace(weekly: fit.slope * 7, n: daily.count)
+        guard let pace = Analytics.recentPace(parsed, days: days) else { return nil }
+        return Pace(weekly: pace.weekly, n: pace.count)
     }
 
     public struct LossRate: Hashable, Sendable {
@@ -222,9 +187,8 @@ extension Analytics.Trends {
 
     /// Loss as a share of body weight a week, from the 4-week fit.
     public static func lossRate(_ parsed: [WeightPoint]) -> LossRate? {
-        guard let cur = parsed.last?.lb, let rp = recentPace(parsed, days: 28) else { return nil }
-        let pct = -rp.weekly / cur * 100
-        return LossRate(weekly: rp.weekly, pct: pct, fast: pct > 1)
+        guard let rate = Analytics.lossRate(parsed) else { return nil }
+        return LossRate(weekly: rate.weekly, pct: rate.pct, fast: rate.fast)
     }
 
     public struct Projection: Hashable, Sendable {
@@ -237,7 +201,7 @@ extension Analytics.Trends {
 
     /// Straight-line fit of daily weigh-ins since the first tirzepatide dose.
     public static func weightProjection(_ parsed: [WeightPoint]) -> Projection? {
-        let daily = dailyWeight(parsed.filter { $0.at >= LogTime.tirzStart })
+        let daily = Analytics.dailyWeight(parsed.filter { $0.at >= LogTime.tirzStart })
         guard daily.count >= 4, let first = daily.first, let last = daily.last else { return nil }
         guard let fit = linearFit(daily.map { (x: $0.at.timeIntervalSince(first.at) / 86400, y: $0.lb) }) else { return nil }
         return Projection(fit: fit, weekly: fit.slope * 7, last: last, base: first.at)
@@ -248,18 +212,8 @@ extension Analytics.Trends {
             $0.skipped != true && ($0.compound ?? "").range(of: "tirzepatide|retatrutide", options: [.regularExpression, .caseInsensitive]) != nil
         }.compactMap { $0.takenDate }.sorted()
         if let t = times.first { return t }
-        if let p = protocolRow(d, "tirzepatide"), let s = p.startedOn, s.count >= 10 { return LogTime.noon(String(s.prefix(10))) }
+        if let p = Analytics.protocolRow(d, "tirzepatide"), let s = p.startedOn, s.count >= 10 { return LogTime.noon(String(s.prefix(10))) }
         return LogTime.tirzStart
-    }
-
-    public static func retaSwitchAt(_ d: Dashboard) -> Date {
-        if let p = protocolRow(d, "retatrutide"), let s = p.startedOn, s.count >= 10 { return LogTime.noon(String(s.prefix(10))) }
-        return LogTime.retaStart
-    }
-
-    public static func firstRetaDose(_ d: Dashboard) -> Dose? {
-        d.doses.filter { $0.skipped != true && $0.takenDate != nil && ($0.compound ?? "").lowercased() == "retatrutide" }
-            .min { ($0.takenDate ?? .distantFuture) < ($1.takenDate ?? .distantFuture) }
     }
 
     public struct Stall: Hashable, Sendable {
@@ -271,25 +225,19 @@ extension Analytics.Trends {
 
     /// stallCheck: is the last 3 weeks of daily weigh-ins roughly flat, and what changed.
     public static func stallCheck(_ d: Dashboard, now: Date) -> Stall {
-        let parsed = Analytics.smoothWeights(d)
-        let daily = dailyWeight(parsed.filter { $0.at >= now.addingTimeInterval(-40 * 86400) })
-        if daily.count < 6 {
-            let n = 6 - daily.count
+        let r = Analytics.stallCheck(Analytics.smoothWeights(d), now: now)
+        if r.weighIns40 < 6 {
+            let n = 6 - r.weighIns40
             return Stall(ready: false, stalled: false, summary: "Needs \(n) more weigh-in\(s(n)) in this window for a stall check.", changed: [])
         }
-        let win = daily.filter { $0.at >= now.addingTimeInterval(-21 * 86400) }
-        guard win.count >= 4, let first = win.first, let last = win.last else {
-            let n = 4 - win.count
+        guard r.ready, let from = r.fromDay, let to = r.toDay, let change = r.change, let weekly = r.weekly else {
+            let n = 4 - r.weighIns21
             return Stall(ready: false, stalled: false, summary: "Needs \(n) more weigh-in\(s(n)) in the last 3 weeks.", changed: [])
         }
-        let fit = linearFit(win.map { (x: $0.at.timeIntervalSince(first.at) / 86400, y: $0.lb) })
-        let change = last.lb - first.lb
-        let weekly = fit.map { $0.slope * 7 } ?? change / 3
-        let stalled = abs(weekly) < 0.4 && abs(change) < 2
-        let summary = stalled
-            ? "Smoothed weight has been roughly flat for 3 weeks (\(num(first.lb, 1)) to \(num(last.lb, 1)) lb)."
+        let summary = r.stalled
+            ? "Smoothed weight has been roughly flat for 3 weeks (\(num(r.fromLb, 1)) to \(num(r.toLb, 1)) lb)."
             : "No stall — weight moved \(num(change, 1)) lb over the last 3 weeks (\(num(weekly, 1)) lb/week)."
-        return Stall(ready: true, stalled: stalled, summary: summary, changed: whatChanged(d, from: first.day, to: last.day))
+        return Stall(ready: true, stalled: r.stalled, summary: summary, changed: whatChanged(d, from: from, to: to))
     }
 
     static func whatChanged(_ d: Dashboard, from: String, to: String) -> [String] {
@@ -373,12 +321,9 @@ extension Analytics.Trends {
     }
 
     public static func journey(_ d: Dashboard) -> Journey? {
-        let parsed = Analytics.smoothWeights(d)
-        guard let current = parsed.last, let first = parsed.first else { return nil }
-        let startLb = d.profile?.startWeightLb ?? first.lb
-        let sinceTirz = parsed.first { $0.at >= LogTime.tirzStart } ?? first
-        return Journey(current: current, startLb: startLb, goalLb: d.profile?.goalWeightLb,
-                       changeStart: current.lb - startLb, changeTirz: current.lb - sinceTirz.lb)
+        guard let j = Analytics.journey(d) else { return nil }
+        return Journey(current: j.current, startLb: j.startLb, goalLb: j.goalLb,
+                       changeStart: j.changeStart, changeTirz: j.current.lb - j.sinceTirz.lb)
     }
 
     /// The verdict label (verdictCard), used in the prescriber report.
@@ -796,15 +741,6 @@ extension Analytics.Trends {
         public var sleep: Double?
     }
 
-    /// sleepHoursOn: daily_health hours, else time in bed, else the sum of sleep stages.
-    static func sleepHours(_ key: String, health: [String: DailyHealth], inBed: [String: Double], stages: [[String: Double]]) -> Double? {
-        if let h = health[key]?.sleepHours { return h }
-        if let b = inBed[key] { return b }
-        let parts = stages.map { $0[key] }
-        if parts.contains(where: { $0 != nil }) { return parts.reduce(0.0) { $0 + ($1 ?? 0) } / 60 }
-        return nil
-    }
-
     static func windowStats(_ d: Dashboard, from: String, to: String, now: Date) -> WindowStats {
         func inWin(_ k: String?) -> Bool { guard let k else { return false }; return k >= from && k <= to }
         let weights = Analytics.smoothWeights(d).filter { inWin($0.day) }
@@ -814,11 +750,7 @@ extension Analytics.Trends {
         let effects = d.sideEffects.filter { inWin($0.recordedOn) }
         let health = d.dailyHealth.filter { inWin($0.day) }
         let burnDays = completeBurnDays(d, from: from, to: to, now: now)
-        var healthByDay: [String: DailyHealth] = [:]
-        for r in d.dailyHealth where healthByDay[r.day] == nil { healthByDay[r.day] = r }
-        let inBed = metricMap(d, "sleep_in_bed_h")
-        let stages = ["sleep_core_min", "sleep_deep_min", "sleep_rem_min"].map { metricMap(d, $0) }
-        let sleep = dayRange(from, to).compactMap { sleepHours($0, health: healthByDay, inBed: inBed, stages: stages) }
+        let sleep = dayRange(from, to).compactMap { Analytics.sleepHours(d, on: $0) }
         return WindowStats(
             delta: delta,
             noise: Analytics.mean(checkins.compactMap { $0.foodNoise }),
@@ -838,7 +770,7 @@ extension Analytics.Trends {
 
     public static func retaVsTirz(_ d: Dashboard, now: Date) -> RetaVsTirz {
         let today = LogTime.today(now)
-        let reta0 = firstRetaDose(d)?.takenDate.map(LogTime.dayKey)
+        let reta0 = Analytics.firstRetaDose(d)?.takenDate.map(LogTime.dayKey)
         let tirz1 = LogTime.shift(reta0 ?? today, -1)
         let tirz0 = LogTime.shift(tirz1, -27)
         let a = windowStats(d, from: tirz0, to: tirz1, now: now)
@@ -849,7 +781,7 @@ extension Analytics.Trends {
             let retaDays = min(14, LogTime.dayDiff(today, reta0) + 1)
             lead = "Last 4 weeks on tirzepatide (\(short(tirz0))–\(short(tirz1))) vs the first \(max(1, retaDays)) day\(s(retaDays)) on retatrutide."
         } else {
-            lead = "Your tirzepatide baseline for the last 4 full weeks (\(short(tirz0))–\(short(tirz1))). The retatrutide column starts with your first dose (planned \(LogTime.weekdayDate(retaSwitchAt(d))))."
+            lead = "Your tirzepatide baseline for the last 4 full weeks (\(short(tirz0))–\(short(tirz1))). The retatrutide column starts with your first dose (planned \(LogTime.weekdayDate(Analytics.retaSwitchAt(d))))."
         }
         return RetaVsTirz(lead: lead, tirz: a, reta: b)
     }
@@ -901,7 +833,7 @@ extension Analytics.Trends {
 
     /// cycleRecaps: weight change and how each cycle went.
     public static func cycleRecaps(_ d: Dashboard, now: Date) -> [CycleRecap] {
-        let daily = dailyWeight(Analytics.smoothWeights(d))
+        let daily = Analytics.dailyWeight(Analytics.smoothWeights(d))
         func weightOn(_ day: String) -> WeightPoint? { daily.last { $0.day <= day } }
         var out: [CycleRecap] = []
         for c in cycles(d, now: now) {
@@ -999,23 +931,14 @@ extension Analytics.Trends {
         public var up: Bool
         public var unit: String
         public var digits: Int
-        func floor(_ med: Double) -> Double {
-            switch id {
-            case "resting_hr": return 4
-            case "hrv_ms": return 0.2 * med
-            case "respiratory_rate": return 1.5
-            default: return 0.9
-            }
-        }
         var unitText: String { unit == "/min" || unit == "°F" ? unit : " " + unit }
     }
 
-    public static let signalDefs = [
-        SignalDef(id: "resting_hr", label: "Resting heart rate", lower: "resting heart rate", daily: true, up: true, unit: "bpm", digits: 0),
-        SignalDef(id: "hrv_ms", label: "HRV", lower: "HRV", daily: true, up: false, unit: "ms", digits: 0),
-        SignalDef(id: "respiratory_rate", label: "Breathing rate", lower: "breathing rate", daily: false, up: true, unit: "/min", digits: 1),
-        SignalDef(id: "wrist_temp_f", label: "Wrist temperature", lower: "wrist temperature", daily: false, up: true, unit: "°F", digits: 1),
-    ]
+    /// Sentence labels for the same signals as `Analytics.normalSignals`, in that order.
+    public static let signalDefs: [SignalDef] = Analytics.normalSignals.map { s in
+        SignalDef(id: s.id, label: s.label, lower: s.id == "hrv_ms" ? "HRV" : s.label.lowercased(),
+                  daily: s.daily, up: s.up, unit: s.unit, digits: s.digits)
+    }
 
     public struct SignalCheck: Hashable, Sendable {
         public var def: SignalDef
@@ -1041,32 +964,16 @@ extension Analytics.Trends {
     /// Each recovery signal's values by day.
     public static func signalMaps(_ d: Dashboard) -> [String: [String: Double]] {
         var maps: [String: [String: Double]] = [:]
-        for s in signalDefs {
-            var m: [String: Double] = [:]
-            if s.daily {
-                let field: KeyPath<DailyHealth, Double?> = s.id == "resting_hr" ? \.restingHr : \.hrvMs
-                for r in d.dailyHealth { if let v = r[keyPath: field] { m[r.day] = v } }
-            } else {
-                for p in metricPoints(d, s.id) { m[p.key] = p.value }
-            }
-            maps[s.id] = m
-        }
+        for s in Analytics.normalSignals { maps[s.id] = Analytics.signalSeries(s, d) }
         return maps
     }
 
     /// offNormal: each signal on `key` against the median and spread of the 30 days before it.
     public static func offNormal(_ maps: [String: [String: Double]], key: String) -> OffNormal {
         var checked: [SignalCheck] = []
-        let window = (1...30).map { LogTime.shift(key, -$0) }
-        for s in signalDefs {
-            guard let m = maps[s.id], let v = m[key] else { continue }
-            let base = window.compactMap { m[$0] }
-            guard base.count >= 7, let med = Analytics.median(base),
-                  let mad = Analytics.median(base.map { abs($0 - med) }) else { continue }
-            let margin = max(2 * 1.4826 * mad, s.floor(med))
-            let diff = v - med
-            let off = s.up ? diff >= margin : -diff >= margin
-            checked.append(SignalCheck(def: s, value: v, median: med, diff: diff, off: off))
+        for (spec, def) in zip(Analytics.normalSignals, signalDefs) {
+            guard let values = maps[spec.id], let hit = Analytics.signalOff(values, on: key, spec) else { continue }
+            checked.append(SignalCheck(def: def, value: hit.value, median: hit.median, diff: hit.diff, off: hit.off))
         }
         return OffNormal(key: key, checked: checked)
     }
@@ -1194,7 +1101,7 @@ extension Analytics.Trends {
     public static func dailySeries(_ d: Dashboard, _ id: String) -> [String: Double] {
         var m: [String: Double] = [:]
         if id == "weight" {
-            for w in dailyWeight(Analytics.smoothWeights(d)) { m[w.day] = w.lb }
+            for w in Analytics.dailyWeight(Analytics.smoothWeights(d)) { m[w.day] = w.lb }
             return m
         }
         if id == "calories" || id == "protein_g" {
