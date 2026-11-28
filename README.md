@@ -12,7 +12,7 @@ Calorie and protein targets come from active `log.goals` rows (`kind` `calories`
 
 ## Endpoints
 
-`log-dashboard` and `log-write` take a signed-in session (`Authorization: Bearer`, from `log-auth`) or the original log's `x-log-passcode` / `x-log-token`. Passcode auth is a SHA-256 match (or the `LOG_APP_PASSCODE` / `LOG_DASHBOARD_TOKEN` function secrets if set). Failed auth waits 600ms and returns 401. The iPhone app calls them directly; the CORS rules (for the old website's origin) don't apply to it. `p_user` is the signed-in account, or null for the owner (passcode or bot token).
+`log-dashboard` and `log-write` take a signed-in session (`Authorization: Bearer`, from `log-auth`) or the original log's `x-log-passcode` / `x-log-token`. The passcode and the bot token must match the `LOG_APP_PASSCODE` and `LOG_DASHBOARD_TOKEN` function secrets. Failed auth waits 600ms and returns 401. The iPhone app calls them directly; the CORS rules (for the old website's origin) don't apply to it. `p_user` is the signed-in account, or null for the owner (passcode or bot token).
 
 | Function | Method | URL | Role |
 | --- | --- | --- | --- |

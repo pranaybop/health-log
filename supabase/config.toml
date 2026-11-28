@@ -1,0 +1,11 @@
+# These three functions check the passcode, the bot token, or a session themselves.
+# The gateway must not require a Supabase user JWT, or the app and the bot cannot call them.
+
+[functions.log-auth]
+verify_jwt = false
+
+[functions.log-dashboard]
+verify_jwt = false
+
+[functions.log-write]
+verify_jwt = false
