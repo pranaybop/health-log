@@ -49,7 +49,7 @@ public struct HealthDayStat: Equatable, Sendable {
 public struct HealthWorkoutSample: Equatable, Sendable {
     public var start: Date
     public var end: Date?
-    /// The plugin's camelCase workout type ("running", "strengthTraining", "other").
+    /// Stored activity label ("running", "strength training", "other").
     public var type: String
     /// Whole seconds, like the plugin sent it.
     public var durationSeconds: Int

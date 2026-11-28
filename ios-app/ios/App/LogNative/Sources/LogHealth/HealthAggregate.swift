@@ -33,13 +33,6 @@ public enum HealthAggregate {
     /// Date.toISOString(): "2026-11-24T15:04:05.123Z".
     public static func iso(_ d: Date) -> String { isoFormatter.string(from: d) }
 
-    public static func words(_ camel: String?) -> String {
-        let s = (camel?.isEmpty ?? true) ? "other" : camel!
-        guard let re = try? NSRegularExpression(pattern: "([a-z])([A-Z])") else { return s.lowercased() }
-        let spaced = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "$1 $2")
-        return spaced.lowercased()
-    }
-
     static func finiteMean(_ list: [Double?]) -> Double? {
         let v = list.compactMap { $0 }.filter { $0.isFinite }
         return v.isEmpty ? nil : v.reduce(0, +) / Double(v.count)
@@ -320,7 +313,7 @@ public enum HealthAggregate {
             HealthWorkoutRow(
                 startedAt: iso(k.start),
                 endedAt: k.end.map(iso),
-                activity: words(k.type),
+                activity: k.type,
                 durationMin: r1(Double(k.durationSeconds) / 60),
                 distanceMi: k.distanceMeters.map { r2($0 * mToMi) },
                 activeKcal: k.energyKcal.map(jsRound),

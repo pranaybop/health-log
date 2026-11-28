@@ -248,44 +248,26 @@ public enum AskCloud {
         guard let http = response as? HTTPURLResponse else { throw LogError.network("No response from \(name).") }
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 || http.statusCode == 403 { throw LogError.server("\(name) didn’t accept the key. Check it in Account.") }
-            if http.statusCode == 404 { throw LogError.server("\(name) doesn’t know the model “\(model)”. Change it in Account.") }
-            if http.statusCode == 429 { throw LogError.server("\(name) says the key is out of quota or rate-limited.") }
-            let msg = (json["error"] as? [String: Any])?["message"] as? String
-            throw LogError.server(msg ?? "\(name) returned \(http.statusCode).")
+            throw AIRequest.failure(status: http.statusCode, name: name, model: model, json: json)
         }
         return json
     }
 
     static func request(_ config: MealAIConfig, system: String, messages: [[String: Any]], tools: Bool) throws -> URLRequest {
-        let model = config.model.trimmingCharacters(in: .whitespaces).isEmpty ? config.provider.defaultModel : config.model
-        var req: URLRequest
+        let model = AIRequest.model(config)
         var body: [String: Any]
         switch config.provider {
         case .openai, .xai:
-            let base = config.provider == .openai ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions"
-            req = URLRequest(url: URL(string: base)!)
-            req.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
             let systemMessage: [String: Any] = ["role": "system", "content": system]
             body = ["model": model, "messages": [systemMessage] + messages]
             if tools { body["tools"] = AskTools.functionSchemas }
         case .anthropic:
-            req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
-            req.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
-            req.setValue("2026-10-21", forHTTPHeaderField: "anthropic-version")
             body = ["model": model, "max_tokens": 16000, "system": system, "messages": messages]
             if tools { body["tools"] = AskTools.anthropicSchemas }
         case .google:
-            let escaped = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
-            req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(escaped):generateContent")!)
-            req.setValue(config.apiKey, forHTTPHeaderField: "x-goog-api-key")
             body = ["systemInstruction": ["parts": [["text": system]]], "contents": messages]
             if tools { body["tools"] = AskTools.googleSchemas }
         }
-        req.httpMethod = "POST"
-        req.timeoutInterval = 120
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return req
+        return try AIRequest.make(config, model: model, timeout: 120, body: body)
     }
 }

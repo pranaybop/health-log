@@ -55,4 +55,112 @@ final class AccountsTests: XCTestCase {
         XCTAssertTrue(s.expiresSoon(now: Date(timeIntervalSince1970: 900)))
         XCTAssertFalse(s.expiresSoon(now: Date(timeIntervalSince1970: 100)))
     }
+
+    func testMealAndAskShareTheProviderRequest() throws {
+        let anthropic = MealAIConfig(provider: .anthropic, model: "", apiKey: "sk-ant-test")
+        let meal = try MealAI.request("eggs", config: anthropic)
+        let ask = try AskCloud.request(anthropic, system: "sys", messages: [["role": "user", "content": "hi"]], tools: false)
+        XCTAssertEqual(meal.value(forHTTPHeaderField: "anthropic-version"), "2026-10-21")
+        XCTAssertEqual(ask.value(forHTTPHeaderField: "anthropic-version"), meal.value(forHTTPHeaderField: "anthropic-version"))
+        XCTAssertEqual(meal.value(forHTTPHeaderField: "x-api-key"), "sk-ant-test")
+        XCTAssertEqual(ask.value(forHTTPHeaderField: "x-api-key"), "sk-ant-test")
+        XCTAssertEqual(meal.url?.absoluteString, "https://api.anthropic.com/v1/messages")
+        XCTAssertEqual(ask.url, meal.url)
+        XCTAssertEqual(meal.timeoutInterval, 45)
+        XCTAssertEqual(ask.timeoutInterval, 120)
+        let mealBody = try json(meal)
+        let askBody = try json(ask)
+        XCTAssertEqual(mealBody["model"] as? String, "claude-haiku-5-5")
+        XCTAssertEqual(askBody["model"] as? String, "claude-haiku-5-5")
+        XCTAssertEqual(mealBody["max_tokens"] as? Int, 1024)
+        XCTAssertEqual(askBody["max_tokens"] as? Int, 16000)
+
+        let openai = MealAIConfig(provider: .openai, model: " custom ", apiKey: "sk-test")
+        let mealOpenAI = try MealAI.request("eggs", config: openai)
+        XCTAssertEqual(mealOpenAI.url?.absoluteString, "https://api.openai.com/v1/chat/completions")
+        XCTAssertEqual(mealOpenAI.value(forHTTPHeaderField: "Authorization"), "Bearer sk-test")
+        let openAIBody = try json(mealOpenAI)
+        XCTAssertEqual(openAIBody["model"] as? String, " custom ")
+        XCTAssertEqual((openAIBody["temperature"] as? NSNumber)?.doubleValue ?? -1, 0.2, accuracy: 0.0001)
+        XCTAssertEqual((openAIBody["response_format"] as? [String: Any])?["type"] as? String, "json_object")
+
+        let xai = MealAIConfig(provider: .xai, model: "grok-4-fast", apiKey: "xai-test")
+        let askXAI = try AskCloud.request(xai, system: "sys", messages: [["role": "user", "content": "q"]], tools: true)
+        XCTAssertEqual(askXAI.url?.absoluteString, "https://api.x.ai/v1/chat/completions")
+        XCTAssertEqual(askXAI.value(forHTTPHeaderField: "Authorization"), "Bearer xai-test")
+        let xaiBody = try json(askXAI)
+        XCTAssertNil(xaiBody["temperature"])
+        XCTAssertNotNil(xaiBody["tools"])
+
+        let google = MealAIConfig(provider: .google, model: "gemini-2.5-flash", apiKey: "AIza-test")
+        let mealGoogle = try MealAI.request("eggs", config: google)
+        XCTAssertEqual(mealGoogle.url?.absoluteString, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent")
+        XCTAssertEqual(mealGoogle.value(forHTTPHeaderField: "x-goog-api-key"), "AIza-test")
+    }
+
+    func testProviderStatusSentences() {
+        XCTAssertEqual(AIRequest.failure(status: 401, name: "OpenAI", model: "m"),
+                       .server("OpenAI didn’t accept the key. Check it in Account."))
+        XCTAssertEqual(AIRequest.failure(status: 403, name: "Anthropic (Claude)", model: "m"),
+                       .server("Anthropic (Claude) didn’t accept the key. Check it in Account."))
+        XCTAssertEqual(AIRequest.failure(status: 404, name: "xAI (Grok)", model: "nope"),
+                       .server("xAI (Grok) doesn’t know the model “nope”. Change it in Account."))
+        XCTAssertEqual(AIRequest.failure(status: 429, name: "Google (Gemini)", model: "g"),
+                       .server("Google (Gemini) says the key is out of quota or rate-limited."))
+        XCTAssertEqual(AIRequest.failure(status: 500, name: "OpenAI", model: "m"), .server("OpenAI returned 500."))
+        XCTAssertEqual(AIRequest.failure(status: 500, name: "OpenAI", model: "m", json: ["error": ["message": "overloaded"]]),
+                       .server("overloaded"))
+    }
+
+    func testMealEstimateUsesTheStatusSentences() async {
+        let config = MealAIConfig(provider: .openai, model: "gpt-4.1-mini", apiKey: "sk-test")
+        let session = StatusStub.session
+        StatusStub.status = 404
+        StatusStub.body = Data("{}".utf8)
+        do {
+            _ = try await MealAI.estimate("eggs", config: config, session: session)
+            XCTFail("expected a 404")
+        } catch let error as LogError {
+            XCTAssertEqual(error, .server("OpenAI doesn’t know the model “gpt-4.1-mini”. Change it in Account."))
+        } catch {
+            XCTFail("unexpected \(error)")
+        }
+        StatusStub.status = 500
+        do {
+            _ = try await MealAI.estimate("eggs", config: config, session: session)
+            XCTFail("expected a 500")
+        } catch let error as LogError {
+            XCTAssertEqual(error, .server("OpenAI returned 500."))
+        } catch {
+            XCTFail("unexpected \(error)")
+        }
+    }
+
+    private func json(_ req: URLRequest) throws -> [String: Any] {
+        try JSONSerialization.jsonObject(with: req.httpBody ?? Data()) as? [String: Any] ?? [:]
+    }
+}
+
+/// Answers MealAI.estimate without leaving the test process.
+private final class StatusStub: URLProtocol, @unchecked Sendable {
+    static var status = 200
+    static var body = Data()
+
+    static var session: URLSession {
+        let c = URLSessionConfiguration.ephemeral
+        c.protocolClasses = [StatusStub.self]
+        return URLSession(configuration: c)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: "HTTP/1.1", headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }

@@ -58,7 +58,7 @@ final class LogHealthTests: XCTestCase {
         w.workouts = [
             HealthWorkoutSample(start: at(a, 7), end: at(a, 7.75), type: "running", durationSeconds: 2701,
                                 distanceMeters: 8046.72, energyKcal: 512.6, indoor: "0"),
-            HealthWorkoutSample(start: at(b, 18), end: at(b, 18.35), type: "highIntensityIntervalTraining", durationSeconds: 1234),
+            HealthWorkoutSample(start: at(b, 18), end: at(b, 18.35), type: "high intensity interval training", durationSeconds: 1234),
         ]
         return w
     }
@@ -145,14 +145,12 @@ final class LogHealthTests: XCTestCase {
         XCTAssertNil(hiit.indoor)
     }
 
-    func testWorkoutNamesMatchThePlugin() {
-        XCTAssertEqual(HealthKitReader.workoutName(.traditionalStrengthTraining), "strengthTraining")
+    func testWorkoutNamesAreTheStoredLabels() {
+        XCTAssertEqual(HealthKitReader.workoutName(.traditionalStrengthTraining), "strength training")
         XCTAssertEqual(HealthKitReader.workoutName(.running), "running")
         XCTAssertEqual(HealthKitReader.workoutName(.stairClimbing), "other")
-        XCTAssertEqual(HealthAggregate.words(HealthKitReader.workoutName(.highIntensityIntervalTraining)), "high intensity interval training")
-        XCTAssertEqual(HealthAggregate.words(HealthKitReader.workoutName(.traditionalStrengthTraining)), "strength training")
-        XCTAssertEqual(HealthAggregate.words(nil), "other")
-        XCTAssertEqual(HealthAggregate.words(""), "other")
+        XCTAssertEqual(HealthKitReader.workoutName(.highIntensityIntervalTraining), "high intensity interval training")
+        XCTAssertEqual(HealthKitReader.workoutName(.mindAndBody), "mind and body")
         XCTAssertEqual(HealthKitReader.metadataText(NSNumber(value: true)), "1")
         XCTAssertEqual(HealthKitReader.metadataText("true"), "true")
         XCTAssertNil(HealthKitReader.metadataText(nil))
