@@ -96,8 +96,7 @@ public enum Analytics {
     }
 
     public static func retaSwitchAt(_ d: Dashboard) -> Date {
-        if let started = d.protocols.first(where: { ($0.compound ?? "").lowercased() == "retatrutide" })?.startedOn,
-           !started.isEmpty {
+        if let started = protocolRow(d, "retatrutide")?.startedOn, !started.isEmpty {
             return LogTime.noon(started)
         }
         return LogTime.retaStart

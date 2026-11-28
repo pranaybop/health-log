@@ -26,6 +26,12 @@ public struct StallResult: Hashable, Sendable {
     public var change: Double?
     public var fromLb: Double?
     public var toLb: Double?
+    /// Day keys of the 3-week window, and weigh-in days in the last 40 and 21.
+    /// Trends writes its stall sentence from these instead of fitting the line again.
+    public var fromDay: String?
+    public var toDay: String?
+    public var weighIns40: Int = 0
+    public var weighIns21: Int = 0
 }
 
 /// One night's sleep stages in minutes (log.health_metrics sleep_*_min).
@@ -71,6 +77,7 @@ extension Analytics {
 
     // MARK: Weight
 
+    /// The latest weigh-in each day, oldest first.
     public static func dailyWeight(_ points: [WeightPoint]) -> [WeightPoint] {
         var byDay: [String: WeightPoint] = [:]
         for p in points { byDay[p.day] = p }
@@ -128,22 +135,15 @@ extension Analytics {
     /// in the last 21 (and 6 in the last 40).
     public static func stallCheck(_ points: [WeightPoint], now: Date = Date()) -> StallResult {
         let daily = dailyWeight(points.filter { $0.at >= now.addingTimeInterval(-40 * 86400) })
-        guard daily.count >= 6 else { return StallResult(stalled: false, ready: false) }
         let win = daily.filter { $0.at >= now.addingTimeInterval(-21 * 86400) }
-        guard win.count >= 4, let a = win.first, let b = win.last else { return StallResult(stalled: false, ready: false) }
+        guard daily.count >= 6, win.count >= 4, let a = win.first, let b = win.last else {
+            return StallResult(stalled: false, ready: false, weighIns40: daily.count, weighIns21: win.count)
+        }
         let xy: [(x: Double, y: Double)] = win.map { (x: $0.at.timeIntervalSince(a.at) / 86400, y: $0.lb) }
         let change = b.lb - a.lb
         let weekly = linearFit(xy).map { $0.slope * 7 } ?? change / 3
-        return StallResult(stalled: abs(weekly) < 0.4 && abs(change) < 2, ready: true, weekly: weekly, change: change, fromLb: a.lb, toLb: b.lb)
-    }
-
-    // MARK: Doses
-
-    public static func plannedNextDose(_ d: Dashboard) -> Date? {
-        let list = d.doses.filter { $0.skipped != true && $0.doseMg != nil && $0.takenDate != nil }
-        guard let last = list.last?.takenDate else { return nil }
-        let next = last.addingTimeInterval(7 * 86400)
-        return next >= LogTime.retaStart ? nil : next
+        return StallResult(stalled: abs(weekly) < 0.4 && abs(change) < 2, ready: true, weekly: weekly, change: change,
+                           fromLb: a.lb, toLb: b.lb, fromDay: a.day, toDay: b.day, weighIns40: daily.count, weighIns21: win.count)
     }
 
     // MARK: Days
@@ -214,30 +214,35 @@ extension Analytics {
     /// Each signal on `key` against the 30 days before it (at least 7 of them): the median, and a
     /// spread from the median absolute deviation. Off means past max(2 × spread, the floor).
     public static func offNormal(_ d: Dashboard, on key: String) -> [SignalCheck] {
-        var out: [SignalCheck] = []
-        let start = LogTime.shift(key, -30)
-        for s in normalSignals {
-            var m: [String: Double] = [:]
-            if s.daily {
-                let field: KeyPath<DailyHealth, Double?> = s.id == "resting_hr" ? \DailyHealth.restingHr : \DailyHealth.hrvMs
-                for r in d.dailyHealth { if let v = r[keyPath: field] { m[r.day] = v } }
-            } else {
-                for p in metric(d, s.id) { m[p.key] = p.value }
-            }
-            guard let v = m[key] else { continue }
-            var base: [Double] = []
-            var k = start
-            while k < key {
-                if let x = m[k] { base.append(x) }
-                k = LogTime.shift(k, 1)
-            }
-            guard base.count >= 7, let med = median(base), let mad = median(base.map { abs($0 - med) }) else { continue }
-            let margin = max(2 * 1.4826 * mad, s.floor(median: med))
-            let diff = v - med
-            let off = s.up ? diff >= margin : -diff >= margin
-            out.append(SignalCheck(spec: s, value: v, median: med, diff: diff, off: off))
+        normalSignals.compactMap { spec in
+            guard let hit = signalOff(signalSeries(spec, d), on: key, spec) else { return nil }
+            return SignalCheck(spec: spec, value: hit.value, median: hit.median, diff: hit.diff, off: hit.off)
         }
-        return out
+    }
+
+    static func signalSeries(_ spec: SignalSpec, _ d: Dashboard) -> [String: Double] {
+        var m: [String: Double] = [:]
+        if spec.daily {
+            let field: KeyPath<DailyHealth, Double?> = spec.id == "resting_hr" ? \.restingHr : \.hrvMs
+            for r in d.dailyHealth { if let v = r[keyPath: field] { m[r.day] = v } }
+        } else {
+            for p in metric(d, spec.id) { m[p.key] = p.value }
+        }
+        return m
+    }
+
+    static func signalOff(_ values: [String: Double], on key: String, _ spec: SignalSpec) -> (value: Double, median: Double, diff: Double, off: Bool)? {
+        guard let v = values[key] else { return nil }
+        var base: [Double] = []
+        var day = LogTime.shift(key, -30)
+        while day < key {
+            if let x = values[day] { base.append(x) }
+            day = LogTime.shift(day, 1)
+        }
+        guard base.count >= 7, let med = median(base), let mad = median(base.map { abs($0 - med) }) else { return nil }
+        let margin = max(2 * 1.4826 * mad, spec.floor(median: med))
+        let diff = v - med
+        return (v, med, diff, spec.up ? diff >= margin : -diff >= margin)
     }
 
     // MARK: Protein
