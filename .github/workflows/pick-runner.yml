@@ -1,5 +1,5 @@
 # Chooses where iOS jobs run. No runner-list API and no extra token.
-# Trusted: push to main, native/**, or cursor/**; workflow_dispatch; a pull request whose
+# Trusted: push to main, native/**, cursor/**, or claude/**; workflow_dispatch; a pull request whose
 # head repository is this one. Those refs use the mac-mini labels.
 # Fork pull requests stay on macos-15. pull_request_target is never trusted.
 # Repository variable IOS_RUNNER=hosted forces macos-15 even for a trusted ref
@@ -73,7 +73,7 @@ jobs:
                   return True, "workflow_dispatch"
               if event == "push":
                   branch = ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ""
-                  if branch == "main" or branch.startswith("native/") or branch.startswith("cursor/"):
+                  if branch == "main" or branch.startswith(("native/", "cursor/", "claude/")):
                       return True, "push to " + (branch or ref)
                   return False, "push to " + (branch or ref) + " is not a trusted branch"
               if event == "pull_request":

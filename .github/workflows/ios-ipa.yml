@@ -7,7 +7,7 @@ name: iPhone app (.ipa)
 on:
   workflow_dispatch:
   push:
-    branches: [main, "cursor/**", "native/**"]
+    branches: [main, "cursor/**", "native/**", "claude/**"]
     paths:
       - "ios-app/**"
       - ".github/workflows/ios-ipa.yml"
@@ -120,10 +120,13 @@ jobs:
           fi
 
   # A debug copy in the iPhone simulator on made-up data: package tests, tabs, screenshots.
+  # After the .ipa, so on the one Mac mini the installable app is ready in ~5 minutes instead of
+  # waiting behind the screenshots. Runs even if the device build failed.
   simulator:
-    needs: [pick-runner]
+    needs: [pick-runner, build]
+    if: ${{ always() && needs.pick-runner.result == 'success' }}
     uses: ./.github/workflows/ios-check.yml
     with:
       runs_on: ${{ needs.pick-runner.outputs.runs_on }}
-      # Every screenshot list when started by hand (Run workflow); one shot per tab on pushes.
-      shots: ${{ github.event_name == 'workflow_dispatch' && 'all' || 'quick' }}
+      # Full screenshot lists on main and on Run workflow. One shot per tab on feature-branch pushes.
+      shots: ${{ (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main') && 'all' || 'quick' }}
