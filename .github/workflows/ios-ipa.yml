@@ -1,5 +1,5 @@
 # Builds the Log iPhone app on a Mac runner and saves an unsigned .ipa, named with its
-# version and build number (Log-1.1-12.ipa). The app is all native Swift (ios-app/ios/App).
+# version (ios-app/VERSION) and build number. The app is all native Swift (ios-app/ios/App).
 # Install it with Sideloadly or AltStore, which sign it with your Apple ID.
 # No secrets or certificates are used or needed here.
 name: iPhone app (.ipa)

@@ -57,7 +57,7 @@ Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today
 
 After a weigh-in, the Log tab offers an optional photo (camera or library). It’s resized to a JPEG and stored in the private `progress-photos` bucket. Trends → Weight scrolls the photos with their date and weight, and a photo can be deleted.
 
-The bucket, its RLS policies, and the `log.progress_photos` columns are in `supabase/migrations/20261125_progress_photos.sql`. That migration has to be applied by hand, then the `log-dashboard` and `log-write` Edge Functions deployed. Until both are live, the rest of the app still loads and the photo step reports that it couldn’t save.
+The bucket, its RLS policies, and the `log.progress_photos` columns are in `supabase/migrations/20261125_progress_photos.sql`.
 
 ## Readiness
 
@@ -78,7 +78,7 @@ Edit the screen in `ios/App/LogNative`; `swift test` there (or the workflow) run
 
 ## Versions
 
-Each build is **version** (from `VERSION`) plus **build** (the workflow's run number): `Log 1.1 (build 14)`. It's set as the app's version in iOS (**Settings > General > iPhone Storage > Log** shows it), in the file name (`Log-1.1-14.ipa`), the artifact name (`Log-1.1-build-14`), and at the bottom of the app's Log tab with the build date.
+Each build is **version** (from `VERSION`) plus **build** (the workflow's run number). It's set as the app's version in iOS (**Settings > General > iPhone Storage > Log** shows it), in the file name, the artifact name, and at the bottom of the app's Log tab with the build date.
 
 ## Get an .ipa without Xcode
 
@@ -90,8 +90,6 @@ To put it on your iPhone, use a sideloading tool on a Mac or PC, which signs it 
 - **AltStore** (AltServer on the Mac mini): re-signs the app over Wi-Fi every few days so it doesn't lapse.
 
 Then on the iPhone turn on **Settings > Privacy & Security > Developer Mode** and trust your Apple ID under **Settings > General > VPN & Device Management**. With a free Apple ID the app has to be re-signed every 7 days (AltStore does this for you). Whether Apple Health access survives signing with a free Apple ID isn't guaranteed; if Health sync can't get permission, the rest of the app still works, and building from Xcode with your Apple ID is the fallback.
-
-## Build from Xcode instead
 
 ## What you need
 

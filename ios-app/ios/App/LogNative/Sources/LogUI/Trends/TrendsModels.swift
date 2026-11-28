@@ -240,7 +240,6 @@ struct TrHealthDef: Hashable {
         ]),
     ]
 
-    /// metricParts: the number and its unit.
     func parts(_ v: Double, _ pairV: Double?) -> (String, String) {
         switch style {
         case .minutes:
@@ -257,7 +256,7 @@ struct TrHealthDef: Hashable {
         }
     }
 
-    /// metricText: "72 bpm", "97%", "7 h 5 min"
+    /// "72 bpm", "97%", "7 h 5 min"
     func text(_ v: Double, _ pairV: Double?) -> String {
         let (a, b) = parts(v, pairV)
         if b.isEmpty { return a }

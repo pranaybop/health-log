@@ -21,8 +21,6 @@ public enum HealthPayload {
         return stride(from: 0, to: list.count, by: size).map { Array(list[$0..<min($0 + size, list.count)]) }
     }
 
-    /// A number as JSON.stringify writes it: whole numbers as integers, others with the shortest
-    /// digits that round-trip (72.3, not 72.299999999999997), so the stored values match the web's.
     public static func number(_ v: Double) -> Any {
         if v == v.rounded(), abs(v) < 1e15 { return Int(v) }
         return Decimal(string: "\(v)", locale: Locale(identifier: "en_US_POSIX")) ?? v

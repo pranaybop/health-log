@@ -1,5 +1,4 @@
 # Simulator screenshots in CI (ios-check.yml). One per line: name tab light|dark [more launch arguments]
-# Each tab shows its native screen once that screen is ready, else the web version.
 # Add your own list as another .txt file in this folder rather than editing this one.
 today-light today light
 trends-light trends light

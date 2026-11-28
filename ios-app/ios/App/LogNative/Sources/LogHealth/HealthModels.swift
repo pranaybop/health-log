@@ -2,13 +2,13 @@ import Foundation
 import LogCore
 
 
-/// One reading: a quantity sample (in the plugin's default unit), a sleep segment, a stand hour
+/// One reading: a quantity sample, a sleep segment, a stand hour
 /// (1 stood, 0 not), a mindful session (minutes), a blood pressure pair or a State of Mind valence.
 public struct HealthSample: Equatable, Sendable {
     public var start: Date
     public var end: Date
     public var value: Double
-    /// "kilogram", "celsius", "percent" ... as the plugin named them (some conversions check it).
+    /// "kilogram", "celsius", "percent" ... (some conversions check it).
     public var unit: String?
     /// The app that wrote it (bundle id, else name). Cumulative types are totalled per source.
     public var source: String
@@ -49,9 +49,8 @@ public struct HealthDayStat: Equatable, Sendable {
 public struct HealthWorkoutSample: Equatable, Sendable {
     public var start: Date
     public var end: Date?
-    /// The plugin's camelCase workout type ("running", "strengthTraining", "other").
+    /// CamelCase workout type ("running", "strengthTraining", "other").
     public var type: String
-    /// Whole seconds, like the plugin sent it.
     public var durationSeconds: Int
     public var distanceMeters: Double?
     public var energyKcal: Double?
@@ -78,7 +77,7 @@ public struct HealthWindowSamples: Sendable {
     public var heartRate: [String: HealthDayStat] = [:]
     public var water: [String: HealthDayStat] = [:]
     public var dietary: [String: HealthDayStat] = [:]
-    // Samples, oldest first (the plugin's readSamples).
+    // Samples, oldest first.
     public var exercise: [HealthSample] = []
     public var stand: [HealthSample] = []
     public var vo2: [HealthSample] = []

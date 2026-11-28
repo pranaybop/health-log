@@ -1330,7 +1330,6 @@ extension Analytics.Trends {
         return v
     }
 
-    /// A number the way JavaScript's String() writes it: 540, 32.5.
     static func raw(_ v: Double?) -> String? {
         guard let v, v.isFinite else { return nil }
         if v == v.rounded() && abs(v) < 1e15 { return String(Int64(v)) }

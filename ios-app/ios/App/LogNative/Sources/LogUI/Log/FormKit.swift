@@ -63,7 +63,7 @@ enum MLNum {
         let t = text(s)
         return t.isEmpty ? nil : Double(t)
     }
-    /// parseInt: the whole-number part.
+    /// The whole-number part.
     static func int(_ s: String) -> Int? {
         guard let v = double(s), abs(v) < 1e15 else { return nil }
         return Int(v.rounded(.towardZero))
