@@ -166,10 +166,12 @@ final class DemoFlowsUITests: XCTestCase {
         return app
     }
 
-    private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 20) {
+    @discardableResult
+    private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 20) -> XCUIElement {
         let ready = NSPredicate(format: "exists == 1 AND isHittable == 1")
         let exp = XCTNSPredicateExpectation(predicate: ready, object: element)
         XCTAssertEqual(XCTWaiter().wait(for: [exp], timeout: timeout), .completed, "\(element) did not become hittable")
+        return element
     }
 
     @discardableResult
