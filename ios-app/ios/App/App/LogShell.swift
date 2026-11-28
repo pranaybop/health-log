@@ -50,6 +50,7 @@ final class ShellTabBarController: UITabBarController {
         store.healthSync = { days in _ = await NativeHealthSync.shared.sync(days: days) }
         store.onLockChange = { [weak self] locked in self?.nativeLockChanged(locked) }
         store.onDataChange = { [weak self] in self?.gateChanged() }
+        ReminderProbe.install(on: view)
         ReminderScheduler.shared.bind()
 
         var start = 0
@@ -104,6 +105,7 @@ final class ShellTabBarController: UITabBarController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        ReminderProbe.install(on: view)
         if store.isLocked || store.needsOnboarding { presentLock() }
     }
 

@@ -128,6 +128,7 @@ struct MLInput: View {
     var keyboard: UIKeyboardType = .default
     var maxLength: Int? = nil
     var big = false
+    var identifier: String? = nil
 
     var body: some View {
         MLField(label) {
@@ -142,6 +143,7 @@ struct MLInput: View {
                     if let m = maxLength, new.count > m { text = String(new.prefix(m)) }
                 }
                 .accessibilityLabel(label)
+                .modifier(MLIdentifier(id: identifier))
         }
     }
 }
@@ -218,6 +220,7 @@ struct MLScale: View {
 struct MLSaveButton: View {
     let title: String
     let busy: Bool
+    var identifier: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -232,6 +235,18 @@ struct MLSaveButton: View {
         .buttonStyle(.borderedProminent)
         .tint(LogColor.accent)
         .disabled(busy)
+        .modifier(MLIdentifier(id: identifier))
+    }
+}
+
+private struct MLIdentifier: ViewModifier {
+    var id: String?
+    func body(content: Content) -> some View {
+        if let id {
+            content.accessibilityIdentifier(id)
+        } else {
+            content
+        }
     }
 }
 
@@ -247,6 +262,7 @@ struct MLMessageView: View {
                 .padding(.vertical, 10)
                 .background(m.ok ? LogColor.goodSoft : LogColor.critSoft, in: RoundedRectangle(cornerRadius: LogMetric.innerRadius, style: .continuous))
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("form.message")
                 .transition(.opacity)
         }
     }

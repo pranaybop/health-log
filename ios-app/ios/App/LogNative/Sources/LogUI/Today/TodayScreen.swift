@@ -284,7 +284,7 @@ public struct TodayScreen: View {
         if TodayDebug.open == "checkin" { checkinDay = CheckinDay(key: m.key, isToday: m.isToday) }
         if TodayDebug.open == "month" { monthOpen = true }
         guard let id = TodayDebug.scrollTo else { return }
-        try? await Task.sleep(nanoseconds: 800_000_000)
+        if !MLDebug.flag("-uiTest") { try? await Task.sleep(nanoseconds: 800_000_000) }
         proxy.scrollTo(id, anchor: .top)
     }
 }

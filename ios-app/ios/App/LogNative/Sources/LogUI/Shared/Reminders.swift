@@ -35,6 +35,77 @@ enum ReminderRouter {
     }
 }
 
+/// UI tests read scheduled reminder ids from this. A normal launch does not install it.
+public enum ReminderProbe {
+    public static let identifier = "reminders.scheduled"
+
+    public static func install(on view: UIView) {
+        #if DEBUG
+        guard MLDebug.flag("-scriptedReminders") else { return }
+        ScriptedReminders.installProbe(on: view)
+        #endif
+    }
+}
+
+#if DEBUG
+/// In-memory stand-in for UNUserNotificationCenter. `-scriptedReminders` selects it, and
+/// `-reminderDenied` makes the permission request fail. No system alert, no real scheduling.
+enum ScriptedReminders {
+    static var active: Bool { MLDebug.flag("-scriptedReminders") }
+    private static let gate = NSLock()
+    private static var storedStatus: UNAuthorizationStatus = .notDetermined
+    private static weak var probe: UILabel?
+
+    static var status: UNAuthorizationStatus {
+        gate.lock()
+        defer { gate.unlock() }
+        return storedStatus
+    }
+
+    static func authorize() -> Bool {
+        gate.lock()
+        if MLDebug.flag("-reminderDenied") {
+            storedStatus = .denied
+        } else {
+            storedStatus = .authorized
+        }
+        let ok = storedStatus == .authorized
+        gate.unlock()
+        return ok
+    }
+
+    static func installProbe(on view: UIView) {
+        if let probe {
+            view.bringSubviewToFront(probe)
+            return
+        }
+        let label = UILabel(frame: CGRect(x: 0, y: 1, width: 160, height: 12))
+        label.isAccessibilityElement = true
+        label.accessibilityIdentifier = ReminderProbe.identifier
+        label.isUserInteractionEnabled = false
+        label.font = .systemFont(ofSize: 1)
+        label.text = "none"
+        label.accessibilityValue = "none"
+        view.addSubview(label)
+        probe = label
+    }
+
+    static func show(_ ids: [String]) {
+        let text = ids.isEmpty ? "none" : ids.joined(separator: " ")
+        let write = {
+            probe?.text = text
+            probe?.accessibilityValue = text
+            if let probe, let host = probe.superview { host.bringSubviewToFront(probe) }
+        }
+        if Thread.isMainThread {
+            write()
+        } else {
+            DispatchQueue.main.async(execute: write)
+        }
+    }
+}
+#endif
+
 public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     public static let shared = ReminderScheduler()
     private let lock = NSLock()
@@ -77,6 +148,9 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
 
     /// Ask only when someone turns a reminder on. Returns false if they decline or previously denied.
     public func authorize() async -> Bool {
+        #if DEBUG
+        if ScriptedReminders.active { return ScriptedReminders.authorize() }
+        #endif
         let center = UNUserNotificationCenter.current()
         let status = await center.notificationSettings().authorizationStatus
         switch status {
@@ -92,7 +166,10 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
     }
 
     public func authorization() async -> UNAuthorizationStatus {
-        await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        #if DEBUG
+        if ScriptedReminders.active { return ScriptedReminders.status }
+        #endif
+        return await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
     public func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
@@ -152,6 +229,12 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
     }
 
     private func apply(_ planned: [ReminderRequest], signature: String, generation: Int) async {
+        #if DEBUG
+        if ScriptedReminders.active {
+            applyScripted(planned, signature: signature, generation: generation)
+            return
+        }
+        #endif
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
         guard isCurrent(generation) else { return }
@@ -164,7 +247,7 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
             setApplied(nil, generation: generation)
             return
         }
-        let now = Date()
+        let now = TodayDebug.now ?? Date()
         for req in planned {
             if let day = req.day, let at = ReminderPlanner.fireDate(day, req.hour, req.minute), at <= now { continue }
             let content = UNMutableNotificationContent()
@@ -188,6 +271,26 @@ public final class ReminderScheduler: NSObject, UNUserNotificationCenterDelegate
         }
         setApplied(signature, generation: generation)
     }
+
+    #if DEBUG
+    /// Same keep-or-drop rule as the real center, written onto the probe instead of iOS.
+    private func applyScripted(_ planned: [ReminderRequest], signature: String, generation: Int) {
+        guard isCurrent(generation) else { return }
+        let status = ScriptedReminders.status
+        guard status == .authorized || status == .provisional || status == .ephemeral else {
+            setApplied(nil, generation: generation)
+            ScriptedReminders.show([])
+            return
+        }
+        let now = TodayDebug.now ?? Date()
+        let kept = planned.filter { req in
+            guard let day = req.day, let at = ReminderPlanner.fireDate(day, req.hour, req.minute) else { return true }
+            return at > now
+        }
+        setApplied(signature, generation: generation)
+        ScriptedReminders.show(kept.map(\.id))
+    }
+    #endif
 }
 
 @MainActor
@@ -266,15 +369,15 @@ struct ReminderSettingsCard: View {
     var body: some View {
         LogCard("Reminders") {
             Caption("Shot day, an evening check-in, a morning weigh-in, and progress alerts. They stay on this phone.")
-            row("Shot day", "The planned dose, including one you missed",
+            row("Shot day", "The planned dose, including one you missed", id: "reminder.shot",
                 on: model.settings.shot, time: model.settings.shotHour, minute: model.settings.shotMinute,
                 toggle: { await model.setShot($0) }, clock: { model.setShotClock($0) })
             MLHairline()
-            row("Evening check-in", "How the day went",
+            row("Evening check-in", "How the day went", id: "reminder.checkin",
                 on: model.settings.checkin, time: model.settings.checkinHour, minute: model.settings.checkinMinute,
                 toggle: { await model.setCheckin($0) }, clock: { model.setCheckinClock($0) })
             MLHairline()
-            row("Morning weigh-in", "Log your weight",
+            row("Morning weigh-in", "Log your weight", id: "reminder.weigh",
                 on: model.settings.weighIn, time: model.settings.weighHour, minute: model.settings.weighMinute,
                 toggle: { await model.setWeigh($0) }, clock: { model.setWeighClock($0) })
             MLHairline()
@@ -282,6 +385,7 @@ struct ReminderSettingsCard: View {
             if model.allowed == false {
                 Text("Notifications are off for Log. Turn them on in iOS Settings to use these.")
                     .font(.footnote).foregroundStyle(LogColor.ink2).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("reminders.denied")
                 Button("Open Settings") { openSystemSettings() }
                     .buttonStyle(.bordered)
             } else {
@@ -292,7 +396,7 @@ struct ReminderSettingsCard: View {
         .onAppear { model.reload() }
     }
 
-    private func row(_ title: String, _ detail: String, on: Bool, time hour: Int, minute: Int,
+    private func row(_ title: String, _ detail: String, id: String, on: Bool, time hour: Int, minute: Int,
                      toggle: @escaping (Bool) async -> Void, clock: @escaping (Date) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: Binding(get: { on }, set: { value in Task { await toggle(value) } })) {
@@ -302,6 +406,7 @@ struct ReminderSettingsCard: View {
                 }
             }
             .tint(LogColor.good)
+            .accessibilityIdentifier(id)
             HStack {
                 Text("Time").font(.subheadline).foregroundStyle(LogColor.ink2)
                 Spacer(minLength: 8)

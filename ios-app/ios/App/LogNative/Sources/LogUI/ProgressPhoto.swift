@@ -79,6 +79,7 @@ struct WeighPhotoOffer: View {
             Text("Add a progress photo")
                 .font(.subheadline)
                 .foregroundStyle(LogColor.ink2)
+                .accessibilityIdentifier("weigh.photo")
             HStack(spacing: 10) {
                 Button {
                     if UIImagePickerController.isSourceTypeAvailable(.camera) {
@@ -91,11 +92,13 @@ struct WeighPhotoOffer: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(LogColor.accent)
+                .accessibilityIdentifier("weigh.camera")
                 PhotosPicker(selection: $libraryItem, matching: .images) {
                     Label("Library", systemImage: "photo").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .tint(LogColor.accent)
+                .accessibilityIdentifier("weigh.library")
             }
             .disabled(busy)
             HStack {
@@ -103,11 +106,13 @@ struct WeighPhotoOffer: View {
                     .font(.subheadline)
                     .foregroundStyle(LogColor.ink2)
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("weigh.photo.dismiss")
                 Spacer()
                 if busy { ProgressView() }
             }
             if let note {
                 Text(note).font(.footnote).foregroundStyle(LogColor.critInk)
+                    .accessibilityIdentifier("weigh.photo.note")
             }
         }
         .padding(.top, 4)

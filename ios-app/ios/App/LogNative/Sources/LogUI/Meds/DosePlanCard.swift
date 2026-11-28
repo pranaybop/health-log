@@ -38,6 +38,7 @@ struct MLDosePlanCard: View {
                 let week = next.week.map { ", week \(Fmt.num($0, 0)) of \(reta.count)" } ?? ""
                 Text("\(overdue ? "Overdue" : "Next"): \(Self.doseText(next))\(week).")
                     .font(.headline).foregroundStyle(LogColor.ink).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("dose.plan.next")
                 VStack(spacing: 0) {
                     PropRow(overdue ? "Was due" : "When", when(next.plannedOn))
                     if let draw = next.vialDraw, !draw.isEmpty { MLHairline(); PropRow("Draw from", draw) }
@@ -69,6 +70,7 @@ struct MLDosePlanCard: View {
                 Button("Remind me") { Task { await reminders.enableShot() } }
                     .buttonStyle(.borderedProminent)
                     .tint(LogColor.accent)
+                    .accessibilityIdentifier("dose.remind")
                 Button("Not now") { reminders.dismissShotPrompt() }
                     .buttonStyle(.bordered)
             }
@@ -82,6 +84,7 @@ struct MLDosePlanCard: View {
             }
             .buttonStyle(.bordered)
             .disabled(busy)
+            .accessibilityIdentifier("dose.skip")
             MLMessageView(message: message)
         }
     }

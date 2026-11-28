@@ -10,6 +10,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-uiTest") {
+            UIView.setAnimationsEnabled(false)
+            UserDefaults.standard.removeObject(forKey: ReminderSettings.storageKey)
+            UserDefaults.standard.removeObject(forKey: "log.photoPrompt.seen")
+            HealthSyncStatus.resetSaved()
+        }
+        #endif
         // Apple Health catch-up in the background (BGAppRefreshTask). Has to be registered before launch ends.
         NativeHealthSync.registerBackgroundTasks()
         ReminderScheduler.shared.install()

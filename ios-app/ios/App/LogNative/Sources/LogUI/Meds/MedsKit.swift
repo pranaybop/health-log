@@ -132,7 +132,8 @@ struct MLScrollOnLaunch: ViewModifier {
     func body(content: Content) -> some View {
         content.task(id: ready) {
             guard ready, let target = MLDebug.scrollTo else { return }
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            // Screenshots wait for the first layout. UI tests scroll on the next turn.
+            if !MLDebug.flag("-uiTest") { try? await Task.sleep(nanoseconds: 700_000_000) }
             proxy.scrollTo(target, anchor: .top)
         }
     }

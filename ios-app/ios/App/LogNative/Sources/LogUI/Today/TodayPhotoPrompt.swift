@@ -56,6 +56,7 @@ struct TodayPhotoPrompt: View {
                                          : "Add a progress photo for this weigh-in?")
                                 .font(.subheadline).foregroundStyle(LogColor.ink2)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("today.photo.prompt")
                         }
                     }
                     if open {
@@ -74,12 +75,14 @@ struct TodayPhotoPrompt: View {
                             .buttonStyle(.borderedProminent)
                             .buttonBorderShape(.capsule)
                             .tint(LogColor.accent)
+                            .accessibilityIdentifier("today.photo.add")
                             Button { withAnimation { seen = p.key } } label: {
                                 Text("Not now").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 2)
                             }
                             .buttonStyle(.bordered)
                             .buttonBorderShape(.capsule)
                             .tint(LogColor.ink2)
+                            .accessibilityIdentifier("today.photo.dismiss")
                         }
                     }
                 }

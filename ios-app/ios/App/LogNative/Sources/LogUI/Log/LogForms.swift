@@ -24,9 +24,9 @@ struct MLWeighInCard: View {
 
     var body: some View {
         LogCard("Weigh-in") {
-            MLInput(label: "Weight (lb)", text: $weight, placeholder: "0.0", keyboard: .decimalPad, big: true)
+            MLInput(label: "Weight (lb)", text: $weight, placeholder: "0.0", keyboard: .decimalPad, big: true, identifier: "weigh.weight")
             MLInput(label: "Notes", text: $notes, maxLength: 200)
-            MLSaveButton(title: "Save weigh-in", busy: busy, action: save)
+            MLSaveButton(title: "Save weigh-in", busy: busy, identifier: "weigh.save", action: save)
             MLMessageView(message: message)
             if let offer {
                 WeighPhotoOffer(offer: offer) {

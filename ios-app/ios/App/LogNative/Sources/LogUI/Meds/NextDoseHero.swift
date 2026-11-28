@@ -13,13 +13,14 @@ struct MLNextDoseHero: View {
 
     var body: some View {
         if let row = Analytics.nextPlanned(data) {
-            let now = Date()
+            let now = TodayDebug.now ?? Date()
             let days = LogTime.dayDiff(row.plannedOn, LogTime.today(now))
             let due = days <= 0
             let site = Analytics.siteRotation(data).next
             VStack(alignment: .leading, spacing: 6) {
                 Text(whenLine(days)).font(.footnote.weight(.semibold))
                     .foregroundStyle(days < 0 ? LogColor.warn : LogColor.heroInk2)
+                    .accessibilityIdentifier("dose.when")
                 Text("\(MLFmt.cap(row.compound)) \(Fmt.mg(row.doseMg)) mg")
                     .font(.system(size: 26, weight: .bold))
                     .foregroundStyle(.white)
