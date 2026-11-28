@@ -5,8 +5,9 @@
 #   2. a debug build of the whole app for the simulator. That build copies
 #      ios/screenshots/demo.json into the app bundle (Release builds leave it out).
 #   3. XCUI tests (AppUITests) on that Debug build, launched with -demo so they read the
-#      bundled demo.json. They run on the quick path and on the full path; the step's
-#      own elapsed time is the cost on top of the screenshot job.
+#      bundled demo.json. Only when shots is "all" (a push to main, or Run workflow).
+#      A feature-branch push (shots=quick) skips them: on pranay-mac-mini the step took
+#      122 seconds, longer than the quick screenshot set, so it stays off that path.
 #   4. screenshots: the app opens on each tab with -demo <tab>, from every list in
 #      ios-app/ios/screenshots/*.txt (one line each: name tab light|dark [more launch arguments]).
 #      They're printed into the log as base64 JPEG lines (IMGDATA <name> ...), so they can be read
@@ -154,7 +155,7 @@ jobs:
 
       - name: UI tests (demo data)
         id: uitests
-        if: steps.build.outcome == 'success'
+        if: steps.build.outcome == 'success' && inputs.shots == 'all'
         continue-on-error: true
         working-directory: ios-app/ios/App
         run: |
@@ -219,7 +220,9 @@ jobs:
           P="${{ steps.package.outcome }}"; B="${{ steps.build.outcome }}"; U="${{ steps.uitests.outcome }}"; S="${{ steps.shots.outcome }}"
           echo "package tests: $P, build: $B, ui tests: $U, screenshots: $S"
           echo "Runner: $RUNNER_NAME ($RUNNER_ENVIRONMENT)"
-          if [ "$P" = success ] && [ "$B" = success ] && [ "$U" = success ] && [ "$S" = success ]; then R=PASS; else R=FAIL; fi
+          # skipped: the quick path leaves UI tests off. A ran step still has to succeed.
+          if [ "$U" = success ] || [ "$U" = skipped ]; then UI_OK=1; else UI_OK=0; fi
+          if [ "$P" = success ] && [ "$B" = success ] && [ "$UI_OK" = 1 ] && [ "$S" = success ]; then R=PASS; else R=FAIL; fi
           echo "NATIVE-CHECK: $R"
           echo "### NATIVE-CHECK: $R (package tests $P, build $B, ui tests $U, screenshots $S)" >> "$GITHUB_STEP_SUMMARY"
           echo "Runner: $RUNNER_NAME ($RUNNER_ENVIRONMENT)" >> "$GITHUB_STEP_SUMMARY"
