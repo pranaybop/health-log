@@ -143,7 +143,7 @@ struct MLInput: View {
                     if let m = maxLength, new.count > m { text = String(new.prefix(m)) }
                 }
                 .accessibilityLabel(label)
-                .modifier(MLIdentifier(identifier))
+                .modifier(MLIdentifier(id: identifier))
         }
     }
 }
@@ -235,7 +235,7 @@ struct MLSaveButton: View {
         .buttonStyle(.borderedProminent)
         .tint(LogColor.accent)
         .disabled(busy)
-        .modifier(MLIdentifier(identifier))
+        .modifier(MLIdentifier(id: identifier))
     }
 }
 

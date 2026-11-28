@@ -14,6 +14,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         if ProcessInfo.processInfo.arguments.contains("-uiTest") {
             UIView.setAnimationsEnabled(false)
             UserDefaults.standard.removeObject(forKey: ReminderSettings.storageKey)
+            UserDefaults.standard.removeObject(forKey: "log.photoPrompt.seen")
             HealthSyncStatus.resetSaved()
         }
         #endif

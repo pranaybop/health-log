@@ -107,6 +107,26 @@ final class DemoFlowsUITests: XCTestCase {
         XCTAssertFalse(text.contains("log."))
     }
 
+    func testWeighInPhotoPromptOnToday() {
+        let app = launch("today", ["-now", "2026-11-24T23:20:00-06:00", "-scrollTo", "photo"])
+        let prompt = app.staticTexts["today.photo.prompt"]
+        waitHittable(prompt)
+        XCTAssertTrue(prompt.label.contains("progress photo"), prompt.label)
+        waitHittable(app.buttons["today.photo.add"]).tap()
+        let offer = app.staticTexts["weigh.photo"]
+        XCTAssertTrue(offer.waitForExistence(timeout: 8))
+        waitHittable(app.buttons["weigh.camera"]).tap()
+        let note = app.staticTexts["weigh.photo.note"]
+        XCTAssertTrue(note.waitForExistence(timeout: 8))
+        XCTAssertTrue(note.label.contains("available on this device"), note.label)
+        waitHittable(app.buttons["weigh.photo.dismiss"]).tap()
+        let offerGone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == 0"), object: offer)
+        XCTAssertEqual(XCTWaiter().wait(for: [offerGone], timeout: 8), .completed)
+        waitHittable(app.buttons["today.photo.dismiss"]).tap()
+        let promptGone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == 0"), object: prompt)
+        XCTAssertEqual(XCTWaiter().wait(for: [promptGone], timeout: 8), .completed)
+    }
+
     func testWeighInOffersAPhotoPrompt() {
         let app = launch("log", ["-scrollTo", "weigh", "-now", "2026-11-24T23:20:00-06:00"])
         let field = app.textFields["weigh.weight"]
