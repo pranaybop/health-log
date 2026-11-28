@@ -17,13 +17,13 @@ public final class LogStore {
     public private(set) var dashboard: Dashboard?
     /// When the shown data was produced (the payload's as_of), else when it was loaded.
     public private(set) var dataTime: Date?
-    public private(set) var isRefreshing = false
+    public internal(set) var isRefreshing = false
     /// Showing the copy saved on the phone while a refresh runs (or after one failed).
     public private(set) var fromCache = false
     /// The last refresh failed but saved data is showing.
     public private(set) var refreshFailed = false
     public private(set) var errorMessage: String?
-    public private(set) var isLocked: Bool
+    public internal(set) var isLocked: Bool
     /// The signed-in account's email (nil when using the passcode).
     public private(set) var accountEmail: String?
     /// This account holds the original (passcode) log, so the Grok bot logs meals for it.
@@ -35,6 +35,8 @@ public final class LogStore {
 
     /// Set by the app: run the native Apple Health sync for the last `days` days, then return.
     @ObservationIgnored public var healthSync: ((_ days: Int) async -> Void)?
+    /// Tests pin a credential so a write does not need the Keychain.
+    @ObservationIgnored var credentialOverride: LogCredential?
     /// Set by the app: called when the app locks or unlocks.
     @ObservationIgnored public var onLockChange: ((_ locked: Bool) -> Void)?
     /// Set by the app: called after new data, so it can show or hide first-run setup.
@@ -67,6 +69,7 @@ public final class LogStore {
     /// What the next request signs in with.
     public func credential() async -> LogCredential? {
         if isDemo { return .passcode("demo") }
+        if let credentialOverride { return credentialOverride }
         return await LogCredentials.shared.current()
     }
 
@@ -93,35 +96,50 @@ public final class LogStore {
         await refresh(syncHealth: true)
     }
 
+    /// One more pass when `refresh` was called while this one was still running (a save does that).
+    @ObservationIgnored var refreshAgain = false
+
     /// Fetch the payload. With `syncHealth`, run the native Apple Health sync first (last 2 days).
+    /// A refresh asked for while one is running is done once more when this one finishes.
     public func refresh(syncHealth: Bool = false) async {
-        guard !isLocked, !isRefreshing else { return }
+        guard !isLocked else { return }
+        if isRefreshing {
+            refreshAgain = true
+            return
+        }
         isRefreshing = true
         defer { isRefreshing = false }
-        if syncHealth, let sync = healthSync, !isDemo { await sync(2) }
-        if isDemo { loadDemo(); return }
-        guard let cred = await credential() else { lock(); return }
-        await flushQueue(cred)
-        do {
-            let (d, data) = try await LogAPI.fetchDashboard(cred)
-            apply(d)
-            fromCache = false
-            refreshFailed = false
-            errorMessage = nil
-            saveCache(data)
-        } catch LogError.unauthorized {
-            if case .session = cred {
-                SessionStore.clear()
-                accountEmail = nil
-                if PasscodeStore.read() != nil { Task { await self.refresh() }; return }
-                errorMessage = "You were signed out. Sign in again."
-            } else {
-                errorMessage = "That passcode didn’t work. Enter it again."
+        var syncFirst = syncHealth
+        while true {
+            refreshAgain = false
+            if syncFirst, let sync = healthSync, !isDemo { await sync(2) }
+            syncFirst = false
+            if isDemo { loadDemo(); return }
+            guard let cred = await credential() else { lock(); return }
+            await flushQueue(cred)
+            do {
+                let (d, data) = try await LogAPI.fetchDashboard(cred)
+                apply(d)
+                fromCache = false
+                refreshFailed = false
+                errorMessage = nil
+                saveCache(data)
+            } catch LogError.unauthorized {
+                if case .session = cred {
+                    SessionStore.clear()
+                    accountEmail = nil
+                    if PasscodeStore.read() != nil { Task { await self.refresh() }; return }
+                    errorMessage = "You were signed out. Sign in again."
+                } else {
+                    errorMessage = "That passcode didn’t work. Enter it again."
+                }
+                lock()
+                return
+            } catch {
+                refreshFailed = true
+                errorMessage = (error as? LogError)?.message ?? "Couldn’t refresh."
             }
-            lock()
-        } catch {
-            refreshFailed = true
-            errorMessage = (error as? LogError)?.message ?? "Couldn’t refresh."
+            guard refreshAgain, !isLocked else { return }
         }
     }
 
@@ -281,7 +299,8 @@ public final class LogStore {
             guard Self.queueable.contains(action) else { throw LogError.network(msg) }
             var p = payload
             if action == "food_thought", p["at"] == nil { p["at"] = ISO8601DateFormatter().string(from: Date()) }
-            enqueue(action, p)
+            // ok/queued means the form saved it. A full queue did not, so this has to fail.
+            guard enqueue(action, p) else { throw LogError.network(msg) }
             return ["ok": true, "queued": true]
         }
     }
@@ -290,6 +309,7 @@ public final class LogStore {
 
     /// Logs that are safe to send later, in order, once the connection is back.
     static let queueable: Set<String> = ["food_thought", "checkin_upsert", "side_effect_upsert", "earn_it", "meal_log", "measurement"]
+    static let pendingLimit = 200
     /// Waiting to send (shown on Today so nothing looks lost).
     public private(set) var pendingCount = 0
 
@@ -311,11 +331,15 @@ public final class LogStore {
         }
     }
 
-    private func enqueue(_ action: String, _ payload: [String: Any]) {
+    private func enqueue(_ action: String, _ payload: [String: Any]) -> Bool {
         var list = readQueue()
-        guard list.count < 200 else { return }
+        guard list.count < Self.pendingLimit else {
+            pendingCount = list.count
+            return false
+        }
         list.append(["action": action, "payload": payload])
         writeQueue(list)
+        return true
     }
 
     /// Send what's waiting. Stops at the first network failure; drops one the log rejects.
