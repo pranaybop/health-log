@@ -260,7 +260,6 @@ enum TodayText {
     /// "1 meal" / "4 meals"
     static func plural(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
 
-    /// A number the way JavaScript prints it: 9, 7.5.
     static func plain(_ v: Double?) -> String { Fmt.mg(v) }
 
     static func dayTitle(_ key: String, today: String, now: Date) -> String {

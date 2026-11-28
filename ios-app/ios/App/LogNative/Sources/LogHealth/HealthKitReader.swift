@@ -7,7 +7,7 @@ final class HealthKitReader: @unchecked Sendable {
 
     static var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
-    // MARK: Units (the plugin's defaults)
+    // MARK: Units
 
     enum Units {
         static let count = HKUnit.count()
@@ -139,7 +139,7 @@ final class HealthKitReader: @unchecked Sendable {
         return out
     }
 
-    /// The plugin's names for sleep stages (core is "light").
+    /// Core sleep is "light".
     static func sleepState(_ value: Int) -> String? {
         switch value {
         case HKCategoryValueSleepAnalysis.inBed.rawValue: return "inBed"

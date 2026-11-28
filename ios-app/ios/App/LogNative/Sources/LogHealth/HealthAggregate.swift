@@ -8,9 +8,6 @@ public enum HealthAggregate {
     public static let mToMi = 1 / 1609.344
     public static let lToFlOz = 33.814
 
-    // MARK: Rounding the way JavaScript does
-
-    /// Math.round: halves go up (toward +infinity), so -2.5 is -2.
     public static func jsRound(_ v: Double) -> Double {
         let f = v.rounded(.down)
         return v - f >= 0.5 ? f + 1 : f
@@ -21,7 +18,6 @@ public enum HealthAggregate {
 
     // MARK: Small helpers
 
-    /// Milliseconds since 1970, like Date.parse on the plugin's timestamps.
     static func ms(_ d: Date) -> Double { (d.timeIntervalSince1970 * 1000).rounded() }
 
     private static let isoFormatter: ISO8601DateFormatter = {
@@ -30,7 +26,6 @@ public enum HealthAggregate {
         return f
     }()
 
-    /// Date.toISOString(): "2026-11-24T15:04:05.123Z".
     public static func iso(_ d: Date) -> String { isoFormatter.string(from: d) }
 
     public static func words(_ camel: String?) -> String {
@@ -345,7 +340,7 @@ public enum HealthAggregate {
         return out
     }
 
-    /// Like [...new Map(list.map((x) => [key(x), x])).values()]: first position, last value.
+    /// First position, last value.
     static func uniq<T>(_ list: [T], _ key: (T) -> String) -> [T] {
         var order: [String] = []
         var seen: [String: T] = [:]

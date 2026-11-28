@@ -5,7 +5,7 @@ import UIKit
 import LogCore
 
 /// Apple Health sync in Swift. HealthKit reads (HealthAggregate) go to the `health_sync` and
-/// `health_metrics` log-write actions with the Keychain passcode.
+/// `health_metrics` log-write actions.
 ///
 /// - The history backfill carries on after a foreground catch-up until it's done; never in the
 ///   background task.
@@ -80,7 +80,7 @@ public final class NativeHealthSync: @unchecked Sendable {
 
     // MARK: Syncing
 
-    /// Sync the last `days` days. Uses the Keychain passcode. The app's catch-up: skipped if one
+    /// Sync the last `days` days. The app's catch-up: skipped if one
     /// ran under a minute ago.
     public func sync(days: Int) async -> HealthSyncResult {
         await run(days: days, mode: .catchUp)

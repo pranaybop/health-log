@@ -3,7 +3,6 @@ import LogCore
 
 
 enum MLTime {
-    /// Like JavaScript's toISOString: "2026-11-25T14:30:00.000Z".
     static func iso(_ d: Date) -> String {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
