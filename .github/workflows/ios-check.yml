@@ -54,13 +54,6 @@ jobs:
             xcodebuild -version
           fi
 
-      # MLX (the on-device model in Ask) compiles Metal shaders; Xcode 26+ ships the Metal
-      # toolchain as a separate download. It stays installed on the Mac mini after the first run.
-      - name: Metal toolchain
-        run: |
-          xcrun -f metal >/dev/null 2>&1 && xcrun metal -v >/dev/null 2>&1 && { echo "Metal toolchain present"; exit 0; }
-          xcodebuild -downloadComponent MetalToolchain
-
       - name: Pick a simulator
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c '
@@ -89,10 +82,31 @@ jobs:
                   if best is None or score > best[0]:
                       best = (score, d["udid"], n, rt)
           if best is None:
-              sys.exit("no matching iPhone simulator")
-          print(best[1])
-          print("Simulator:", best[2], best[3], file=sys.stderr)
+              print("No ready iPhone simulator; making one.", file=sys.stderr)
+          else:
+              print(best[1])
+              print("Simulator:", best[2], best[3], file=sys.stderr)
           ')
+          if [ -z "$UDID" ]; then
+            # After an Xcode update the old simulators can be gone: make one on the newest iOS runtime.
+            xcrun simctl list runtimes available
+            RUNTIME=$(xcrun simctl list runtimes available -j | python3 -c '
+          import json, sys
+          rts = [r for r in json.load(sys.stdin)["runtimes"] if r.get("platform") == "iOS" and r.get("isAvailable", True)]
+          rts.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+          print(rts[-1]["identifier"] if rts else "")
+          ')
+            [ -n "$RUNTIME" ] || { echo "No iOS simulator runtime installed. On the Mac mini: Xcode > Settings > Components > iOS."; exit 1; }
+            TYPE=$(xcrun simctl list devicetypes -j | python3 -c '
+          import json, re, sys
+          names = [t for t in json.load(sys.stdin)["devicetypes"] if re.fullmatch(r"iPhone \d+ Pro", t["name"])]
+          names.sort(key=lambda t: int(re.search(r"\d+", t["name"]).group()))
+          print(names[-1]["identifier"] if names else "")
+          ')
+            [ -n "$TYPE" ] || { echo "No iPhone Pro device type in this Xcode."; exit 1; }
+            UDID=$(xcrun simctl create "CI iPhone" "$TYPE" "$RUNTIME")
+            echo "Simulator: made $TYPE on $RUNTIME"
+          fi
           echo "UDID=$UDID" >> "$GITHUB_ENV"
 
       - name: Package tests (LogNative)

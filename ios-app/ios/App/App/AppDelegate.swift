@@ -13,6 +13,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Apple Health catch-up in the background (BGAppRefreshTask). Has to be registered before launch ends.
         NativeHealthSync.registerBackgroundTasks()
         ReminderScheduler.shared.install()
+        // Old builds downloaded on-device models (gigabytes); remove them, off the main thread.
+        DispatchQueue.global(qos: .utility).async { StorageCleanup.run() }
         return true
     }
 
