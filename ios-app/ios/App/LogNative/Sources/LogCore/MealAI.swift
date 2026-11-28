@@ -108,6 +108,47 @@ public struct MealEstimate: Sendable, Equatable {
     public var mealType: String?
 }
 
+enum AIRequest {
+    /// Current Messages API version (the one Ask sends). A meal estimate does not send
+    /// temperature, top_p or top_k, which this version rejects.
+    static let anthropicVersion = "2026-10-21"
+
+    static func model(_ config: MealAIConfig) -> String {
+        config.model.trimmingCharacters(in: .whitespaces).isEmpty ? config.provider.defaultModel : config.model
+    }
+
+    static func make(_ config: MealAIConfig, model: String, timeout: TimeInterval, body: [String: Any]) throws -> URLRequest {
+        var req: URLRequest
+        switch config.provider {
+        case .openai, .xai:
+            let base = config.provider == .openai ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions"
+            req = URLRequest(url: URL(string: base)!)
+            req.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
+        case .anthropic:
+            req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
+            req.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
+            req.setValue(anthropicVersion, forHTTPHeaderField: "anthropic-version")
+        case .google:
+            let escaped = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
+            req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(escaped):generateContent")!)
+            req.setValue(config.apiKey, forHTTPHeaderField: "x-goog-api-key")
+        }
+        req.httpMethod = "POST"
+        req.timeoutInterval = timeout
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return req
+    }
+
+    static func failure(status: Int, name: String, model: String, json: [String: Any] = [:]) -> LogError {
+        if status == 401 || status == 403 { return .server("\(name) didn’t accept the key. Check it in Account.") }
+        if status == 404 { return .server("\(name) doesn’t know the model “\(model)”. Change it in Account.") }
+        if status == 429 { return .server("\(name) says the key is out of quota or rate-limited.") }
+        let msg = (json["error"] as? [String: Any])?["message"] as? String
+        return .server(msg ?? "\(name) returned \(status).")
+    }
+}
+
 public enum MealAI {
     static let instructions = """
     You estimate nutrition for a food log. The user describes what they ate. Reply with JSON only, \
@@ -129,12 +170,7 @@ public enum MealAI {
         catch { throw LogError.network("Couldn’t reach \(config.provider.name). Check your connection.") }
         guard let http = response as? HTTPURLResponse else { throw LogError.network("No response.") }
         guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 || http.statusCode == 403 {
-                throw LogError.server("\(config.provider.name) didn’t accept the key. Check it in Account.")
-            }
-            if http.statusCode == 404 { throw LogError.server("\(config.provider.name) doesn’t know the model “\(config.model)”. Change it in Account.") }
-            if http.statusCode == 429 { throw LogError.server("\(config.provider.name) says the key is out of quota or rate-limited.") }
-            throw LogError.server("\(config.provider.name) returned \(http.statusCode).")
+            throw AIRequest.failure(status: http.statusCode, name: config.provider.name, model: config.model)
         }
         guard let reply = replyText(data, provider: config.provider) else {
             throw LogError.server("Couldn’t read \(config.provider.name)’s answer.")
@@ -145,37 +181,23 @@ public enum MealAI {
     }
 
     static func request(_ description: String, config: MealAIConfig) throws -> URLRequest {
-        let model = config.model.trimmingCharacters(in: .whitespaces).isEmpty ? config.provider.defaultModel : config.model
-        var req: URLRequest
+        let model = AIRequest.model(config)
         var body: [String: Any]
         switch config.provider {
         case .openai, .xai:
-            let base = config.provider == .openai ? "https://api.openai.com/v1/chat/completions" : "https://api.x.ai/v1/chat/completions"
-            req = URLRequest(url: URL(string: base)!)
-            req.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
             body = ["model": model,
                     "messages": [["role": "system", "content": instructions], ["role": "user", "content": description]],
                     "temperature": 0.2]
             if config.provider == .openai { body["response_format"] = ["type": "json_object"] }
         case .anthropic:
-            req = URLRequest(url: URL(string: "https://api.anthropic.com/v1/messages")!)
-            req.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
-            req.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             body = ["model": model, "max_tokens": 1024, "system": instructions,
                     "messages": [["role": "user", "content": description]]]
         case .google:
-            let escaped = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
-            req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(escaped):generateContent")!)
-            req.setValue(config.apiKey, forHTTPHeaderField: "x-goog-api-key")
             body = ["systemInstruction": ["parts": [["text": instructions]]],
                     "contents": [["role": "user", "parts": [["text": description]]]],
                     "generationConfig": ["responseMimeType": "application/json", "temperature": 0.2]]
         }
-        req.httpMethod = "POST"
-        req.timeoutInterval = 45
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        return req
+        return try AIRequest.make(config, model: model, timeout: 45, body: body)
     }
 
     /// The model's text from each provider's response shape.
