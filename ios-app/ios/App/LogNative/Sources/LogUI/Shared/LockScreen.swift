@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices // webAuthenticationSession, used by Google sign-in
 import CryptoKit
 import Security
 import LogCore
