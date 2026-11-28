@@ -11,7 +11,7 @@ import {
 // function talks to Supabase Auth with the project's anon key, server side.
 //
 // POST { action, ... }
-//   signup        { email, password }            -> session
+//   signup        { email, password }            -> session, or a confirm-email message
 //   signin        { email, password }            -> session
 //   refresh       { refresh_token }              -> session
 //   google_url    { redirect_to, code_challenge } -> { url } to open in a web auth session
@@ -23,8 +23,7 @@ import {
 //   claim         (Bearer + x-log-passcode)      -> moves the owner's existing log to this account
 //
 // A session is { access_token, refresh_token, expires_at, user: { id, email } }.
-// After every sign-in the owner check runs: if the email matches the owner's (set in the
-// database, never in this repo), the existing log moves to the account the first time.
+// Sign-in does not move the existing log. That happens only in `claim`, after the passcode matches.
 
 const MAX_BODY = 4096;
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
@@ -88,7 +87,19 @@ Deno.serve(async (req: Request) => {
     return json(status >= 500 ? 502 : 400, { ok: false, error: code, message: msg });
   };
 
-  // Shape a session for the app and run the owner check once.
+  // Whether this account already holds the log. p_by_passcode false never moves rows.
+  // The email is left null so a database that still claims on an email match cannot
+  // do it from sign-in, refresh, or me.
+  const readOwner = async (id: string) => {
+    const { data } = await admin.rpc("log_claim_owner", {
+      p_user: id,
+      p_email: null,
+      p_by_passcode: false,
+    });
+    return !!(data as Json | null)?.owner;
+  };
+
+  // Shape a session for the app.
   const session = async (data: Json) => {
     const user = (data.user ?? {}) as Json;
     const id = str(user.id);
@@ -96,12 +107,7 @@ Deno.serve(async (req: Request) => {
     if (!str(data.access_token) || !id) return json(502, { ok: false, error: "no_session" });
     let owner = false;
     try {
-      const { data: claim } = await admin.rpc("log_claim_owner", {
-        p_user: id,
-        p_email: email,
-        p_by_passcode: false,
-      });
-      owner = !!(claim as Json | null)?.owner;
+      owner = await readOwner(id);
     } catch (err) {
       console.error("log_claim_owner", err);
     }
@@ -128,17 +134,26 @@ Deno.serve(async (req: Request) => {
         return json(400, { ok: false, error: "weak_password", message: "Use at least 8 characters." });
       }
       if (action === "signup") {
-        // Created confirmed, so a friend can start right away without an email round trip.
-        const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-        if (created.error) {
-          const taken = /already|registered|exists/i.test(created.error.message);
+        // Public signup follows the project's confirm-email setting. This function does not confirm the address.
+        const r = await auth("signup", { email, password });
+        if (str(r.data.access_token)) return await session(r.data);
+        if (r.status !== 200) {
           await failDelay();
-          return json(400, {
-            ok: false,
-            error: taken ? "email_taken" : "signup_failed",
-            message: taken ? "That email already has an account. Sign in instead." : created.error.message,
-          });
+          const blob = `${str(r.data.error_code)} ${str(r.data.error)} ${str(r.data.msg)} ${str(r.data.message)}`;
+          if (/already|registered|exists/i.test(blob)) {
+            return json(400, {
+              ok: false,
+              error: "email_taken",
+              message: "That email already has an account. Sign in instead.",
+            });
+          }
+          return authError(r.status, r.data);
         }
+        return json(400, {
+          ok: false,
+          error: "email_not_confirmed",
+          message: "Check your email to confirm the account, then sign in.",
+        });
       }
       const r = await auth("token?grant_type=password", { email, password });
       if (r.status !== 200) {
@@ -251,15 +266,10 @@ Deno.serve(async (req: Request) => {
         }
         return json(200, { ok: true, owner: true, claimed: !!r.claimed });
       }
-      const { data } = await admin.rpc("log_claim_owner", {
-        p_user: caller.id,
-        p_email: caller.email,
-        p_by_passcode: false,
-      });
       return json(200, {
         ok: true,
         user: { id: caller.id, email: caller.email },
-        owner: !!(data as Json | null)?.owner,
+        owner: await readOwner(caller.id),
       });
     }
 
