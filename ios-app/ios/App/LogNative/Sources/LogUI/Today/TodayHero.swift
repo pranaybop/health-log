@@ -29,7 +29,7 @@ struct TodayHero: View {
             let pct: Double? = total.flatMap { $0 > 0 ? max(0, min(1, lost / $0)) : nil }
             VStack(alignment: .leading, spacing: 0) {
                 HeroNumber(value: Fmt.num(cur.lb, 1), muted: false)
-                Text("Weighed \(LogTime.weekdayDate(cur.at)), \(TodayText.timeCT(cur.at))")
+                Text("Weighed \(LogTime.weekdayDate(cur.at)), \(LogTime.timeWithZone(cur.at))")
                     .font(.subheadline).foregroundStyle(LogColor.ink2).padding(.top, 6)
                 Wrap {
                     TodayChip(text: "\(Fmt.signed(-lost)) lb since start", tone: lost > 0 ? .good : lost < 0 ? .watch : .plain)
@@ -116,7 +116,7 @@ struct TodayHero: View {
 
     private func metaLine(cur: WeightPoint?, count: Int) -> String {
         guard let cur else { return "No weigh-in this day. Showing the smoothed trend." }
-        return "Weighed \(TodayText.timeCT(cur.at))\(count > 1 ? ", \(count) weigh-ins that day" : "")"
+        return "Weighed \(LogTime.timeWithZone(cur.at))\(count > 1 ? ", \(count) weigh-ins that day" : "")"
     }
 }
 

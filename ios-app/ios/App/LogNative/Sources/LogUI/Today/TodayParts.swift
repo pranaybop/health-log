@@ -238,8 +238,6 @@ struct ShareBar: View {
 
 
 enum TodayText {
-    static func timeCT(_ d: Date) -> String { LogTime.time(d) + " CT" }
-
     static func weekdayDateYear(_ d: Date, now: Date) -> String {
         let y = LogTime.calendar.component(.year, from: d)
         return y == LogTime.calendar.component(.year, from: now) ? LogTime.weekdayDate(d) : "\(LogTime.weekdayDate(d)), \(y)"
@@ -251,17 +249,6 @@ enum TodayText {
         if n < 0 { return "\(-n) day\(n == -1 ? "" : "s") ago" }
         return "in \(n) days"
     }
-
-    static func capitalize(_ s: String) -> String {
-        guard let first = s.first else { return "" }
-        return String(first).uppercased() + s.dropFirst()
-    }
-
-    /// "1 meal" / "4 meals"
-    static func plural(_ n: Int, _ word: String) -> String { "\(n) \(word)\(n == 1 ? "" : "s")" }
-
-    /// A number the way JavaScript prints it: 9, 7.5.
-    static func plain(_ v: Double?) -> String { Fmt.mg(v) }
 
     static func dayTitle(_ key: String, today: String, now: Date) -> String {
         let off = LogTime.dayDiff(key, today)
@@ -291,6 +278,15 @@ enum TodayDebug {
         return args[i + 1]
         #else
         return nil
+        #endif
+    }
+
+    /// Whether a launch argument is present. Debug builds only.
+    static func flag(_ name: String) -> Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains(name)
+        #else
+        return false
         #endif
     }
 

@@ -43,13 +43,13 @@ struct TodayCheckinNudge: View {
         if let a = c.movedVsUsual, !a.isEmpty { bits.append("moved \((vs[a] ?? a).lowercased())") }
         if let f = c.doseFeel, !f.isEmpty { bits.append("dose feels \((feel[f] ?? f).lowercased())") }
         var scores: [String] = []
-        if let v = c.mood { scores.append("mood \(TodayText.plain(v))") }
-        if let v = c.foodNoise { scores.append("food noise \(TodayText.plain(v))") }
-        if let v = c.energy { scores.append("energy \(TodayText.plain(v))") }
-        if let v = c.sleepQuality { scores.append("sleep \(TodayText.plain(v))") }
+        if let v = c.mood { scores.append("mood \(Fmt.mg(v))") }
+        if let v = c.foodNoise { scores.append("food noise \(Fmt.mg(v))") }
+        if let v = c.energy { scores.append("energy \(Fmt.mg(v))") }
+        if let v = c.sleepQuality { scores.append("sleep \(Fmt.mg(v))") }
         var parts: [String] = []
-        if !bits.isEmpty { parts.append(TodayText.capitalize(bits.joined(separator: ", ")) + ".") }
-        if !scores.isEmpty { parts.append(TodayText.capitalize(scores.joined(separator: ", ")) + " out of 10.") }
+        if !bits.isEmpty { parts.append(MLFmt.cap(bits.joined(separator: ", ")) + ".") }
+        if !scores.isEmpty { parts.append(MLFmt.cap(scores.joined(separator: ", ")) + " out of 10.") }
         return parts.joined(separator: " ")
     }
 }
@@ -129,7 +129,7 @@ struct TodayFeelNow: View {
     }
 
     private var effectList: String {
-        m.effects.map { "\($0.effect ?? "—") \(TodayText.plain($0.severity))/10" }.joined(separator: ", ")
+        m.effects.map { "\($0.effect ?? "—") \(Fmt.mg($0.severity))/10" }.joined(separator: ", ")
     }
 }
 
@@ -377,7 +377,7 @@ struct TodayVerdict: View {
         if let rp = m.pace {
             receipts.append("\(Fmt.signed(rp.weekly)) lb a week over the last 4 weeks of weigh-ins (\(Fmt.num(abs(rp.weekly / j.current.lb) * 100, 1))% of body weight).")
         }
-        receipts.append("\(TodayText.plural(doses.count, "dose")) logged.")
+        receipts.append("\(MLFmt.count(doses.count, "dose")) logged.")
         let daysOn = m.now.timeIntervalSince(LogTime.tirzStart) / 86400
         let stall = Analytics.stallCheck(m.points, now: m.now)
         let change = j.changeStart
@@ -448,13 +448,13 @@ struct TodayMedSummary: View {
 
     private func lastText(_ dose: Dose?) -> String {
         guard let dose, let at = dose.takenDate else { return "—" }
-        return "\(Fmt.num(dose.doseMg, 1)) mg \(TodayText.capitalize(dose.compound ?? "")), \(LogTime.weekdayDate(at))"
+        return "\(Fmt.num(dose.doseMg, 1)) mg \(MLFmt.cap(dose.compound ?? "")), \(LogTime.weekdayDate(at))"
     }
 
     private var nextText: String {
         if let plan = Analytics.nextPlanned(m.d) {
             let day = LogTime.noon(plan.plannedOn)
-            let text = "\(TodayText.capitalize(plan.compound ?? "")) \(Fmt.num(plan.doseMg, 1)) mg\(plan.units.map { " (\(Fmt.num($0, 0)) units)" } ?? "")"
+            let text = "\(MLFmt.cap(plan.compound ?? "")) \(Fmt.num(plan.doseMg, 1)) mg\(plan.units.map { " (\(Fmt.num($0, 0)) units)" } ?? "")"
             let when = "\(text), \(LogTime.weekdayDate(day)) (\(TodayText.daysWord(LogTime.daysUntil(day, now: m.now))))"
             return Analytics.planIsOverdue(plan, now: m.now) ? "Overdue: \(when)" : when
         }
@@ -489,7 +489,7 @@ struct TodayDayMeds: View {
     private static func doseText(_ dose: Dose) -> String {
         if dose.skipped == true { return "Skipped" }
         let site = dose.site.map { ", \(Sites.label($0))" } ?? ""
-        return "\(Fmt.num(dose.doseMg, 1)) mg \(TodayText.capitalize(dose.compound ?? ""))\(site)"
+        return "\(Fmt.num(dose.doseMg, 1)) mg \(MLFmt.cap(dose.compound ?? ""))\(site)"
     }
 }
 

@@ -166,6 +166,25 @@ public enum LogTime {
     }
     /// "11:30 AM"
     public static func time(_ date: Date) -> String { fTime.string(from: date) }
+
+    /// "11:30 AM CT". The short name is the person's zone, so a Pacific clock says PT, not CT.
+    /// Short generic stays "CT" through daylight saving; the standard abbreviation would flip to CDT.
+    public static func timeWithZone(_ date: Date) -> String {
+        let clock = time(date)
+        let abbr = zone.localizedName(for: .shortGeneric, locale: Locale(identifier: "en_US"))
+            ?? zone.abbreviation(for: date)
+            ?? ""
+        guard !abbr.isEmpty else { return clock }
+        return "\(clock) \(abbr)"
+    }
+
+    /// "Central" from "Central Time", for the sentence "Times are …".
+    public static var zoneName: String {
+        let name = zone.localizedName(for: .generic, locale: Locale(identifier: "en_US")) ?? zone.identifier
+        if name.hasSuffix(" Time") { return String(name.dropLast(" Time".count)) }
+        return name
+    }
+
     /// "Nov 2026"
     public static func monthYear(_ date: Date) -> String { fMonthYear.string(from: date) }
     /// "Tuesday"

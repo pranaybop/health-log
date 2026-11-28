@@ -1,8 +1,7 @@
 import SwiftUI
 import LogCore
 
-// Small helpers shared by the Meds and Log tabs and the switch card. Internal and prefixed "ML"
-// so they can't clash with the other screens' helpers in LogUI.
+// Formatters shared by Today, Meds, and Log.
 
 enum MLFmt {
     /// "Tirzepatide"
@@ -12,7 +11,6 @@ enum MLFmt {
     }
     static func day(_ d: Date) -> String { LogTime.weekdayDate(d) }
     static func short(_ d: Date) -> String { LogTime.shortDate(d) }
-    static func timeCT(_ d: Date) -> String { "\(LogTime.time(d)) CT" }
     static func shortKey(_ key: String?) -> String {
         guard let key, key.count >= 10, Int(key.prefix(4)) != nil else { return "—" }
         return LogTime.shortDate(key: String(key.prefix(10)))
@@ -101,28 +99,16 @@ struct MLHairline: View {
     var body: some View { Rectangle().fill(LogColor.hairline).frame(height: 1) }
 }
 
-/// Debug-only launch arguments for the CI screenshots.
+/// Same launch arguments as TodayDebug. Callers in Meds and Log keep these names.
 enum MLDebug {
     /// `-scrollTo <card id>`: scroll the screen to that card when it opens (debug builds only).
-    static var scrollTo: String? { arg("-scrollTo") }
+    static var scrollTo: String? { TodayDebug.scrollTo }
 
     /// The value after a launch argument, in debug builds only.
-    static func arg(_ name: String) -> String? {
-        #if DEBUG
-        let args = ProcessInfo.processInfo.arguments
-        if let i = args.firstIndex(of: name), i + 1 < args.count { return args[i + 1] }
-        #endif
-        return nil
-    }
+    static func arg(_ name: String) -> String? { TodayDebug.value(name) }
 
     /// Whether a launch argument is present, in debug builds only.
-    static func flag(_ name: String) -> Bool {
-        #if DEBUG
-        return ProcessInfo.processInfo.arguments.contains(name)
-        #else
-        return false
-        #endif
-    }
+    static func flag(_ name: String) -> Bool { TodayDebug.flag(name) }
 }
 
 /// Scrolls to the `-scrollTo` card once the data is there (debug builds only).

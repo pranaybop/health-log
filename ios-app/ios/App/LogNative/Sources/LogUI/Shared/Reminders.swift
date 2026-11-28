@@ -285,7 +285,7 @@ struct ReminderSettingsCard: View {
                 Button("Open Settings") { openSystemSettings() }
                     .buttonStyle(.bordered)
             } else {
-                Caption("Times are Central. Log asks before the first one.")
+                Caption("Times are \(LogTime.zoneName). Log asks before the first one.")
             }
         }
         .task { await model.refreshAuthorization() }

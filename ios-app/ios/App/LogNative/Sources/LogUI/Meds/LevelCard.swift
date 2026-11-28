@@ -100,9 +100,9 @@ struct MLLevelCard: View {
         if let p = pick {
             let planned = p.id < lp.withNext.count ? lp.withNext[p.id].v : p.v
             let extra = abs(planned - p.v) > 0.01 ? ", \(Fmt.num(planned, 2)) mg with next shot" : ""
-            BigNumber(Fmt.num(p.v, 2), unit: "mg", detail: "\(MLFmt.day(p.t)), \(MLFmt.timeCT(p.t))\(extra)", size: 30)
+            BigNumber(Fmt.num(p.v, 2), unit: "mg", detail: "\(MLFmt.day(p.t)), \(LogTime.timeWithZone(p.t))\(extra)", size: 30)
         } else {
-            BigNumber(Fmt.num(levelNow, 2), unit: "mg", detail: "Estimated now, \(MLFmt.timeCT(now))", size: 30)
+            BigNumber(Fmt.num(levelNow, 2), unit: "mg", detail: "Estimated now, \(LogTime.timeWithZone(now))", size: 30)
         }
     }
 

@@ -25,7 +25,7 @@ struct TodaySleepCard: View {
                     TileData(label: night == m.today ? "Last night" : LogTime.shortDate(key: night), value: hours.map { "\(Fmt.num($0, 1)) h" } ?? "—",
                              detail: stageText(stages) ?? (hours != nil ? "asleep" : "no hours for this night")),
                     TileData(label: "7-night average", value: avg.map { "\(Fmt.num($0, 1)) h" } ?? "—",
-                             detail: nights.isEmpty ? "needs more nights" : "\(TodayText.plural(nights.count, "night")) with data"),
+                             detail: nights.isEmpty ? "needs more nights" : "\(MLFmt.count(nights.count, "night")) with data"),
                     TileData(label: "vs 8-hour nights", value: shortfall.map { "\(Fmt.num($0, 1)) h short" } ?? "—",
                              detail: "Sum of shortfalls on recorded nights, not a personal target"),
                 ])
@@ -199,7 +199,7 @@ struct TodayMeals: View {
     }
 
     private func row(_ meal: Meal) -> some View {
-        let sub = [TodayText.capitalize(meal.mealType ?? ""), meal.eatenDate.map(TodayText.timeCT) ?? "", meal.quantity ?? ""]
+        let sub = [MLFmt.cap(meal.mealType ?? ""), meal.eatenDate.map(LogTime.timeWithZone) ?? "", meal.quantity ?? ""]
             .filter { !$0.isEmpty }.joined(separator: ", ")
         return HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 1) {
