@@ -90,7 +90,7 @@ public enum DataDigest {
 
         let ready = Readiness.history(d, now: now, days: full ? 30 : 7)
         if !ready.isEmpty {
-            out.append("Readiness 0-10 (5 = their normal; from HRV, resting HR, sleep, training load vs their last 4 weeks): "
+            out.append("Readiness 0-10 (5 = their normal; from HRV, resting HR, sleep hours, deep and REM, wrist temperature, breathing rate, blood oxygen and training load vs their last 4 weeks): "
                        + ready.reversed().map { "\($0.key) \(f($0.score, 1))" }.joined(separator: ", ") + ".")
         }
         let effects = d.sideEffects.filter { ($0.recordedOn ?? "") >= from }

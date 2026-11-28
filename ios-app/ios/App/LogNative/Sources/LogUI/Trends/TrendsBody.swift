@@ -30,6 +30,10 @@ struct TrReadinessCard: View {
     func partValue(_ p: Readiness.Part) -> String {
         switch p.id {
         case "sleep": return "\(TrendsCalc.num(p.value, 1)) h"
+        case "stages": return "\(TrendsCalc.num(p.value)) min"
+        case "temp": return "\(TrendsCalc.num(p.value, 2)) °F"
+        case "resp": return "\(TrendsCalc.num(p.value, 1))/min"
+        case "spo2": return "\(TrendsCalc.num(p.value, 1))%"
         case "load": return p.value < 1 ? "Rest" : TrendsCalc.num(p.value)
         default: return "\(TrendsCalc.num(p.value)) \(p.unit)"
         }
@@ -38,6 +42,10 @@ struct TrReadinessCard: View {
     func partNormal(_ p: Readiness.Part) -> String {
         switch p.id {
         case "sleep": return "normal \(TrendsCalc.num(p.normal, 1)) h"
+        case "stages": return "normal \(TrendsCalc.num(p.normal)) min"
+        case "temp": return "normal \(TrendsCalc.num(p.normal, 2)) °F"
+        case "resp": return "normal \(TrendsCalc.num(p.normal, 1))/min"
+        case "spo2": return "normal \(TrendsCalc.num(p.normal, 1))%"
         case "load": return "normal \(TrendsCalc.num(p.normal))"
         default: return "normal \(TrendsCalc.num(p.normal)) \(p.unit)"
         }
@@ -63,6 +71,10 @@ struct TrReadinessCard: View {
                 .font(.subheadline).foregroundStyle(LogColor.ink2)
             let ctx = context(latest)
             if !ctx.isEmpty { Caption(ctx) }
+            Text(Readiness.whatMoved(latest))
+                .font(.subheadline)
+                .foregroundStyle(LogColor.ink2)
+                .fixedSize(horizontal: false, vertical: true)
             VStack(spacing: 0) {
                 ForEach(Array(latest.parts.enumerated()), id: \.element.id) { i, p in
                     if i > 0 { Divider().overlay(LogColor.hairline) }
@@ -94,7 +106,7 @@ struct TrReadinessCard: View {
                 [TrendsCalc.short(day.key), TrendsCalc.num(day.score, 1), TrendsCalc.num(day.calories),
                  TrendsCalc.num(day.weightTrend, 1), day.daysSinceDose.map { $0 == 0 ? "Shot" : "+\($0)d" } ?? ""]
             })
-            Caption("Overnight HRV (35%), resting heart rate (30%), sleep (25%) and the last 3 days’ training against the 4 weeks before (10%), each compared with your own last 4 weeks. 5 is a normal day for you. It tracks the same signals as watch readiness scores but won’t match them, and it isn’t medical advice.")
+            Caption("HRV (24%), resting heart rate (20%), sleep (16%), deep and REM (10%), wrist temperature (8%), breathing rate (7%), blood oxygen (5%) and the last 3 days’ training against the 4 weeks before (10%). Each is compared with your own last 4 weeks. A signal with no reading, or without a week of baseline, is left out and the rest are scaled. 5 is a normal day for you. It isn’t medical advice.")
         }
     }
 }

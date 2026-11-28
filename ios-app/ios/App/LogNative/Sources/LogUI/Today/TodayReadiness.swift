@@ -10,7 +10,8 @@ enum ReadinessCache {
 
     private static func fill(_ d: Dashboard) {
         let today = LogTime.today()
-        let s = "\(d.asOf ?? "")|\(d.dailyHealth.count)|\(d.workouts.count)|\(d.weights.count)|\(d.doses.count)|\(today)"
+        let points = d.healthMetrics.reduce(0) { $0 + $1.value.count }
+        let s = "\(d.asOf ?? "")|\(d.dailyHealth.count)|\(d.workouts.count)|\(d.weights.count)|\(d.doses.count)|\(points)|\(today)"
         guard s != stamp else { return }
         stamp = s
         byKey = [:]
@@ -30,8 +31,9 @@ enum ReadinessCache {
 }
 
 /// Today's readiness (Readiness in LogCore): a gauge with the 0–10 score, a small meter per
-/// signal showing better or worse than your normal, and the last 7 days. The full breakdown and
-/// history are on Trends › Body.
+/// scored signal (except training load) showing better or worse than your normal, one line
+/// naming the one or two signals that moved it most, and the last 7 days. The full breakdown
+/// and history are on Trends › Body.
 struct TodayReadiness: View {
     let day: Readiness.Day
     let week: [Readiness.Day]
@@ -50,23 +52,8 @@ struct TodayReadiness: View {
         }
     }
 
-    /// One line on what moved the score most.
-    var why: String {
-        let core = day.parts.filter { $0.id != "load" }
-        guard let top = core.max(by: { abs($0.z) < abs($1.z) }), abs(top.z) >= 0.5 else {
-            return "HRV, resting heart rate and sleep are all close to your normal."
-        }
-        let what: String
-        switch top.id {
-        case "hrv": what = top.z > 0 ? "HRV is above your normal" : "HRV is below your normal"
-        case "rhr": what = top.z > 0 ? "Resting heart rate is lower than usual" : "Resting heart rate is up"
-        case "sleep": what = top.z > 0 ? "You slept more than usual" : "Sleep was short"
-        default: what = ""
-        }
-        var s = what + "."
-        if let n = day.daysSinceDose, n <= 2 { s += n == 0 ? " Shot day." : " Day \(n) after a shot." }
-        return s
-    }
+    /// What moved the score: the one or two largest contributors (Readiness.whatMoved).
+    var why: String { Readiness.whatMoved(day) }
 
     var body: some View {
         Button { TrendsRouter.open("body", card: "readiness") } label: { card }
@@ -143,14 +130,18 @@ private struct ReadinessGauge: View {
     }
 }
 
-/// HRV / Resting HR / Sleep with a centred meter: right and green is better than your normal,
-/// left and amber is worse.
+/// One scored signal with a centred meter: right and green is better than your normal,
+/// left and amber is worse. Training load stays on the Trends breakdown.
 private struct SignalMeter: View {
     let part: Readiness.Part
 
     var value: String {
         switch part.id {
         case "sleep": return "\(Fmt.num(part.value, 1)) h"
+        case "stages": return "\(Fmt.num(part.value, 0)) min"
+        case "temp": return "\(Fmt.num(part.value, 2)) °F"
+        case "resp": return "\(Fmt.num(part.value, 1))/min"
+        case "spo2": return "\(Fmt.num(part.value, 1))%"
         default: return "\(Fmt.num(part.value, 0)) \(part.unit)"
         }
     }

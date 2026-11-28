@@ -302,7 +302,7 @@ public struct ReadinessWidget: Widget {
             ReadinessWidgetView(entry: entry).containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Readiness")
-        .description("Today's 0–10 score from HRV, resting heart rate, sleep and training.")
+        .description("Today's 0–10 score from HRV, sleep, wrist temperature, blood oxygen and training.")
         .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
