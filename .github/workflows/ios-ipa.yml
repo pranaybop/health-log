@@ -78,6 +78,11 @@ jobs:
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/App.app"
           test -d "$APP"
+          # Screenshot data is Debug-only. A release .ipa must not carry it.
+          if [ -e "$APP/demo.json" ] || [ -e "$APP/public/demo.json" ]; then
+            echo "Release app contains screenshot demo data"
+            exit 1
+          fi
           /usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Info.plist"
           /usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP/Info.plist"
           IPA="Log-$APP_VERSION-$APP_BUILD.ipa"

@@ -7,7 +7,8 @@ import Observation
 /// Signed in means a session (Google or email, from log-auth) or the owner's passcode, both in the
 /// Keychain. Opens instantly from the last payload saved on the phone, then refreshes. A rejected
 /// sign-in signs out. Debug builds launched with `-demo <tab>` (the CI simulator check) read made-up
-/// data from public/demo.json and never touch the network or the Keychain.
+/// data from demo.json in the app bundle and never touch the network or the Keychain. The Debug
+/// build copies that file from ios/screenshots/demo.json; Release builds leave it out.
 @MainActor
 @Observable
 public final class LogStore {
@@ -403,7 +404,7 @@ public final class LogStore {
     }
 
     private func loadDemo() {
-        guard let url = Bundle.main.url(forResource: "demo", withExtension: "json", subdirectory: "public"),
+        guard let url = Bundle.main.url(forResource: "demo", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let d = try? Dashboard.decode(data) else {
             errorMessage = "No demo data in this build."
