@@ -13,7 +13,7 @@ Log is a GLP-1 and health tracker for iPhone. Version 2.0 is fully native: Today
 
 ### Today
 - One day at a time: swipe, use the week strip or month picker to move between days.
-- **Readiness** right under the weight: a gauge with the 0–10 score, a meter for HRV, resting heart rate and sleep showing better or worse than your normal, one line on what moved it most, and the last 7 days.
+- **Readiness** right under the weight: a gauge with the 0–10 score, a meter per scored signal showing better or worse than your normal, one line naming the one or two signals that moved it most, and the last 7 days.
 - **Weight hero:** current weight and trend, change since start, pace as lb a week and % of body weight.
 - **Food:** a calorie and protein ring against your targets, **Log a meal** (describe it, your AI key estimates the macros, review, save), the day's meals, and the **calorie breakdown**: where the calories came from (protein, carbs and fat by energy, with grams and %), each meal's share of the day, and protein per 100 kcal against what your targets need.
 - **Under-eating** card in the evening when the day is far below target.
@@ -61,7 +61,7 @@ The bucket, its RLS policies, and the `log.progress_photos` columns are in `supa
 
 ## Readiness
 
-Trends → Body opens with a 0–10 readiness score (`LogCore/Readiness.swift`), worked out on the phone from what Apple Health sync already stores: overnight HRV 35%, resting heart rate 30%, sleep 25%, and the last 3 days' training load against the 4 weeks before 10%. Each signal is compared with your own last 4 weeks (median and spread), so 5 is a normal day for you. It lists the day's calories, weight trend and days since the last shot next to the score. No extra tables or Shortcuts: it reads `log.daily_health` and `log.workouts`.
+Trends → Body opens with a 0–10 readiness score (`LogCore/Readiness.swift`), worked out on the phone from what Apple Health sync already stores: overnight HRV 24%, resting heart rate 20%, sleep hours 16%, deep + REM 10%, sleeping wrist temperature 8%, respiratory rate 7%, blood oxygen 5%, and the last 3 days' training load against the 4 weeks before 10%. Each signal is compared with your own last 4 weeks (median and spread), so 5 is a normal day for you. A signal with no reading, or without 7 baseline days, is left out and the remaining weights are scaled to 100%. It lists the day's calories, weight trend and days since the last shot next to the score, and names the one or two signals that moved it most. No extra tables or Shortcuts: it reads `log.daily_health`, `log.health_metrics` and `log.workouts`.
 
 ## Ask your data
 
