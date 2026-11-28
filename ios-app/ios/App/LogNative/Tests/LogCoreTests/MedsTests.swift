@@ -9,7 +9,6 @@ final class MedsTests: XCTestCase {
         XCTAssertEqual(p.next, LogTime.parse("2026-11-29T16:00:00Z"))
         XCTAssertEqual(p.withNext.count, 5)
         XCTAssertEqual(p.withNext.last?.mg, 3)
-        XCTAssertEqual(p.withNext.last?.planned, true)
     }
 
     func testLevelPoints() throws {

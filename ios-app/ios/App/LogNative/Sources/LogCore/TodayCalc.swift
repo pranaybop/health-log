@@ -14,7 +14,6 @@ public struct WeightJourney: Hashable, Sendable {
     public var current: WeightPoint
     public var startLb: Double
     public var goalLb: Double?
-    public var sinceTirz: WeightPoint
     /// current - start (negative = down).
     public var changeStart: Double { current.lb - startLb }
 }
@@ -113,8 +112,7 @@ extension Analytics {
         let pts = points ?? smoothWeights(d)
         guard let current = pts.last, let first = pts.first else { return nil }
         let start = d.profile?.startWeightLb ?? first.lb
-        let since = pts.first { $0.at >= LogTime.tirzStart } ?? first
-        return WeightJourney(current: current, startLb: start, goalLb: d.profile?.goalWeightLb, sinceTirz: since)
+        return WeightJourney(current: current, startLb: start, goalLb: d.profile?.goalWeightLb)
     }
 
     /// Loss as a share of body weight per week, from the 4-week fit. Fast is over 1% a week.

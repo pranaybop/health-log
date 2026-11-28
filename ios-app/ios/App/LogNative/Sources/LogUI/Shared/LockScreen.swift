@@ -1,12 +1,10 @@
 import SwiftUI
-import AuthenticationServices
 import CryptoKit
 import Security
 import LogCore
 
 /// The sign-in screen: Google, an email and password (a free account), or the passcode (the
-/// original log). Sign in with Apple is built but stays hidden until the app has a paid developer
-/// account (SignInOptions.apple).
+/// original log).
 public struct LockScreen: View {
     @Environment(LogStore.self) private var store
     @Environment(\.webAuthenticationSession) private var webAuth
@@ -89,13 +87,6 @@ public struct LockScreen: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(LogColor.hero)
-
-            if SignInOptions.apple {
-                SignInWithAppleButton(.continue, onRequest: appleRequest, onCompletion: appleDone)
-                    .signInWithAppleButtonStyle(.black)
-                    .frame(height: 50)
-                    .clipShape(Capsule())
-            }
 
             Button { switchTo(.create) } label: {
                 Text("Create an account with email").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
@@ -259,31 +250,6 @@ public struct LockScreen: View {
             return try await LogAuth.googleFinish(code: authCode, verifier: verifier)
         }
     }
-
-    @State private var appleNonce = ""
-
-    private func appleRequest(_ request: ASAuthorizationAppleIDRequest) {
-        appleNonce = PKCE.verifier()
-        request.requestedScopes = [.email]
-        request.nonce = PKCE.sha256Hex(appleNonce)
-    }
-
-    private func appleDone(_ result: Result<ASAuthorization, Error>) {
-        guard case .success(let auth) = result,
-              let cred = auth.credential as? ASAuthorizationAppleIDCredential,
-              let tokenData = cred.identityToken, let token = String(data: tokenData, encoding: .utf8) else {
-            message = "Apple sign-in was cancelled."
-            return
-        }
-        let nonce = appleNonce
-        run { try await LogAuth.appleFinish(idToken: token, nonce: nonce) }
-    }
-}
-
-/// Sign-in choices that depend on the app's setup.
-public enum SignInOptions {
-    /// Sign in with Apple needs the paid Apple developer program (and its capability). Off for now.
-    public static let apple = false
 }
 
 /// PKCE for Google sign-in (RFC 7636).
@@ -296,10 +262,6 @@ enum PKCE {
 
     static func challenge(_ verifier: String) -> String {
         base64url(Data(SHA256.hash(data: Data(verifier.utf8))))
-    }
-
-    static func sha256Hex(_ text: String) -> String {
-        SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     static func base64url(_ data: Data) -> String {

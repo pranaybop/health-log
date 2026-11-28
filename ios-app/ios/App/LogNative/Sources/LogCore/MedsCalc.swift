@@ -6,9 +6,8 @@ public struct Shot: Hashable, Sendable {
     public var at: Date
     public var mg: Double
     public var compound: String?
-    public var planned: Bool
-    public init(at: Date, mg: Double, compound: String?, planned: Bool = false) {
-        self.at = at; self.mg = mg; self.compound = compound; self.planned = planned
+    public init(at: Date, mg: Double, compound: String?) {
+        self.at = at; self.mg = mg; self.compound = compound
     }
 }
 
@@ -110,7 +109,7 @@ extension Analytics {
         var plannedMg = last.mg
         if let a = active?.typicalDoseMg, a != 0 { plannedMg = a }
         if plannedMg == 0 { plannedMg = 3 }
-        let planned = Shot(at: next, mg: plannedMg, compound: last.compound ?? "tirzepatide", planned: true)
+        let planned = Shot(at: next, mg: plannedMg, compound: last.compound ?? "tirzepatide")
         return (list, next, list + [planned])
     }
 

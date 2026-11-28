@@ -142,7 +142,7 @@ private struct LogButtons: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            button(1, compact ? "Passing" : "Passing", HColor.tealBright)
+            button(1, "Passing", HColor.tealBright)
             button(2, compact ? "Strong" : "Strong pull", HColor.orange)
             button(3, "Craving", HColor.magenta)
         }
