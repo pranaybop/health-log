@@ -23,7 +23,7 @@ public enum LogAPI {
     public static let dashboardURL = URL(string: "https://qnbshmenmurdaogslmrj.supabase.co/functions/v1/log-dashboard")!
     public static let writeURL = URL(string: "https://qnbshmenmurdaogslmrj.supabase.co/functions/v1/log-write")!
 
-    static let session: URLSession = {
+    static var session: URLSession = {
         let c = URLSessionConfiguration.default
         c.requestCachePolicy = .reloadIgnoringLocalCacheData
         c.timeoutIntervalForRequest = 30
