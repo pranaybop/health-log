@@ -168,41 +168,51 @@ struct MLVialsCard: View {
     }
 
     static func runwayNote(_ data: Dashboard, now: Date = Date()) -> String? {
-        let days = MLFmt.days(until: Analytics.retaSwitchAt(data), now: now)
         let tirz = Analytics.compoundRunway(data, "tirzepatide", now: now)
         let reta = Analytics.compoundRunway(data, "retatrutide", now: now)
         if !tirz.ready && !reta.ready { return nil }
+        let inPlay = Analytics.compoundsInPlay(data)
         var bits: [String] = []
-        if tirz.ready {
-            let shotsNeeded = days > 0 ? Int((Double(days) / 7).rounded(.up)) : 0
-            if days <= 0 {
-                let have = tirz.mg.map { "\(MLFmt.auto($0)) mg on hand" } ?? MLFmt.count(tirz.items.count, "vial")
-                bits.append("Tirzepatide: \(have). The switch date has arrived.")
+        if tirz.ready, inPlay.contains("tirzepatide") {
+            if let switchAt = LogTime.switchStart {
+                let days = MLFmt.days(until: switchAt, now: now)
+                let shotsNeeded = days > 0 ? Int((Double(days) / 7).rounded(.up)) : 0
+                if days <= 0 {
+                    let have = tirz.mg.map { "\(MLFmt.auto($0)) mg on hand" } ?? MLFmt.count(tirz.items.count, "vial")
+                    bits.append("Tirzepatide: \(have). The switch date has arrived.")
+                } else if let weeks = tirz.weeks {
+                    let shotsLeft = Int(weeks.rounded(.down))
+                    let enough = shotsLeft >= shotsNeeded
+                    let mgText = tirz.mg.map(MLFmt.auto) ?? "—"
+                    let cover = enough ? " That covers the remaining tirzepatide weeks." : " That may run short before \(MLFmt.short(switchAt))."
+                    bits.append("Tirzepatide: \(mgText) mg, about \(Fmt.num(weeks, 1)) weekly shot\(weeks == 1 ? "" : "s") at \(Fmt.num(tirz.weeklyMg, 1)) mg. The switch is in \(MLFmt.count(days, "day")) (about \(MLFmt.count(shotsNeeded, "shot"))).\(cover)")
+                } else {
+                    bits.append("Tirzepatide: \(MLFmt.count(tirz.items.count, "vial")) on hand.")
+                }
             } else if let weeks = tirz.weeks {
-                let shotsLeft = Int(weeks.rounded(.down))
-                let enough = shotsLeft >= shotsNeeded
                 let mgText = tirz.mg.map(MLFmt.auto) ?? "—"
-                let cover = enough ? " That covers the remaining tirzepatide weeks." : (LogTime.switchStart.map { " That may run short before \(MLFmt.short($0))." } ?? "")
-                bits.append("Tirzepatide: \(mgText) mg, about \(Fmt.num(weeks, 1)) weekly shot\(weeks == 1 ? "" : "s") at \(Fmt.num(tirz.weeklyMg, 1)) mg. The switch is in \(MLFmt.count(days, "day")) (about \(MLFmt.count(shotsNeeded, "shot"))).\(cover)")
+                bits.append("Tirzepatide: \(mgText) mg, about \(Fmt.num(weeks, 1)) weekly shot\(weeks == 1 ? "" : "s") at \(Fmt.num(tirz.weeklyMg, 1)) mg.")
             } else {
                 bits.append("Tirzepatide: \(MLFmt.count(tirz.items.count, "vial")) on hand.")
             }
-        } else if days > 0, let switchAt = LogTime.switchStart {
+        } else if let switchAt = LogTime.switchStart, inPlay.contains("tirzepatide"), MLFmt.days(until: switchAt, now: now) > 0 {
             bits.append("No tirzepatide vials are logged, so runway before \(MLFmt.short(switchAt)) can’t be calculated.")
         }
-        if reta.ready {
-            if let weeks = reta.weeks, let wu = reta.weeklyUnits, wu != 0 {
-                bits.append("Retatrutide: \(Fmt.num(reta.units, 0)) units on hand, about \(Fmt.num(weeks, 1)) week\(weeks == 1 ? "" : "s") at \(Fmt.num(wu, 0)) units a week.")
-            } else if let mg = reta.mg {
-                let wk = reta.weeks.map { ", about \(Fmt.num($0, 1)) week\($0 == 1 ? "" : "s")" } ?? ""
-                bits.append("Retatrutide: \(MLFmt.auto(mg)) mg on hand\(wk).")
+        if inPlay.contains("retatrutide") {
+            if reta.ready {
+                if let weeks = reta.weeks, let wu = reta.weeklyUnits, wu != 0 {
+                    bits.append("Retatrutide: \(Fmt.num(reta.units, 0)) units on hand, about \(Fmt.num(weeks, 1)) week\(weeks == 1 ? "" : "s") at \(Fmt.num(wu, 0)) units a week.")
+                } else if let mg = reta.mg {
+                    let wk = reta.weeks.map { ", about \(Fmt.num($0, 1)) week\($0 == 1 ? "" : "s")" } ?? ""
+                    bits.append("Retatrutide: \(MLFmt.auto(mg)) mg on hand\(wk).")
+                } else {
+                    bits.append("Retatrutide: \(MLFmt.count(reta.items.count, "vial")) on hand.")
+                }
             } else {
-                bits.append("Retatrutide: \(MLFmt.count(reta.items.count, "vial")) on hand.")
+                bits.append("No retatrutide vials are logged yet.")
             }
-        } else {
-            bits.append("No retatrutide vials are logged yet.")
         }
-        return bits.joined(separator: " ")
+        return bits.isEmpty ? nil : bits.joined(separator: " ")
     }
 }
 

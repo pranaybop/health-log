@@ -95,12 +95,29 @@ public enum Analytics {
         return Sites.all[(i + 1) % Sites.all.count]
     }
 
-    public static func retaSwitchAt(_ d: Dashboard) -> Date {
+    public static func retaSwitchAt(_ d: Dashboard) -> Date? {
         if let started = d.protocols.first(where: { ($0.compound ?? "").lowercased() == "retatrutide" })?.startedOn,
            !started.isEmpty {
             return LogTime.noon(started)
         }
-        return LogTime.retaStart
+        return LogTime.switchStart
+    }
+
+    /// Compounds on a dose, protocol, vial, plan, regimen, or the planned switch, first-seen order.
+    public static func compoundsInPlay(_ d: Dashboard) -> [String] {
+        var names: [String] = []
+        func add(_ raw: String?) {
+            let c = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !c.isEmpty, !names.contains(c) else { return }
+            names.append(c)
+        }
+        for dose in d.doses { add(dose.compound) }
+        for row in d.protocols { add(row.compound) }
+        for vial in d.vials { add(vial.compound) }
+        for row in d.dosePlan { add(row.compound) }
+        for row in d.regimens { add(row.compound) }
+        if LogTime.switchStart != nil { add(LogTime.switchName) }
+        return names
     }
 
     // MARK: Weight

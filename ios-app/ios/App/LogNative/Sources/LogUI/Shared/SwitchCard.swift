@@ -15,13 +15,12 @@ public struct SwitchCard: View {
     }
 
     public var body: some View {
-        if let d = store.dashboard, Self.shows(d) {
-            content(d)
+        if let d = store.dashboard, Self.shows(d), let start = Analytics.retaSwitchAt(d) {
+            content(d, start: start)
         }
     }
 
-    private func content(_ d: Dashboard) -> some View {
-        let start = Analytics.retaSwitchAt(d)
+    private func content(_ d: Dashboard, start: Date) -> some View {
         let days = LogTime.daysUntil(start)
         let first = Analytics.firstRetaDose(d)
         let rot = Analytics.siteRotation(d)

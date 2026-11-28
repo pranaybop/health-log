@@ -195,8 +195,15 @@ struct TrHeartCard: View {
             ForEach(0..<panels.count, id: \.self) { i in
                 panel(panels[i], color: panels[i].higherIsBetter ? LogColor.s4 : LogColor.s3)
             }
-            Caption("From Apple Health. The badge compares the last 7 days with the 30 days before tirzepatide.\(LogTime.switchStart.map { " Watch resting heart rate after the \(LogTime.switchName) switch on \(LogTime.shortDate($0)): the retatrutide trials reported it rising." } ?? "")")
+            Caption("From Apple Health. The badge compares the last 7 days with the 30 days before \(LogTime.journeyName.lowercased()).\(switchNote)")
         }
+    }
+
+    private var switchNote: String {
+        guard let at = LogTime.switchStart else { return "" }
+        let when = " Watch resting heart rate after the \(LogTime.switchName) switch on \(LogTime.shortDate(at))"
+        if LogTime.switchName.lowercased() == "retatrutide" { return "\(when): the retatrutide trials reported it rising." }
+        return "\(when)."
     }
 
     func panel(_ p: TrendsCalc.HeartPanel, color: Color) -> some View {

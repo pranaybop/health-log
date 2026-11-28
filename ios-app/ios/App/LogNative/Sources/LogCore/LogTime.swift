@@ -184,8 +184,6 @@ public enum LogTime {
     nonisolated(unsafe) public static var tirzStart = parse("2026-11-02T12:00:00-06:00")!
     /// A planned switch to another GLP-1 (settings switch_on), or nil when there isn't one.
     nonisolated(unsafe) public static var switchStart: Date? = parse("2026-12-06T12:00:00-06:00")!
-    /// The planned switch, or the far future when there isn't one (so "before the switch" is always true).
-    public static var retaStart: Date { switchStart ?? .distantFuture }
     /// Names for the journey's markers ("Tirzepatide", "Retatrutide").
     nonisolated(unsafe) public static var journeyName = "Tirzepatide"
     nonisolated(unsafe) public static var switchName = "Retatrutide"
