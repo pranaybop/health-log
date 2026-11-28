@@ -88,11 +88,10 @@ public struct TrendsScreen: View {
     /// Debug builds: `-scrollTo <card id>` scrolls to a card for the CI screenshots.
     func debugScroll(_ proxy: ScrollViewProxy) async {
         #if DEBUG
-        let args = ProcessInfo.processInfo.arguments
-        guard !didDebugScroll, store.dashboard != nil, let i = args.firstIndex(of: "-scrollTo"), i + 1 < args.count else { return }
+        guard !didDebugScroll, store.dashboard != nil, let target = TodayDebug.scrollTo else { return }
         didDebugScroll = true
         try? await Task.sleep(nanoseconds: 900_000_000)
-        proxy.scrollTo(args[i + 1], anchor: .top)
+        proxy.scrollTo(target, anchor: .top)
         #endif
     }
 }

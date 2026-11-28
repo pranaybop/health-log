@@ -81,7 +81,7 @@ struct TodayFoodCard: View {
         let meals: String
         if let row = m.totals {
             let n = Int(row.mealCount ?? Double(m.meals.count))
-            meals = "\(TodayText.plural(n, "meal")) logged"
+            meals = "\(MLFmt.count(n, "meal")) logged"
         } else {
             meals = "Nothing logged yet today"
         }
@@ -158,7 +158,7 @@ private struct ProteinLine: View {
     let s: ProteinStreak
 
     var body: some View {
-        let streak = s.streak == 0 ? "No hit streak yet." : "\(TodayText.plural(s.streak, "day")) in a row at your protein target."
+        let streak = s.streak == 0 ? "No hit streak yet." : "\(MLFmt.count(s.streak, "day")) in a row at your protein target."
         let remain = s.hitToday ? "Target hit today." : "\(Fmt.num(s.remaining, 0)) g left to hit \(Fmt.num(s.target, 0)) g."
         Text("\(remain) \(streak)")
             .font(.subheadline.weight(.semibold))

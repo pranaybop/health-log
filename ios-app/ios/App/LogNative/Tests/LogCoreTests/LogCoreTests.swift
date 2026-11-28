@@ -44,6 +44,32 @@ final class LogCoreTests: XCTestCase {
         XCTAssertEqual(LogTime.shortDate(key: "2026-11-24"), "Nov 24")
     }
 
+    /// A fixed "CT" / "Central" label is wrong once the clock follows the person's zone.
+    func testTimeLabelFollowsZone() {
+        let original = LogTime.zone
+        defer { LogTime.use(zone: original) }
+        let winter = LogTime.parse("2026-11-24T14:30:00Z")!
+        let summer = LogTime.parse("2026-07-15T18:30:00Z")!
+
+        LogTime.use(zone: TimeZone(identifier: "America/Chicago")!)
+        XCTAssertTrue(LogTime.time(winter).hasPrefix("8:30"))
+        XCTAssertEqual(LogTime.timeWithZone(winter), LogTime.time(winter) + " CT")
+        XCTAssertTrue(LogTime.time(summer).hasPrefix("1:30"))
+        XCTAssertEqual(LogTime.timeWithZone(summer), LogTime.time(summer) + " CT")
+        XCTAssertEqual(LogTime.zoneName, "Central")
+
+        LogTime.use(zone: TimeZone(identifier: "America/Los_Angeles")!)
+        XCTAssertTrue(LogTime.time(winter).hasPrefix("6:30"))
+        XCTAssertEqual(LogTime.timeWithZone(winter), LogTime.time(winter) + " PT")
+        XCTAssertNotEqual(LogTime.timeWithZone(winter), LogTime.time(winter) + " CT")
+        XCTAssertEqual(LogTime.zoneName, "Pacific")
+
+        LogTime.use(zone: TimeZone(identifier: "America/New_York")!)
+        XCTAssertTrue(LogTime.time(winter).hasPrefix("9:30"))
+        XCTAssertEqual(LogTime.timeWithZone(winter), LogTime.time(winter) + " ET")
+        XCTAssertEqual(LogTime.zoneName, "Eastern")
+    }
+
     func testWeightTrend() {
         let sm = Analytics.smoothWeights(Self.dashboard)
         XCTAssertEqual(sm.count, 128)

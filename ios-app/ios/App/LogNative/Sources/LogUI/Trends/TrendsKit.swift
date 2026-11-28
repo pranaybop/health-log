@@ -636,7 +636,7 @@ struct TrSwatch: View {
 struct TrLegend: View {
     var items: [TrLegendItem]
     var body: some View {
-        TrFlow(spacing: 14, lineSpacing: 6) {
+        FlowLayout(spacing: 14, lineSpacing: 6) {
             ForEach(items) { item in
                 HStack(spacing: 6) {
                     TrSwatch(key: item.key)
@@ -645,49 +645,6 @@ struct TrLegend: View {
             }
         }
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// Lays children out left to right, wrapping onto new lines.
-struct TrFlow: Layout {
-    var spacing: CGFloat = 8
-    var lineSpacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxW = proposal.width ?? 10_000
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var lineH: CGFloat = 0
-        var widest: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(ProposedViewSize(width: maxW, height: nil))
-            if x > 0 && x + s.width > maxW {
-                y += lineH + lineSpacing
-                x = 0
-                lineH = 0
-            }
-            x += s.width + spacing
-            lineH = max(lineH, s.height)
-            widest = max(widest, x - spacing)
-        }
-        return CGSize(width: min(widest, maxW), height: y + lineH)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var lineH: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
-            if x > bounds.minX && x + s.width > bounds.maxX {
-                y += lineH + lineSpacing
-                x = bounds.minX
-                lineH = 0
-            }
-            v.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: s.width, height: s.height))
-            x += s.width + spacing
-            lineH = max(lineH, s.height)
-        }
     }
 }
 

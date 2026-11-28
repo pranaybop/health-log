@@ -126,7 +126,7 @@ public struct TodayScreen: View {
     private func updatedLine(_ m: TodayModel) -> some View {
         let t = m.d.asOfDate ?? store.dataTime ?? Date()
         let failed = store.refreshFailed
-        return Text(failed ? "Couldn’t refresh. Showing data from \(TodayText.timeCT(t))." : "Updated \(TodayText.timeCT(t)). Refreshes every minute.")
+        return Text(failed ? "Couldn’t refresh. Showing data from \(LogTime.timeWithZone(t))." : "Updated \(LogTime.timeWithZone(t)). Refreshes every minute.")
             .font(.footnote)
             .foregroundStyle(failed ? LogColor.critInk : LogColor.ink2)
             .multilineTextAlignment(.center)
