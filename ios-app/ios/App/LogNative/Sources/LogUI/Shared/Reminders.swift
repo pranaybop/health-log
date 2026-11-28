@@ -27,11 +27,6 @@ enum ReminderRouter {
         default: TodayTabs.select(1)
         }
         NotificationCenter.default.post(name: opened, object: route)
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            guard pending == route else { return }
-            NotificationCenter.default.post(name: opened, object: route)
-        }
     }
 }
 

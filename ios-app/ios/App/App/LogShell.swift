@@ -36,6 +36,10 @@ final class ShellTabBarController: UITabBarController {
             return host
         }
         setViewControllers(hosts, animated: false)
+        TodayTabs.onSelect = { [weak self] index in
+            guard let self, let vcs = self.viewControllers, index >= 0, index < vcs.count else { return }
+            self.selectedIndex = index
+        }
         tabBar.tintColor = UIColor { traits in
             traits.userInterfaceStyle == .dark
                 ? UIColor(red: 0.36, green: 0.83, blue: 0.72, alpha: 1)

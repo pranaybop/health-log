@@ -13,9 +13,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = ShellTabBarController()
         window?.makeKeyAndVisible()
 
-        // Opened from a widget.
+        // Opened from a widget. The tab bar is already loaded; a screen reads its pending route on appear.
         if let url = connectionOptions.urlContexts.first?.url, DeepLink.handles(url) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { DeepLink.open(url) }
+            DeepLink.open(url)
         }
     }
 

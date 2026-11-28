@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 import LogCore
 
 
@@ -306,35 +305,12 @@ enum TodayDebug {
 
 // MARK: Switching tabs
 
-/// Selects another tab the way a tap on the tab bar does (asking the tab bar's delegate first).
+/// Set by the app's tab bar.
 @MainActor
-enum TodayTabs {
+public enum TodayTabs {
+    public static var onSelect: ((Int) -> Void)?
+
     static func select(_ index: Int) {
-        for scene in UIApplication.shared.connectedScenes {
-            guard let ws = scene as? UIWindowScene else { continue }
-            for window in ws.windows {
-                if let tbc = find(window.rootViewController) {
-                    pick(tbc, index)
-                    return
-                }
-            }
-        }
-    }
-
-    private static func find(_ vc: UIViewController?) -> UITabBarController? {
-        guard let vc else { return nil }
-        if let t = vc as? UITabBarController { return t }
-        for c in vc.children {
-            if let t = find(c) { return t }
-        }
-        return nil
-    }
-
-    private static func pick(_ tbc: UITabBarController, _ index: Int) {
-        guard let vcs = tbc.viewControllers, index >= 0, index < vcs.count else { return }
-        let vc = vcs[index]
-        if let delegate = tbc.delegate, delegate.tabBarController?(tbc, shouldSelect: vc) == false { return }
-        tbc.selectedIndex = index
-        tbc.delegate?.tabBarController?(tbc, didSelect: vc)
+        onSelect?(index)
     }
 }

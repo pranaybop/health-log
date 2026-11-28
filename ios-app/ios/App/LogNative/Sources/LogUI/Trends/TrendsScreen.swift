@@ -9,6 +9,8 @@ public struct TrendsScreen: View {
     @State var picked: String? = nil
     @State var cache = TrendsCache()
     @State var didDebugScroll = false
+    @State var pendingCard: String?
+    @State var routeTick = 0
 
     public init() {}
 
@@ -29,17 +31,26 @@ public struct TrendsScreen: View {
                 }
             }
             .task(id: store.dataTime) { await debugScroll(proxy) }
-            .onReceive(NotificationCenter.default.publisher(for: TrendsRouter.opened)) { note in
-                guard let target = note.object as? TrendsRouter.Target else { return }
-                picked = target.section
-                savedSection = target.section
-                guard let card = target.card else { return }
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 350_000_000)
+            .onAppear { openPending() }
+            .onReceive(NotificationCenter.default.publisher(for: TrendsRouter.opened)) { _ in openPending() }
+            .onChange(of: routeTick) { _, _ in
+                guard let card = pendingCard else { return }
+                pendingCard = nil
+                DispatchQueue.main.async {
                     withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(card, anchor: .top) }
                 }
             }
         }
+    }
+
+    /// `onChange` runs after the section is in the tree. The tick covers opening a card on the section already shown.
+    func openPending() {
+        guard let target = TrendsRouter.pending else { return }
+        TrendsRouter.pending = nil
+        picked = target.section
+        savedSection = target.section
+        pendingCard = target.card
+        if target.card != nil { routeTick += 1 }
     }
 
     func select(_ id: String, proxy: ScrollViewProxy) {
@@ -140,17 +151,15 @@ enum TrendsRouter {
         var card: String?
     }
 
+    /// Section and card until TrendsScreen consumes them.
+    static var pending: Target?
+
     @MainActor
     static func open(_ section: String, card: String? = nil) {
         UserDefaults.standard.set(section, forKey: "log.trendsSection")
+        pending = Target(section: section, card: card)
         TodayTabs.select(2)
-        let target = Target(section: section, card: card)
-        NotificationCenter.default.post(name: opened, object: target)
-        // The Trends screen may not exist until its tab is first shown; say it again once it does.
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 400_000_000)
-            NotificationCenter.default.post(name: opened, object: target)
-        }
+        NotificationCenter.default.post(name: opened, object: nil)
     }
 }
 

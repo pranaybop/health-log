@@ -23,7 +23,7 @@ let package = Package(
                 linkerSettings: [.linkedFramework("UserNotifications"), .unsafeFlags(["-Xlinker", "-weak_framework", "-Xlinker", "FoundationModels"])]),
         .target(name: "LogActivity", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("ActivityKit"), .linkedFramework("AppIntents")]),
         .target(name: "LogHealth", dependencies: ["LogCore"], linkerSettings: [.linkedFramework("HealthKit")]),
-        .testTarget(name: "LogCoreTests", dependencies: ["LogCore"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "LogCoreTests", dependencies: ["LogCore", "LogUI"], resources: [.copy("Fixtures")]),
         .testTarget(name: "LogHealthTests", dependencies: ["LogHealth", "LogCore"]),
     ]
 )
